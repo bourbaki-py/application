@@ -8,6 +8,9 @@ from pathlib import Path
 import re
 from shlex import quote
 import sys
+
+from bourbaki.introspection.classes import parameterized_classpath
+
 from ..paths import is_newer
 from .compgen_python_classpaths import MODULE_FLAG, CALLABLE_FLAG, CLASS_FLAG, INSTANCE_FLAG, SUBCLASS_FLAG
 
@@ -105,7 +108,11 @@ class Complete(ABC):
     def __str__(self):
         if not self.args:
             return self._shell_func_name or ''
-        return "{} {}".format(self._shell_func_name, ' '.join(map(quote, self.args)))
+        try:
+            return "{} {}".format(self._shell_func_name, ' '.join(map(quote, self.args)))
+        except Exception as e:
+            print(tuple(map(str, self.args)))
+            raise e
 
     def to_bash_call(self):
         return str(self)
@@ -176,7 +183,7 @@ class _CompletePythonPathsWithTypes(CompletePythonClassPaths):
     _flag = None
 
     def __init__(self, *superclasses):
-        super().__init__(self._flag, *(_classpath(cls) for cls in superclasses))
+        super().__init__(self._flag, *(parameterized_classpath(cls) for cls in superclasses))
 
 
 class CompletePythonClasses(_CompletePythonPathsWithPrefixes):
