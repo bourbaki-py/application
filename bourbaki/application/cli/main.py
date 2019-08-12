@@ -7,11 +7,10 @@ import shlex
 import shutil
 from pathlib import Path
 from itertools import chain
-import pickle
 from warnings import warn, filterwarnings
 from collections import OrderedDict, ChainMap
 from logging import Logger, DEBUG, _levelToName, getLogger
-from functools import partial, lru_cache
+from functools import lru_cache
 from inspect import Signature, Parameter
 from argparse import (ArgumentParser, Namespace, RawDescriptionHelpFormatter,
                       ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE, SUPPRESS, _SubParsersAction)
@@ -34,8 +33,7 @@ from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
 from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
 from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV
-from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, ClearCacheAction,
-                      SetExecuteFlagAction)
+from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
 from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _to_output_sig,
                       get_task, NamedChainMap, strip_command_prefix, update_in)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
@@ -240,9 +238,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                  add_install_bash_completion_flag: Union[bool, str] = True,
                  add_init_config_command: Union[bool, str, Tuple[str, ...]] = False,
                  suppress_setup_warnings: bool = False,
-                 # pickle cache
-                 add_clear_cache_flag: Union[bool, str] = False,
-                 fast_pickle_reloads: bool = False,
+                 # source files
                  source_file: Opt[str] = None,
                  helper_files: Opt[List[str]] = None,
                  # info actions
@@ -362,16 +358,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             configuration file (or dir) for your command line interface that can then be manually edited and passed
             to the --config option when that option is available. See `application.CommandLineInterface.init_config` for
             more details.
-        :param add_clear_cache_flag: bool or str. When `fast_pickle_reloads` is True, add a flag to the command line
-            interface specifying to remove the pickle cache file when passed. If this arg is a str, it is used as the
-            flag, otherwise the default value `application.cli.CLEAR_CACHE_FLAG` is used.
-        :param fast_pickle_reloads: bool. When True, the command line interface definition (an instance of this class)
-            is saved to a pickle file at the path `source_file + application.cli.PICKLE_CACHE_SUFFIX` when that file
-            doesn't exist or is older than `source_file` (and possibly `helper_files`). Inversely, all interface
-            inference logic is deferred in calls to `CommandLineInterface.definition`, `CommandLineInterface.main`, and
-            `CommandLineInterface.subcommand` in favor of loading the interface from the previously created pickle file
-            (when it exists) at invocation of `CommandLineInterface.run()`.
-            Note that the above implies that `source_file` must be passed when `fast_pickle_reloads` is True.
 
         :param suppress_setup_warnings: bool. During processing of these args and inference of the interface from
             annotations and docstrings, some warnings may arise. To suppress these, pass True.
@@ -428,10 +414,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if not prog:
                 raise ValueError("prog (the program name) must be supplied if "
                                  "add_install_bash_completion_flag/install_bash_completion=True")
-
-        if fast_pickle_reloads and not source_file:
-            setup_warn("fast_pickle_reloads=True but no source_file is specified; source location will be determined "
-                       "at run time from the calling file")
 
         if output_handler is not None and not callable(output_handler):
             raise TypeError("output_handler must be callable; got {}".format(type(output_handler)))
@@ -535,13 +517,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                     else INSTALL_SHELL_COMPLETION_FLAG)
             self._add_argument(flag, action=InstallShellCompletionAction)
 
-        if add_clear_cache_flag:
-            if not fast_pickle_reloads:
-                setup_warn("add_clear_cache_flag was passed but fast_pickle_reloads is False; the flag will be added "
-                           "but will not have an effect when passed from the command line.")
-            flag = (add_clear_cache_flag if isinstance(add_clear_cache_flag, str) else CLEAR_CACHE_FLAG)
-            self.add_argument(flag, action=ClearCacheAction)
-
         self.version = version
         self.package = package
 
@@ -572,7 +547,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         self.source_file = source_file
         self.helper_files = helper_files
-        self.fast_pickle_reloads = bool(fast_pickle_reloads)
         self._bash_completion = bool(install_bash_completion)
         self.use_init_config_command = bool(add_init_config_command)
         self.subcommands = {}
@@ -687,12 +661,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
     def run(self, args=None, namespace=None, report_progress=True, time_units='s',
             log_level=PROGRESS, error_level=ERROR):
-        if self.safe_to_load:
-            self.update_from_pickle()
-        elif self.fast_pickle_reloads and self.get_pickle_path(load=False):
-            # assume definition is complete at this point; we can pickle without losing state
-            self.maybe_to_pickle()
-
         ns = self.parse_args(args, namespace)
         cmd, func = self.get_subcommand_func(ns)
         self.logger.debug("command is %r", cmd)
@@ -851,10 +819,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                    parse_config_as_cli=None, parse_order=None, typecheck=None,
                    output_handler=None, require_keyword_args=None, require_output_keyword_args=None,
                    name=None, from_method=False, metavars=None, tvar_map=None, _main=False, _builtin=False):
-        if self.safe_to_load and not _builtin:
-            # do-nothing decorator
-            return identity
-
         if (not from_method) and (ignore_on_cmd_line is None) and (cmd_line_args is None):
             # otherwise when from_method these are namespaced in `self`
             ignore_on_cmd_line = self.reserved_attrs
@@ -940,10 +904,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def definition(self, app_cls: type):
         """class decorator for generating subcommands via a class.
         This should only be called once per instance."""
-        if self.safe_to_load:
-            # do-nothing decorator
-            return app_cls
-
         if not isinstance(app_cls, _type):
             t = type(self)
             raise TypeError("{} instances can only be used to decorate classes; if you would like to customize "
@@ -1159,6 +1119,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         app_cls = state.get("app_cls", None)
         if app_cls is not None:
             state["app_cls"] = deconstruct_generic(app_cls)
+        state.pop("_source_files", None)  # could change in a new context if relative paths or ~/ are used
         return state
 
     def __setstate__(self, state):
@@ -1167,82 +1128,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         if app_cls is not None:
             app_cls = reconstruct_generic(app_cls)
             self.app_cls = app_cls
-
-    def _get_cached_subcommand(self, func, name=None):
-        # for looking up the command when it's already been defined via a pickle load
-        func_name = name or funcname(func)
-        cmdname = to_cmd_line_name(func_name)
-        return self.subcommands[cmdname]
-
-    def update_from_pickle(self):
-        new = self.maybe_from_pickle()
-        if new is not None:
-            attrs = ((name, value) for name, value in new.__dict__.items() if name not in self._unsafe_pickle_attrs)
-            self.__dict__.update(attrs)
-
-    def maybe_to_pickle(self):
-        path = self.get_pickle_path(load=False)
-        if path:
-            with get_task(self.logger, "Saving CLI to {}".format(path)):
-                try:
-                    with open(path, 'wb') as f:
-                        pickle.dump(self, f)
-                except Exception as e:
-                    self.logger.exception("pickle dump to {} failed with exception {}; removing".format(path, e))
-                    if os.path.exists(path):
-                        os.remove(path)
-
-    @property
-    def safe_to_load(self):
-        return self.fast_pickle_reloads and self.get_pickle_path(load=True)
-
-    def maybe_from_pickle(self):
-        path = self.get_pickle_path(load=True)
-
-        if path and os.path.exists(path):
-            with get_task(self.logger, "Loading CLI from {}".format(path), log_level=DEBUG):
-                try:
-                    with open(path, 'rb') as f:
-                        cli = pickle.load(f)
-                except Exception as e:
-                    self.logger.exception("pickle load from {} failed with exception {}; running setup code directly"
-                                          .format(path, e))
-                    if os.path.exists(path):
-                        os.remove(path)
-                    return None
-                else:
-                    return cli
-        return None
-
-    def get_pickle_path(self, load=True):
-        if load and self._pickle_load_path is not None:
-            return self._pickle_load_path or None
-        elif not load and self._pickle_dump_path is not None:
-            return self._pickle_dump_path or None
-
-        sourcepath = self.get_sourcepath()
-        if sourcepath is None:
-            raise ValueError("no source file was specified and none could be looked up on __main__; can't determine "
-                             "a pickle cache path")
-
-        picklepath = sourcepath + PICKLE_CACHE_SUFFIX
-        edit_time = self.last_edit_time()
-
-        if load:
-            if not os.path.exists(picklepath):
-                path = False
-            elif is_newer(picklepath, edit_time):
-                # safe to load
-                path = picklepath
-            else:
-                path = False
-                warn("unsafe to load CLI from {}; some source files were edited; re-compiling".format(picklepath))
-
-            self._pickle_load_path = path
-            return path
-        else:
-            self._pickle_dump_path = picklepath or False
-            return picklepath
 
     ########################
     # special CLI commands #
@@ -1283,16 +1168,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         """
         Initialize a configuration for this app.
 
-        :param path: path to the file (or dir) to write the configuration to. '-' implies stdout; note that in this case
-            a format must also be specified, since it cannot be inferred from the filename.
-        :param as_dir: should the config be written to a dir? (one file per subsection)
         :param only_required_args: should only required arguments be given and empty config value?
         :param literal_defaults: should literal default values be written to the config?
-        :param format: the file extension to use for the configuration; determines the markup language used.
-           Note: the .ini format is constrained to 1-level nesting and cannot represent values needing more than this
         :param only_commands: only write configuration for these commands
         :param omit_commands: omit configuration for these commands
-        :param use_default_path: use the default config file path for this app.
         """
         # this is added as a CLI command if specified in the constructor
         self.logger.info("constructing empty configuration")
@@ -1315,6 +1194,17 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                     as_dir: bool = False,
                     format: Opt[ConfigFormat] = None,
                     use_default_path: bool = False):
+        """
+        Optionally save the configuration to a file, or print to stdout if no path is provided.
+
+        :param config: the configuration to dump (usually a JSON-serializable python object)
+        :param path: path to the file (or dir) to write the configuration to. '-' implies stdout; note that in this case
+            a format must also be specified, since it cannot be inferred from the filename.
+        :param as_dir: should the config be written to a dir? (one file per subsection)
+        :param format: the file extension to use for the configuration; determines the markup language used.
+           Note: the .ini format is constrained to 1-level nesting and cannot represent values needing more than this
+        :param use_default_path: use the default config file path for this app.
+        """
         if use_default_path:
             if path is not None:
                 raise ValueError("Cannot supply both a path and specify default_path=True")
@@ -1648,7 +1538,9 @@ class SubCommandFunc(Logged):
             final_args = (*(final_kwargs.pop(n) for n in self.positional_names), *final_args)
         if self.output_positional_names:
             final_output_args = (
-            *(final_output_kwargs.pop(n) for n in self.output_positional_names), *final_output_args)
+                *(final_output_kwargs.pop(n) for n in self.output_positional_names),
+                *final_output_args
+            )
 
         return final_args, final_kwargs, final_output_args, final_output_kwargs
 

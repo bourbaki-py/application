@@ -1,37 +1,123 @@
-__init__:
+__main__:
+  '[c]': null
   a: 1
   b:
   - 1
   - 2
   - 3
-  c: null
-print: {}
-bytes:
-  b:
-  - 123
-  - 234
-flags:
-  boolean1: '1'
-  boolean2: false
-  flag1: false
-  flag2: true
-args_and_kwargs:
-  ips:
-  - 1::2:3:4
-  - 5:6:7::8
-  named_ips:
-    one: 2.3.4.5
-    two: 6.7.8.9
-tuple_kwarg:
-  tup:
-  - 12345678
-  - a_string
-  - 1234.5678
-tuple_union_kwarg:
-  tup:
-  - foo
-  - false
 args:
-
-enum:
-
+  '[outfile]': null
+  args:
+  - foo|bar|baz
+  - '...'
+  literal: false
+  pretty: false
+args-and-kwargs:
+  '[outfile]': null
+  ips:
+  - <ipv6addr>
+  - '...'
+  literal: false
+  named_ips:
+    '...': '...'
+    <str>: <ipaddr>
+  pretty: false
+cant:
+  parse:
+    '[cant_parse_me]': null
+    '[outfile]': null
+    can_parse_me:
+    - <str>
+    - '...'
+    literal: false
+    pretty: false
+get:
+  attr:
+    '[outfile]': null
+    attr: <str>
+    literal: false
+    pretty: false
+init:
+  config: {}
+leading-list:
+  '[outfile]': null
+  i_2: <int>
+  l_1:
+  - <float>
+  - '...'
+  literal: false
+  pretty: false
+print:
+  bytes:
+    '[outfile]': null
+    b:
+    - <0-255>
+    - '...'
+    literal: false
+    pretty: false
+  enum:
+    '[foo]': null
+    '[outfile]': null
+    literal: false
+    pretty: false
+  flags:
+    boolean1: '{0|1|true|false}'
+    boolean2: false
+    flag1: false
+    flag2: true
+  ns:
+    '[outfile]': null
+    literal: false
+    pretty: false
+  numbers:
+    '[outfile]': null
+    '[x]': null
+    '[y]': null
+    '[z]': null
+    literal: false
+    pretty: false
+  tuple:
+    kwarg:
+      '[outfile]': null
+      literal: false
+      pretty: false
+      tup:
+      - <int>
+      - <int> OR <float> OR <float>[+<float>j] OR <int>[/<int>]
+      - <float>
+    pos:
+      '[outfile]': null
+      literal: false
+      pretty: false
+      tup:
+      - <int>
+      - <int> OR <float> OR <float>[+<float>j] OR <int>[/<int>]
+      - <float>
+    union-kwarg:
+      '[outfile]': null
+      literal: false
+      pretty: false
+      tup:
+      - - <int> OR <float> OR <float>[+<float>j] OR <int>[/<int>]
+        - <str>
+      - OR
+      - - <str>
+        - <bool>
+  url:
+    '[outfile]': null
+    literal: false
+    pretty: false
+    url: scheme://netloc[/path][;params][?query][#fragment]
+  uuid:
+    '[outfile]': null
+    '[uuid]': null
+    literal: false
+    pretty: false
+types:
+  '[outfile]': null
+  literal: false
+  number: path.to.type[type,params]
+  pretty: false
+  types:
+    '...': '...'
+    <str>: path.to.type[type,params]

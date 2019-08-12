@@ -102,27 +102,6 @@ class InstallShellCompletionAction(Action):
         exit(0)
 
 
-class ClearCacheAction(Action):
-    def __init__(self,
-                 option_strings,
-                 dest=SUPPRESS,
-                 default=SUPPRESS,
-                 help="Clear the cached CLI definition by deleting the pickle file where it is stored"):
-        super().__init__(
-            option_strings=option_strings,
-            dest=dest,
-            default=default,
-            nargs=0,
-            help=help)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        path = parser.get_pickle_path(load=True) or parser.get_pickle_path(load=False)
-        if path is not None and os.path.exists(path):
-            print("CLEARING CLI DEFINITION CACHE FROM {}".format(path))
-            os.remove(path)
-        sys.exit(0)
-
-
 class SetExecuteFlagAction(Action):
     def __init__(self,
                  option_strings,
