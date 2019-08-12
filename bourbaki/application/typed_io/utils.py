@@ -1,0 +1,387 @@
+# coding:utf-8
+from typing import Union, Optional, TextIO, BinaryIO, IO
+from argparse import FileType, ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL
+import io
+import typing
+import types
+import datetime
+import decimal
+import encodings
+import fractions
+import ipaddress
+import numbers
+import pathlib
+import uuid
+import sys
+from urllib.parse import ParseResult as URL
+from functools import lru_cache, singledispatch
+from inspect import Parameter
+from multipledispatch import Dispatcher
+from bourbaki.introspection.types import deconstruct_generic, reconstruct_generic
+from bourbaki.introspection.typechecking import isinstance_generic
+from bourbaki.introspection.docstrings import CallableDocs, ParamDocs, ParamDoc
+from bourbaki.introspection.imports import import_object
+from bourbaki.introspection.callables import function_classpath
+from bourbaki.introspection.classes import classpath, parameterized_classpath
+from bourbaki.introspection.generic_dispatch_helpers import PicklableWithType
+from .exceptions import TypedInputError, TypedOutputError
+
+Empty = Parameter.empty
+Doc = Union[CallableDocs, ParamDocs, ParamDoc]
+
+
+FILE_MODES = {'r', 'w', 'a', 'rb', 'wb', 'ab', 'r+', 'a+', 'w+', 'rb+', 'wb+', 'ab+'}
+READ_MODES = {'r', 'rb', 'r+', 'rb+', 'a+', 'ab+', 'wb+'}
+WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+'}
+
+NARGS_OPTIONS = (ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL, None)
+CLI_PREFIX_CHAR = '-'
+
+
+
+class _FileHandleConstructor(type):
+    encoding = None
+    mode = None
+
+    @lru_cache(None)
+    def __getitem__(cls, mode, encoding=None) -> type:
+        mode, encoding, is_binary, base = _file_args(mode, encoding)
+        cls = BinaryFile if is_binary else TextFile
+        mcs = type(cls)
+        return mcs.__new__(mcs, cls.__name__, (cls, base), {"mode": mode, "encoding": encoding})
+
+    def __repr__(cls):
+        tname = cls.__name__
+        if cls.encoding:
+            return "{}[{}, {}]".format(tname, repr(cls.mode), repr(cls.encoding))
+        return"{}[{}]".format(tname, repr(cls.mode))
+
+
+class File(metaclass=_FileHandleConstructor):
+    encoding = None
+    mode = None
+
+    def __new__(cls, path) -> IO:
+        # argparse.FileType has the nice feature of treating '-' as stdin/stdout and raising nice errors
+        return FileType(cls.mode, encoding=cls.encoding)(path)
+
+
+class TextFile(File):
+    def __new__(cls, path) -> TextIO:
+        return super().__new__(cls, path)
+
+
+class BinaryFile(File):
+    def __new__(cls, path) -> BinaryIO:
+        return super().__new__(cls, path)
+
+
+def validate_nargs(nargs):
+    if isinstance(nargs, int):
+        if nargs > 0:
+            return nargs
+        raise ValueError("if an int, nargs must be positive; got {}".format(nargs))
+    if nargs not in NARGS_OPTIONS:
+        raise ValueError("nargs must be a positive int or one of {}; got {}"
+                         .format(NARGS_OPTIONS, nargs))
+    return nargs
+
+
+def to_cmd_line_name(s: str, negative_flag=False):
+    name = s.replace('_', '-').rstrip('-')
+    if negative_flag:
+        name = 'no-' + name
+    return name
+
+
+def cmd_line_arg_names(name, positional=False, prefix_char=None, negative_flag=False):
+    if not positional:
+        if prefix_char is None:
+            prefix_char = CLI_PREFIX_CHAR
+        names = ((prefix_char * min(len(name), 2)) + to_cmd_line_name(name, negative_flag),)
+    else:
+        names = (name,)
+    return names
+
+
+def get_dest_name(args, prefix_chars):
+    cs = prefix_chars
+    try:
+        dest = next(argname.lstrip(cs) for argname in args if len(argname.lstrip(cs)) > 1)
+    except StopIteration:
+        dest = args[0]
+    return dest
+
+
+def normalize_encoding(enc):
+    if enc is None:
+        return sys.getdefaultencoding()
+    enc_ = encodings.search_function(enc)
+    if not enc_:
+        raise ValueError("{} is not a valid text encoding; see encodings.aliases.aliases for the set of legal "
+                         "values".format(enc))
+    return enc_.name
+
+
+def cached_property(method):
+    """compute the getter once and store the result in the instance dict under the same name,
+    so it isn't computed again"""
+    attr = method.__name__
+
+    def newmethod(self):
+        value = method(self)
+        self.__dict__[attr] = value
+        return value
+
+    return property(newmethod)
+
+
+def normalize_file_mode(mode):
+    if mode not in FILE_MODES:
+        raise ValueError("{} is not a valid file mode; choose one of {}".format(mode, tuple(FILE_MODES)))
+    return mode
+
+
+def is_binary_mode(mode):
+    return 'b' in mode and mode in FILE_MODES
+
+
+def is_write_mode(mode):
+    return mode in WRITE_MODES
+
+
+def is_read_mode(mode):
+    return mode in READ_MODES
+
+
+def _file_args(mode, encoding):
+    mode = normalize_file_mode(mode)
+
+    if is_binary_mode(mode):
+        is_binary = True
+
+        if encoding:
+            raise ValueError("binary mode {} can't be specified with an encoding; got encoding={}"
+                             .format(repr(mode), repr(encoding)))
+
+        if is_read_mode(mode) and is_write_mode(mode):
+            base = io.BufferedRandom
+        elif is_read_mode(mode):
+            base = io.BufferedReader
+        else:
+            base = io.BufferedWriter
+    else:
+        is_binary = False
+        base = io.TextIOWrapper
+        encoding = normalize_encoding(encoding)
+
+    return mode, encoding, is_binary, base
+
+
+def singleton(cls):
+    return cls()
+
+
+def identity(x):
+    return x
+
+
+def name_of(x):
+    return getattr(x, "__name__", getattr(type(x), "__name__", str(x)))
+
+
+@singledispatch
+def type_spec(type_):
+    if type_.__module__ == "builtins":
+        path = type_.__name__
+    else:
+        path = classpath(type_)
+    return "<{}>".format(path)
+
+
+@type_spec.register(str)
+def type_spec_str(s):
+    return "<{}>".format(s)
+
+
+byte_repr = '<0-255>'
+regex_repr = '<regex>'
+regex_bytes_repr = '<byte-regex>'
+date_repr = 'YYYY-MM-DD'
+path_repr = '<path>'
+binary_path_repr = '<binary-file>'
+text_path_repr = '<text-file>'
+classpath_type_repr = 'path.to.type[type,params]'
+classpath_function_repr = 'path.to.function'
+int_repr = type_spec(int)
+float_repr = type_spec(float)
+decimal_repr = '<decimal-str>'
+fraction_repr = '{i}[/{i}]'.format(i=int_repr)
+complex_repr = '{f}[+{f}j]'.format(f=float_repr)
+range_repr = '{i}:{i}[:{i}]'.format(i=int_repr)
+datetime_repr = 'YYYY-MM-DD[THH:MM:SS[.ms]]'
+ipv4_repr = '<ipaddr>'
+ipv6_repr = '<ipv6addr>'
+url_repr = 'scheme://netloc[/path][;params][?query][#fragment]'
+uuid_repr = '[0-f]{32}'
+ellipsis_ = '...'
+any_repr = '____'
+
+
+default_repr_values = {
+    str: type_spec(str),
+    int: int_repr,
+    float: float_repr,
+    complex: complex_repr,
+    fractions.Fraction: fraction_repr,
+    decimal.Decimal: decimal_repr,
+    range: range_repr,
+    datetime.date: date_repr,
+    datetime.datetime: datetime_repr,
+    pathlib.Path: path_repr,
+    File: path_repr,
+    BinaryFile: binary_path_repr,
+    TextFile: text_path_repr,
+    typing.Pattern: regex_repr,
+    typing.Pattern[bytes]: regex_bytes_repr,
+    ipaddress.IPv4Address: ipv4_repr,
+    ipaddress.IPv6Address: ipv6_repr,
+    URL: url_repr,
+    uuid.UUID: uuid_repr,
+    Empty: any_repr,
+    type: classpath_type_repr,
+    types.FunctionType: classpath_function_repr,
+    types.BuiltinFunctionType: classpath_function_repr,
+    numbers.Number: "|".join((int_repr, float_repr, complex_repr)),
+    numbers.Real: "|".join((int_repr, float_repr)),
+    numbers.Integral: int_repr,
+}
+
+
+def maybe_map(f, it, exc=Exception):
+    for i in it:
+        try:
+            res = f(i)
+        except exc:
+            pass
+        else:
+            yield res
+
+
+def to_param_doc(param: Doc, name: str) -> Optional[str]:
+    if param is None:
+        return None
+    elif isinstance(param, CallableDocs):
+        p = param.params.get(name)
+        if p:
+            return p.doc
+    elif isinstance(param, ParamDocs):
+        p = param.get(name)
+        if p:
+            return p.doc
+    elif isinstance(param, ParamDoc):
+        return param.doc
+    else:
+        raise TypeError("must pass introspection.CallableDocs/Params/Param for a docstring; got {}"
+                        .format(type(param)))
+
+
+class MissingMeta(type):
+    """Just a placeholder for command line args which get no default from a function sig, but we need to know whether
+    they were explicitly passed on the command line"""
+    def __repr__(self):
+        return "<missing>"
+
+    def __bool__(self):
+        # if thing: <-- False if thing is missing
+        return False
+
+
+class missing(metaclass=MissingMeta):
+    # we make this a metaclass -> class relationship rather than class -> instance to avoid issues with checking
+    # pickled values for identity; unpickling looks this up at runtime and the `is` operator works as expected
+    pass
+
+
+class IODispatch(Dispatcher):
+    """interject a custom exception into the dispatch process"""
+    exc_type = IOError
+
+    def __init__(self, name, return_type, doc=None):
+        self.return_type = deconstruct_generic(return_type)
+        super().__init__(name, doc=doc)
+
+    def __call__(self, arg):
+        try:
+            return Dispatcher.__call__(self, arg)
+        except Exception as e:
+            raise self.exc_type(self.return_type, arg, e)
+
+
+class TypeCheckPicklableWithType(PicklableWithType):
+    def type_check(self, value):
+        if not isinstance_generic(value, self.type_):
+            raise self.exc_cls(self.type_, value)
+        return value
+
+
+class TypeCheckInput(TypeCheckPicklableWithType):
+    exc_cls = TypedInputError
+    decode = staticmethod(identity)
+
+    def __call__(self, value):
+        try:
+            parsed = self.decode(value)
+        except Exception as e:
+            raise self.exc_cls(self.type_, value, e)
+        else:
+            return self.type_check(parsed)
+
+
+class TypeCheckImport(TypeCheckInput):
+    decode = staticmethod(import_object)
+
+    def __call__(self, value):
+        if isinstance(value, str):
+            return super().__call__(value)
+        else:
+            return self.type_check(value)
+
+
+class TypeCheckOutput(TypeCheckPicklableWithType):
+    exc_cls = TypedOutputError
+    encode = staticmethod(identity)
+
+    def __init__(self, type_, *args, encoder=None):
+        super().__init__((type_, *args))
+        if encoder is not None:
+            self.encode = encoder
+
+    def __call__(self, value):
+        value = self.type_check(value)
+        try:
+            out = self.encode(value)
+        except Exception as e:
+            raise self.exc_cls(self.type_, value, e)
+        else:
+            return out
+
+
+class TypeCheckOutputFunc(TypeCheckOutput):
+    encode = staticmethod(function_classpath)
+
+    def type_check(self, value):
+        if not callable(value):
+            raise self.exc_cls(self.type_, value, TypeError("{} is not callable".format(value)))
+        return value
+
+    def __call__(self, value):
+        path = super().__call__(value)
+        if import_object(path) is not value:
+            raise self.exc_cls(self.type_, value, ValueError("classpath {} does not refer to the same object as {}"
+                                                             .format(path, value)))
+        return path
+
+
+class TypeCheckOutputType(TypeCheckOutput):
+    encode = staticmethod(parameterized_classpath)

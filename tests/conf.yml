@@ -1,0 +1,37 @@
+__init__:
+  a: 1
+  b:
+  - 1
+  - 2
+  - 3
+  c: null
+print: {}
+bytes:
+  b:
+  - 123
+  - 234
+flags:
+  boolean1: '1'
+  boolean2: false
+  flag1: false
+  flag2: true
+args_and_kwargs:
+  ips:
+  - 1::2:3:4
+  - 5:6:7::8
+  named_ips:
+    one: 2.3.4.5
+    two: 6.7.8.9
+tuple_kwarg:
+  tup:
+  - 12345678
+  - a_string
+  - 1234.5678
+tuple_union_kwarg:
+  tup:
+  - foo
+  - false
+args:
+
+enum:
+
