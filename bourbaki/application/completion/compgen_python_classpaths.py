@@ -15,7 +15,7 @@ from warnings import warn
 Module = type(sys)
 from itertools import chain
 
-COMPLETION_DEBUG_ENV_VAR = "APPUTILS_COMPLETION_DEBUG"
+COMPLETION_DEBUG_ENV_VAR = "BOURBAKI_COMPLETION_DEBUG"
 
 DEBUG = os.environ.get(COMPLETION_DEBUG_ENV_VAR, "").lower().strip()
 if DEBUG == "true" or (DEBUG.isdigit() and DEBUG != "0"):

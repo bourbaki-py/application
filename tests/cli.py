@@ -70,7 +70,7 @@ class MyCommandLineApp(Generic[Num], Logged):
     You can also add lots of extensive documentation down here.
     """
     @cli_spec.config_subsection("__main__")
-    def __init__(self, a: Num=1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None):
+    def __init__(self, a: Num = 1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None):
         """
         :param a: an number called a
         :param b: a list of numbers called b
@@ -222,7 +222,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         print("flag2:", flag2)
         return boolean1, boolean2, flag1, flag2
 
-    def types(self, number: Type[Num], **types: type):
+    def types(self, number: Type[Num], **types: Type[Mapping]):
         """
         Inflate python types from classpaths
         :param types: a bunch of python types
