@@ -5,7 +5,7 @@ import itertools
 import numbers
 import pathlib
 from bourbaki.introspection.types import (get_constraints, get_bound, get_generic_args, reconstruct_generic,
-                                          issubclass_generic, is_top_type)
+                                          issubclass_generic, is_top_type, is_named_tuple_class, get_named_tuple_arg_types)
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.application.completion.completers import (
@@ -71,9 +71,12 @@ def completer_for_type(t, supertype=None):
 @cli_completer.register(typing.Tuple)
 def completer_for_tuple(t, *contents):
     if not contents:
+        if is_named_tuple_class(t):
+            contents = get_named_tuple_arg_types(t)
+            return _multi_completer(CompleteTuple, *contents)
         return completer_for_collection(t)
     elif contents[-1] is Ellipsis:
-        return completer_for_collection(t, contents[:-1])
+        return completer_for_collection(t, *contents[:-1])
     else:
         return _multi_completer(CompleteTuple, *contents)
 
@@ -84,8 +87,8 @@ def completer_for_union(u, *types):
     if all(issubclass_generic(t, typing.Tuple) for t in types):
         # complete a Union of tuples as a tuple of unions - a fair approximation that parses
         argtups = (get_generic_args(t) for t in types)
-        unionartups = itertools.zip_longest(*argtups, fillvalue=NoneType)
-        uniontypes = (typing.Union[args] for args in unionartups)
+        unionargtups = itertools.zip_longest(*argtups, fillvalue=NoneType)
+        uniontypes = (typing.Union[args] for args in unionargtups)
         return _multi_completer(CompleteTuple, *uniontypes)
     return _multi_completer(CompleteUnion, *types, remove_no_complete=True)
 
@@ -117,6 +120,7 @@ def _multi_completer(completer_cls, *types, remove_no_complete=False):
             pass
         else:
             completers.append(comp)
+
     return completer_cls(*completers) if completers else None
 
 

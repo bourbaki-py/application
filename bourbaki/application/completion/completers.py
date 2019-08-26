@@ -256,6 +256,9 @@ class _MultiComplete(Complete):
         collect = set if self.unique else iter
         return self.sep.join(collect(map(str, self.completers)))
 
+    def __repr__(self):
+        return "{}{}".format(self.__class__.__name__, repr(tuple(self.completers)))
+
 
 class CompleteKeyValues(_MultiComplete):
     sep = " {} ".format(KEYVAL_SEP * 3)

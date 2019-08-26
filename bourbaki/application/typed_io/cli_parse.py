@@ -9,23 +9,23 @@ import ipaddress
 import collections
 from urllib.parse import ParseResult as URL, urlparse
 import uuid
-from inspect import signature, Parameter
+from inspect import Parameter
 from functools import lru_cache
 from warnings import warn
-from bourbaki.introspection.types import (issubclass_generic, is_top_type, get_constructor_for,
-                                             LazyType, NonStrCollection)
-from bourbaki.introspection.callables import params_of_kind
+from bourbaki.introspection.types import (get_named_tuple_arg_types, is_named_tuple_class, issubclass_generic, is_top_type, LazyType, NonStrCollection)
+from bourbaki.introspection.callables import signature
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature, DEBUG
 from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, MappingWrapper, UnionWrapper,
                                                                 TupleWrapper, LazyWrapper)
+from .cli_complete import cli_completer
 from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs
+from .cli_repr_ import cli_repr
 from .exceptions import CLITypedInputError, CLIIOUndefined, CLIUnionInputError, CLINestedCollectionsNotAllowed
 from .parsers import (parse_iso_date, parse_iso_datetime, parse_range, parse_regex, parse_regex_bytes, parse_bool,
                       parse_path, EnumParser, FlagParser, TypeCheckImportType, TypeCheckImportFunc)
-from .utils import File, Empty, identity
+from .utils import File, Empty, identity, KEY_VAL_JOIN_CHAR, parser_constructor_for_collection
 
 NoneType = type(None)
-KEY_VAL_JOIN_CHAR = '='
 
 
 class InvalidCLIParser(TypeError):
@@ -81,15 +81,13 @@ def _validate_parser(func):
     try:
         sig = signature(func)
     except ValueError:
-        nargs = None
+        annotation = None
     else:
         msg = "CLI parsers must have only a single required positional arg; "
         if len(sig.parameters) == 0:
             raise InvalidCLIParser(msg + "{} takes no arguments!".format(func))
 
-        params = params_of_kind(sig, (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
-                                      Parameter.POSITIONAL_OR_KEYWORD))
-        required = [p for p in params if p.default is Parameter.empty
+        required = [p for p in sig.parameters.values() if p.default is Parameter.empty
                     and p.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)]
 
         if len(required) > 1:
@@ -104,22 +102,36 @@ def _validate_parser(func):
                 warn("{} accepts *args for its first argument; when called as a parser, only one arg will be passed. "
                      "Is this what was intended?")
 
-        nargs = cli_nargs(param.annotation) if param.annotation is not Parameter.empty else None
+        annotation = param.annotation
 
-    return func, nargs
+    return func, annotation
 
 
 class CLIParserDispatch(GenericTypeLevelSingleDispatch):
     def register(self, *sig, debug: bool=DEBUG, as_const: bool=False):
+        """
+        Register a parser for a type, and if the following are derivable and not yet registered, register them too:
+        - cli_nargs
+        - cli_repr
+        - cli_completer
+        """
         dec = super().register(*sig, debug=debug, as_const=as_const)
         if not as_const:
             return dec
 
         def maybe_register_nargs(f):
             # register an inferred nargs with cli_nargs if possible
-            func, nargs = _validate_parser(f)
-            if nargs is not None and sig not in cli_nargs.funcs:
-                cli_nargs.register(*sig, debug=debug, as_const=True)(nargs)
+            func, type_ = _validate_parser(f)
+            if type_ is not None and type_ is not Parameter.empty:
+                for dispatcher in (cli_nargs, cli_repr, cli_completer):
+                    if sig not in dispatcher.funcs:
+                        try:
+                            value = dispatcher(type_)
+                        except NotImplementedError:
+                            pass
+                        else:
+                            dispatcher.register(*sig, debug=debug, as_const=True)(value)
+
             return dec(f)
 
         return maybe_register_nargs
@@ -147,7 +159,7 @@ class TypeCheckImportTypeCLI(TypeCheckImportType):
 
 class GenericCLIParserMixin:
     getter = cli_parser
-    get_reducer = staticmethod(get_constructor_for)
+    get_reducer = staticmethod(parser_constructor_for_collection)
 
 
 @cli_parser.register(typing.Collection)
@@ -198,6 +210,8 @@ class TupleCLIParser(GenericCLIParserMixin, TupleWrapper):
     _collection_cls = CollectionCLIParser
 
     def __new__(cls, t, *types):
+        if is_named_tuple_class(t):
+            types = get_named_tuple_arg_types(t)
         check_tuple_nargs(t, *types)
         return TupleWrapper.__new__(cls, t, *types)
 

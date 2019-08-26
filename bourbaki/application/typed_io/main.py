@@ -2,7 +2,7 @@
 from typing import Optional, Tuple, Dict, Union
 import enum
 from inspect import Parameter
-from argparse import ArgumentParser, OPTIONAL
+from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
 from bourbaki.introspection.types import deconstruct_generic
 from .cli_parse import cli_parser
@@ -176,6 +176,7 @@ class TypedIO(PicklableWithType):
             OR if `type_` is a parameterizable generic type, specify `as_const=False` and then pass to `config_repr_`
             a function with signature `(base_type, *generic_args) -> config_value_for_type`. (see `as_const` above)
         """
+        # cli_parser first, since cli_nargs/repr/completer may be derivable
         for dispatcher, func in [(cli_parser, cli_parser_),
                                  (cli_nargs, cli_nargs_),
                                  (cli_repr, cli_repr_),
@@ -196,6 +197,14 @@ class TypedIO(PicklableWithType):
     @cached_property
     def cli_nargs(self):
         return cli_nargs(self.type_)
+
+    @property
+    def is_variadic(self):
+        return cli_nargs(self.type_) in (ZERO_OR_MORE, ONE_OR_MORE)
+
+    @property
+    def is_optional(self):
+        return cli_nargs(self.type_) == OPTIONAL
 
     @cached_property
     def cli_repr(self):
@@ -256,8 +265,9 @@ class TypedIO(PicklableWithType):
             variadic = False
             positional = False
         else:
-            variadic = False
-            positional = allow_positionals
+            # Parameter.POSITIONAL_OR_KEYWORD and Parameter.POSITIONAL_ONLY
+            variadic = self.is_variadic
+            positional = allow_positionals and not variadic
 
         required = not has_default and not has_fallback and not variadic
         doc = to_param_doc(docs, name)
