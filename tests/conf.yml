@@ -39,19 +39,20 @@ get:
     pretty: false
 init:
   config: {}
-leading-list:
-  '[outfile]': null
-  i_2: <int>
-  l_1:
-  - <float>
-  - '...'
-  literal: false
-  pretty: false
+leading:
+  list:
+    '[outfile]': null
+    i_2: <int>
+    l_1:
+    - <float>
+    - '...'
+    literal: false
+    pretty: false
 print:
   bytes:
     '[outfile]': null
     b:
-    - <0-255>
+    - <str>
     - '...'
     literal: false
     pretty: false
@@ -65,6 +66,21 @@ print:
     boolean2: false
     flag1: false
     flag2: true
+  mapping:
+    '[outfile]': null
+    foo_to_date:
+      '...': '...'
+      foo|bar|baz: YYYY-MM-DD
+    literal: false
+    pretty: false
+  named-tuple:
+    '[outfile]': null
+    literal: false
+    pretty: false
+    tup:
+      bar: .
+      baz: '2019-08-25'
+      foo: foo
   ns:
     '[outfile]': null
     literal: false

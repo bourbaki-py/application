@@ -12,12 +12,13 @@ import datetime
 import uuid
 from urllib.parse import ParseResult as URL, urlparse
 from functools import partial
+from bourbaki.introspection.callables import UnStarred
 from bourbaki.introspection.imports import import_object
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
 from bourbaki.introspection.types import (issubclass_generic, get_constructor_for,
-                                             NonStrCollection, NonAnyStrCollection, LazyType)
+                                          NamedTupleABC, NonStrCollection, NonAnyStrCollection, LazyType)
 from bourbaki.introspection.generic_dispatch_helpers import (LazyWrapper, CollectionWrapper, TupleWrapper,
-                                                                MappingWrapper, UnionWrapper)
+                                                             MappingWrapper, NamedTupleWrapper, UnionWrapper)
 from bourbaki.application.typed_io.inflation import inflate_config
 from .parsers import (parse_regex_bytes, parse_regex, parse_range, parse_iso_date, parse_iso_datetime, parse_bool,
                       parse_path, EnumParser, FlagParser)
@@ -298,6 +299,22 @@ class TupleConfigDecoder(GenericConfigDecoderMixin, TupleWrapper):
     _collection_cls = SequenceConfigDecoder
     legal_container_types = (NonAnyStrCollection,)
     helper_cls = TupleWrapper
+
+
+class _DictFromNamedTupleIter:
+    def __init__(self, tuple_cls):
+        self.tuple_cls = tuple_cls
+
+    def __call__(self, keyvals):
+        return self.tuple_cls(**dict(keyvals))
+
+
+@config_decoder.register(NamedTupleABC)
+class NamedTupleConfigDecoder(GenericConfigDecoderMixin, NamedTupleWrapper):
+    get_named_reducer = staticmethod(_DictFromNamedTupleIter)
+    get_reducer = staticmethod(UnStarred)
+    legal_container_types = (typing.Sequence, typing.Mapping)
+    helper_cls = NamedTupleWrapper
 
 
 @config_decoder.register(typing.Union)
