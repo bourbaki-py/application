@@ -285,7 +285,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         pass
 
 
-cli.definition(MyCommandLineApp[Union[int, float, complex, Fraction]])
+cli.definition(MyCommandLineApp[Union[int, Fraction]])
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
 from .utils import Empty, Doc, to_param_doc, to_cmd_line_name, cmd_line_arg_names, CLI_PREFIX_CHAR
-from .utils import cached_property, PicklableWithType, missing, identity
+from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity
 
 
 class ArgSource(enum.Enum):
@@ -295,15 +295,17 @@ class TypedIO(PicklableWithType):
                 metavar = metavar.get(name)
 
             if metavar is None:
-                type_str = None
-                metavar = self.cli_repr
-                if positional and not isinstance(metavar, str):
-                    # hack to deal with the fact that argparse handles fixed-length positionals differently than
-                    # fixed-length options when formatting help strings
-                    type_str = ' '.join(metavar)
-                    metavar = name.upper()
+                metavar = type_str = self.cli_repr
             else:
                 type_str = self.cli_repr
+                
+            if not isinstance(type_str, (str, type(None))):
+                type_str = ' '.join(type_str)
+                
+            if positional and not isinstance(metavar, (str, type(None))):
+                # hack to deal with the fact that argparse handles fixed-length positionals differently than
+                # fixed-length options when formatting help strings
+                metavar = PositionalMetavarFormatter(*(metavar or ()), name=name.upper())
 
             # don't pass the parser here; we handle parsing as a postprocessing step
             kw = dict(metavar=metavar)

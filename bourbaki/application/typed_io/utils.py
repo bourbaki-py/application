@@ -76,6 +76,39 @@ class BinaryFile(File):
         return super().__new__(cls, path)
 
 
+class PositionalMetavarFormatter:
+    """Hack to deal with the fact that argparse doesn't allow tuples for positional arg metavars 
+    (in contrast to the behavior for options)"""
+    def __init__(self, *metavar: str, name: str):
+        self.metavar = metavar
+        self.name = name
+        self._iter = iter(metavar * 2)
+
+    def copy(self):
+        return self.__class__(*self.metavar, name=self.name)
+
+    def __getitem__(self, item):
+        return self.metavar[item]
+
+    def __str__(self):
+        try:
+            metavar = str(next(self._iter))
+        except StopIteration:
+            # for the help section
+            s = self.name
+        else:
+            # for the usage line
+            if self.name is None:
+                s = metavar
+            else:
+                s = "{}-{}".format(self.name, metavar)
+
+        return str(s)
+
+    def __len__(self):
+        return len(self.metavar) #max(map(len, self.metavar))
+
+
 def validate_nargs(nargs):
     if isinstance(nargs, int):
         if nargs > 0:
