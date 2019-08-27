@@ -118,7 +118,6 @@ class MyCommandLineApp(Generic[Num], Logged):
         return tup
 
     @cli_spec.command_prefix("print")
-    @cli_spec.require_keyword_args
     def print_named_tuple(self, tup: FooTuple = FooTuple(FooEnum.foo, Path("."), datetime.date.today())):
         """
         print an instance of a namedtuple
