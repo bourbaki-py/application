@@ -1,12 +1,13 @@
 # coding:utf-8
 import typing
 from argparse import ZERO_OR_MORE
+import decimal
 import fractions
-from urllib.parse import ParseResult as URL
-from bourbaki.introspection.types import NonStrCollection
+from bourbaki.introspection.types import NonStrCollection, is_named_tuple_class, get_named_tuple_arg_types
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
 from .utils import maybe_map
 from .exceptions import CLIIOUndefined
+
 
 NoneType = type(None)
 
@@ -49,7 +50,7 @@ def check_tuple_nargs(t, *types):
 
 cli_nargs = GenericTypeLevelSingleDispatch("cli_nargs", isolated_bases=[typing.Union])
 
-cli_nargs.register_all(URL, fractions.Fraction, as_const=True)(None)
+cli_nargs.register_all(decimal.Decimal, fractions.Fraction, as_const=True)(None)
 
 
 @cli_nargs.register(typing.Any)
@@ -72,8 +73,12 @@ def nested_collections_cli_error(t, *args):
 
 @cli_nargs.register(typing.Tuple)
 def tuple_nargs(t, *types):
-    if not types or types[-1] is Ellipsis:
+    if not types and is_named_tuple_class(t):
+        types = get_named_tuple_arg_types(t)
+    elif not types or types[-1] is Ellipsis:
+        _ = check_tuple_nargs(t, *types)
         return ZERO_OR_MORE
+
     _ = check_tuple_nargs(t, *types)
     return len(types)
 

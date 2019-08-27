@@ -10,12 +10,12 @@ Usage:
 
 import os
 import sys
+from typing import Union
 from warnings import warn
 Module = type(sys)
 from itertools import chain
-from bourbaki.introspection.imports import import_object
 
-COMPLETION_DEBUG_ENV_VAR = "APPUTILS_COMPLETION_DEBUG"
+COMPLETION_DEBUG_ENV_VAR = "BOURBAKI_COMPLETION_DEBUG"
 
 DEBUG = os.environ.get(COMPLETION_DEBUG_ENV_VAR, "").lower().strip()
 if DEBUG == "true" or (DEBUG.isdigit() and DEBUG != "0"):
@@ -79,6 +79,7 @@ def complete_subclasspath(prefix: str= '', *legal_superclasses: str):
 # The above dispatch to this main function
 
 def _complete_objpath(prefix: str, cls=None, typecheck=None, legal_prefixes=None, include_attrs=True):
+    from bourbaki.introspection.imports import import_object
     if legal_prefixes:
         candidate_prefixes = [p for p in legal_prefixes if p.startswith(prefix)]
         if not candidate_prefixes:
@@ -123,26 +124,29 @@ def callable_(o, cls=None):
 
 
 def issubclass_(o, cls):
-    return isinstance(o, type) and issubclass(o, cls)
+    from bourbaki.introspection.types import issubclass_generic, typetypes
+    return isinstance(o, (type, *typetypes)) and issubclass_generic(o, cls)
 
 
 def _materialize_classes(*legal_superclasses: str):
     if not legal_superclasses:
         clss = None
     else:
+        from bourbaki.introspection.imports import import_type
+        from bourbaki.introspection.types import typetypes
         clss = []
         for name in legal_superclasses:
             try:
-                cls = import_object(name)
+                cls = import_type(name)
             except (ImportError, AttributeError):
                 pass
             else:
-                if isinstance(cls, type):
+                if isinstance(cls, (type, *typetypes)):
                     clss.append(cls)
         clss = tuple(clss)
 
     _debug("Imported classes: {clss}", clss=clss)
-    return clss
+    return Union[cls]
 
 
 def get_attr_names(mod, attr_prefix='', cls=None, typecheck=None, modname=None):

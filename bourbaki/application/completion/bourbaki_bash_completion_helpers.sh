@@ -3,7 +3,7 @@
 # completions can be registered like so:
 
 #    _complete_my_awesome_cli() {
-#    _application_complete """
+#    _bourbaki_complete """
 #    - complete pos1
 #    - 2 complete pos2
 #    - * complete pos3
@@ -39,36 +39,48 @@
 #    complete -o filenames bashdefault -F _complete_my_awesome_cli my_awesome_cli
 
 
-export APPUTILS_COMPLETION_DEBUG=false
-export APPUTILS_KEYVAL_SPLIT_CHAR="="
-APPUTILS_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
+export BOURBAKI_COMPLETION_DEBUG=false
+export BOURBAKI_KEYVAL_SPLIT_CHAR="="
+export BOURBAKI_UNION_SPLIT=" && "
+export BOURBAKI_TUPLE_SPLIT=" ; "
+BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
 BASH_COMPLETION_FILEDIR="_filedir"
 BASH_COMPLETION_CUR_WORD="_get_comp_words_by_ref"
 
 
-_application_complete() {
-    local token cur_opt='' cur_spec='' cur_pos=0 ix=0 cur_cmd='' cmd_tree="$1"; shift
-    local complete_commands=false complete_options=false
-    local nargs ntokens add completer positional new_command
+_bourbaki_complete() {
+    # temp vars
+    #     option str  arg spec    positional     cmd name   cmd spec
+    local cur_opt='' cur_spec='' cur_pos=0 ix=0 cur_cmd='' cmd_tree="$1"; shift
+    local cur_token token nargs ntokens add completer positional new_command
+    # the command line to complete
+    local ARGS
+    # should we complete command names?
+    local complete_commands=false
+    # should we complete --options?
+    local complete_options=false
+    # number of positional args in the cmd spec
     local npos="$(_n_positionals "$cmd_tree")"
 
     if [ $# -eq 0 ]; then
         # if no args passed, use the bash default
-        local ARGS=("${COMP_WORDS[@]}")
-        local cur_token="${COMP_WORDS[$COMP_CWORD]}"
+        ARGS=("${COMP_WORDS[@]}")
+        cur_token="${COMP_WORDS[$COMP_CWORD]}"
     else
         # else treat the args as the command line to be completed
-        local ARGS=("$@")
-        local cur_token="${ARGS[-1]}"
+        ARGS=("$@")
+        cur_token="${ARGS[-1]}"
     fi
+    # total number of tokens in the command line
     ntokens="${#ARGS[@]}"
 
-    $APPUTILS_COMPLETION_DEBUG && echo
+    _bourbaki_debug
 
+    # figure out what to complete by going through the tokens
     while [ "${#ARGS[@]}" -ge 1 ]; do
         # first token
         token="${ARGS[0]}"
-        $APPUTILS_COMPLETION_DEBUG && _debug "ARGS: ${#ARGS[@]}: $(_print_args "${ARGS[@]}")" && _debug "TOKEN: '$token' INDEX: $ix"
+        _bourbaki_debug "ARGS: ${#ARGS[@]}: $(_print_args "${ARGS[@]}")" && _bourbaki_debug "TOKEN: '$token' INDEX: $ix"
         nargs=''
         positional=false
         new_command=false
@@ -76,9 +88,9 @@ _application_complete() {
         complete_options=false
 
         if [ "${#ARGS[@]}" -eq 1 ] && ([ -z "$token" ] || _is_optional "$token"); then
-            # only one token, which is an --option; complete available options
+            # only one token, which is an --option or empty; complete available options
             complete_options=true
-            $APPUTILS_COMPLETION_DEBUG && _debug "LAST TOKEN '$token' IS OPTION; COMPLETE OPTIONS"
+            _bourbaki_debug "LAST TOKEN '$token' IS OPTION; COMPLETE OPTIONS"
         fi
 
         if _is_optional "$token" && _is_option "$cmd_tree" "$token"; then
@@ -87,8 +99,8 @@ _application_complete() {
             cur_opt="$token"
             cur_spec="$(_argspec_for_optional "$cmd_tree" "$cur_opt")"
             # skip the flag
-            $APPUTILS_COMPLETION_DEBUG && _debug "KNOWN OPTION: '$token' WITH SPEC $cur_spec; SKIPPING AHEAD 1" &&
-                _debug "CUR OPTION SPEC: $cur_spec"
+            _bourbaki_debug "KNOWN OPTION: '$token'; SKIPPING AHEAD 1" &&
+            _bourbaki_debug "NEW OPTION SPEC: $cur_spec"
             ARGS=("${ARGS[@]:1}")
             ((ix+=1))
         else
@@ -96,19 +108,19 @@ _application_complete() {
             cur_opt=''
             if _positionals_are_consumed "$npos" "$cur_pos" "$token" "$cmd_tree"; then
                 # if there are no positionals left to complete for, then
-                $APPUTILS_COMPLETION_DEBUG && _debug "CONSUMED POSITIONALS FOR COMMAND $cur_cmd: $cur_pos out of $npos"
+                _bourbaki_debug "CONSUMED POSITIONALS FOR COMMAND $cur_cmd: $cur_pos out of $npos"
 
                 if _has_suffix "$npos" '-'; then
                     # variadic positional allows more positionals to be consumed; continue
                     cur_spec="$(_argspec_for_positional "$cmd_tree" "$((cur_pos))")"
                     positional=true
-                    $APPUTILS_COMPLETION_DEBUG && _debug "PARSE CONTINUED POSITIONALS FOR SPEC $cur_spec"
+                    _bourbaki_debug "PARSE CONTINUED POSITIONALS FOR SPEC $cur_spec"
                 fi
 
                 if [ "${#ARGS[@]}" -eq 1 ]; then
                     # last token is a potential subcommand; don't parse subtree so we can use it to complete commands
                     complete_commands=true
-                    $APPUTILS_COMPLETION_DEBUG && _debug "LAST TOKEN NON-OPTION; ALLOW COMMAND COMPLETION"
+                    _bourbaki_debug "LAST TOKEN NON-OPTION; ALLOW COMMAND COMPLETION"
                 elif _is_subcommand "$cmd_tree" "$token"; then
                     # get the tree for the subcommand and start processing args for it
                     cur_cmd="$token"
@@ -116,15 +128,15 @@ _application_complete() {
                     npos="$(_n_positionals "$cmd_tree")"
                     cur_pos=0
                     new_command=true
-                    $APPUTILS_COMPLETION_DEBUG && _debug "FOUND COMMAND $cur_cmd; NEW TREE:" && _debug "$cmd_tree"
+                    _bourbaki_debug "FOUND COMMAND $cur_cmd; NEW TREE:" && _bourbaki_debug "$cmd_tree"
                 fi
                 # else an error - unknown positional; make sure no completions take effect, and skip forward 1
             elif ! _is_optional "$token"; then
                 # process positional arg normally
                 cur_spec="$(_argspec_for_positional "$cmd_tree" "$((cur_pos))")"
                 positional=true
-                $APPUTILS_COMPLETION_DEBUG && _debug "POSITIONALS CONSUMED: $cur_pos" &&
-                                              _debug "CURRENT POSITIONAL SPEC: $cur_spec"
+                _bourbaki_debug "POSITIONALS CONSUMED: $cur_pos" &&
+                    _bourbaki_debug "CURRENT POSITIONAL SPEC: $cur_spec"
             fi
         fi
 
@@ -133,8 +145,8 @@ _application_complete() {
             $new_command && completer="complete_command" || completer=''
             ARGS=("${ARGS[@]:1}")
             ((ix+=1))
-            $APPUTILS_COMPLETION_DEBUG && { $new_command && _debug "NEW COMMAND; CONSUMING 1 TOKEN" ||
-                                                            _debug "UNKNOWN ARG; CONSUMING 1 TOKEN"; }
+            { $new_command && _bourbaki_debug "NEW COMMAND; CONSUMING 1 TOKEN" ||
+                              _bourbaki_debug "UNKNOWN ARG; CONSUMING 1 TOKEN"; }
         else
             completer="$(_completer_from_spec "$cur_spec")"
             nargs="$(_nargs_from_spec "$cur_spec")"
@@ -150,36 +162,36 @@ _application_complete() {
             $positional && ((cur_pos+=$add))
             ((ix+=$add))
             ARGS=("${ARGS[@]:$add}")
-            $APPUTILS_COMPLETION_DEBUG && _debug "CONSUMING $add TOKENS"
+            _bourbaki_debug "CONSUMING $add TOKENS"
         fi
-        $APPUTILS_COMPLETION_DEBUG && _debug
+        _bourbaki_debug
     done
 
     if $complete_options; then
-        _application_complete_choices $(_flags "$cmd_tree")
+        _bourbaki_complete_choices $(_flags "$cmd_tree")
     fi
     if $complete_commands; then
-        _application_complete_choices $(_subcommand_names "$cmd_tree")
+        _bourbaki_complete_choices $(_subcommand_names "$cmd_tree")
     fi
     if [ -n "$completer" ]; then
         # this is assumed to mutate COMPREPLY directly as the bash_completion functions do
-        eval "$completer"
+        _eval_completer "$completer" "$subpos"
     fi
 
-    if $APPUTILS_COMPLETION_DEBUG; then
-        _debug
-        _debug "COMMAND: '$cur_cmd'"
-        _debug "LAST OPTION: '$cur_opt' WITH ARG SPEC: $cur_spec"
-        _debug "CONSUMED POSITIONALS: $cur_pos"
-        _debug "COMPLETER: $completer"
-        _debug "CURRENT TOKEN: '$cur_token'"
-        _debug "REMAINDER: ${ARGS[@]}"
-        _debug "COMPLETE COMMANDS? $complete_commands"
-        _debug "COMPLETE OPTIONS? $complete_options"
-        _debug "COMPLETIONS:"
-        _debug
-        _application_debug_completions
-        _debug
+    if $BOURBAKI_COMPLETION_DEBUG; then
+        _bourbaki_debug
+        _bourbaki_debug "COMMAND: '$cur_cmd'"
+        _bourbaki_debug "LAST OPTION: '$cur_opt' WITH ARG SPEC: $cur_spec"
+        _bourbaki_debug "CONSUMED POSITIONALS: $cur_pos"
+        _bourbaki_debug "COMPLETER: $completer"
+        _bourbaki_debug "CURRENT TOKEN: '$cur_token'"
+        _bourbaki_debug "REMAINDER: ${ARGS[@]}"
+        _bourbaki_debug "COMPLETE COMMANDS? $complete_commands"
+        _bourbaki_debug "COMPLETE OPTIONS? $complete_options"
+        _bourbaki_debug "COMPLETIONS:"
+        _bourbaki_debug
+        _bourbaki_debug_completions
+        _bourbaki_debug
     fi
 }
 
@@ -210,6 +222,10 @@ _optional_argspecs() {
 }
 
 _argspecs() {
+    # print either
+    # opt*: optional arg specs
+    # pos*: positional arg specs
+    # name*: names of optional args
     local check strip prefix
     case "$1" in
         opt*) check=_is_optional strip=_lstrip_chars prefix='-';;
@@ -308,6 +324,7 @@ _is_subcommand() {
 }
 
 _is_option() {
+    # the prefix is an option for the command represented by cmdtree
     local cmdtree="$1" prefix="$2" arg
     _flags "$cmdtree" | {
         while read arg; do
@@ -322,8 +339,6 @@ _nargs_from_spec() {
     local first="$(_rstrip "$1" ' *')"
     _is_numeric "$first" && _rstrip "$first" ' *' || case "$first" in
         '*'|'+'|'?') echo "$first" ;;
-        -) echo 0;;
-        *) echo 1;;
     esac
 }
 
@@ -334,14 +349,25 @@ _completer_from_spec() {
 }
 
 _positionals_are_consumed() {
+    # are all positional arguments consumed for the command represented by cmdtree?
     local npos="$1" cur_pos="$2" token="$3" cmdtree="$4"
     if _has_suffix "$npos" '-'; then
-        # variadic; only consumed if numeric part exceeded and token is an option or a command name
-        echo check positionals consumed "$cur_pos" out of "$npos"
-        echo "$token is subcommand? $(_is_subcommand "$cmdtree" "$token" && echo true || echo false)"
-        [ "$cur_pos" -ge "$(_rstrip "$npos" -)" ] && (_is_optional "$token" || _is_subcommand "$cmdtree" "$token") &&
-            return 0 || return 1
+        # variadic; only consumed if numeric part exceeded *and* token is an option or a command name
+        _bourbaki_debug "check variadic positionals consumed: $cur_pos out of $npos"
+        if [ "$cur_pos" -ge "$(_rstrip "$npos" -)" ]; then
+            _bourbaki_debug "positionals minimum exceeded"
+            if _is_optional "$token"; then
+                _bourbaki_debug "'$token' is an option; positionals consumed"
+                return 0
+            elif _is_subcommand "$cmdtree" "$token"; then
+                _bourbaki_debug "'$token' is a subcommand; positionals consumed"
+                return 0
+            fi
+        else
+            return 1
+        fi
     else
+        _bourbaki_debug "check fixed positionals consumed: $cur_pos out of $npos"
         [ "$cur_pos" -ge "$npos" ] && return 0 || return 1
     fi
 }
@@ -390,7 +416,7 @@ _rstrip() {
 }
 
 _is_optional() {
-    _has_prefix "$1" - && ! _is_positional "$1"
+    _has_prefix "$1" - && ! _is_numeric "${1:1:1}" && ! _is_positional "$1"
 }
 
 _is_positional() {
@@ -413,12 +439,28 @@ _has_suffix() {
     [ "${s%$p}" != "$s" ] && return 0 || return 1
 }
 
-_application_no_complete() {
+_bourbaki_no_complete() {
     return 0
 }
 
-_application_complete_union() {
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETIING UNION: $@"
+_eval_completer() {
+    local completer="$1" pos="$2"
+    if ! _is_numeric "$pos"; then
+        pos=0
+    else
+        _bourbaki_debug "eval position $pos in '$completer'"
+    fi
+    while [ "$pos" -gt 0 ]; do
+        completer="${completer#*\;}"
+        $((pos-=1))
+    done
+    completer="${completer%%\;*}"
+    _bourbaki_debug "eval '$completer'"
+    eval "$completer"
+}
+
+_bourbaki_complete_union() {
+    _bourbaki_debug "COMPLETIING UNION: $@"
     [ $# -eq 0 ] && return
     local comp_cmd
     for comp_cmd in "$@"; do
@@ -426,52 +468,65 @@ _application_complete_union() {
     done
 }
 
-_application_complete_keyval() {
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING KEY-VALUE '$@'"
-    local complete_key="$1" complete_val="$2"
+_get_keyval_cmd_idx() {
+    local token ix=0 which='key'
+    for token in "$@"; do
+        ((ix+=1))
+        if [ "$(_lstrip_chars "$token" "$BOURBAKI_KEYVAL_SPLIT_CHAR")" == "" ] && [ ${token#} -gt 2 ]; then
+            break
+        fi
+    done
+    echo "$ix"
+}
+
+_bourbaki_complete_keyval() {
+    _bourbaki_debug "COMPLETING KEY-VALUE '$@'"
+    local keyval_cmd_ix=$(_get_keyval_cmd_idx "$@")
     local cur="${COMP_WORDS[$COMP_CWORD]}" last="${COMP_WORDS[$((COMP_CWORD - 1))]}"
 
-    if [ "$cur" == "$APPUTILS_KEYVAL_SPLIT_CHAR" ]; then
-        $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING VALUE: '$complete_val'"
+    if [ "$cur" == "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
+        _bourbaki_debug "COMPLETING VALUE: '$cur'"
         COMP_WORDS=("${COMP_WORDS[@]}" '')
         ((COMP_CWORD += 1))
-        $complete_val
-    elif [ "$last" == "$APPUTILS_KEYVAL_SPLIT_CHAR" ]; then
-        $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING VALUE: '$complete_val'"
-        $complete_val
-    elif [ "$cur" != "$APPUTILS_KEYVAL_SPLIT_CHAR" ]; then
-        $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING KEY: '$complete_key'"
-        _complete_with_suffix "$APPUTILS_KEYVAL_SPLIT_CHAR" "$complete_key"
+        "${@:keyval_cmd_ix+1}"
+    elif [ "$last" == "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
+        _bourbaki_debug "COMPLETING VALUE: '$cur'"
+        "${@:keyval_cmd_ix+1}"
+    elif [ "$cur" != "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
+        _bourbaki_debug "COMPLETING KEY: '$cur'"
+        _complete_with_suffix "$BOURBAKI_KEYVAL_SPLIT_CHAR" "${@:1:keyval_cmd_ix-1}"
     fi
 }
 
 _complete_with_prefix() {
-    local prefix="$1" complete="$2" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETE WITH PREFIX '$prefix'"
-    $complete
+    local prefix="$1" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
+    shift
+    _bourbaki_debug "COMPLETE WITH PREFIX '$prefix'"
+    "$@"
     local tail="${COMPREPLY[@]:$compreply_len:${#COMPREPLY[@]}}"
-    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_prefix "$prefix" ${tail[@]}))
+    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_prefix "$prefix" "${tail[@]}"))
 }
 
 _complete_with_suffix() {
-    local suffix="$1" complete="$2" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETE WITH SUFFIX '$suffix'"
-    $complete
+    local suffix="$1" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
+    shift
+    _bourbaki_debug "COMPLETE WITH SUFFIX '$suffix'"
+    "$@"
     local tail="${COMPREPLY[@]:$compreply_len:${#COMPREPLY[@]}}"
-    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_suffix "$suffix" ${tail[@]}))
+    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_suffix "$suffix" "${tail[@]}"))
 }
 
-_application_complete_choices() {
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETIING $# CHOICES: $@"
+_bourbaki_complete_choices() {
+    _bourbaki_debug "COMPLETIING $# CHOICES: $@"
     [ $# -eq 0 ] && return
     local cur
     $BASH_COMPLETION_CUR_WORD cur
     COMPREPLY=("${COMPREPLY[@]}" $(compgen -W "$(echo $@)" -- "$cur"))
-    $APPUTILS_COMPLETION_DEBUG && _application_debug_total_completions
+    _bourbaki_debug_total_completions
 }
 
-_application_complete_files() {
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETIING FILES FOR EXTENSIONS: $@"
+_bourbaki_complete_files() {
+    _bourbaki_debug "COMPLETIING FILES FOR EXTENSIONS: $@"
     # the bash completion _filedir function needs $cur set globally for some reason
     $BASH_COMPLETION_CUR_WORD cur
 
@@ -483,35 +538,35 @@ _application_complete_files() {
             $BASH_COMPLETION_FILEDIR "${ext#.}"
         done
     fi
-    $APPUTILS_COMPLETION_DEBUG && _application_debug_total_completions
+    _bourbaki_debug_total_completions
 }
 
-_application_complete_python_classpaths() {
+_bourbaki_complete_python_classpaths() {
     local cur
     $BASH_COMPLETION_CUR_WORD cur
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING PYTHON CLASSPATHS FOR '$cur'; LEGAL PREFIXES: $@"
-    COMPREPLY=("${COMPREPLY[@]}" $($APPUTILS_COMPGEN_PYTHON_CLASSPATHS_SCRIPT "$cur" "$@"))
-    $APPUTILS_COMPLETION_DEBUG && _application_debug_total_completions
+    _bourbaki_debug "COMPLETING PYTHON CLASSPATHS FOR '$cur'; LEGAL PREFIXES: $@"
+    COMPREPLY=("${COMPREPLY[@]}" $($BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT "$cur" "$@"))
+    _bourbaki_debug_total_completions
 }
 
-_application_complete_simple_call() {
+_bourbaki_complete_simple_call() {
     local cur genfunc="$1" type="$2"
     $BASH_COMPLETION_CUR_WORD cur
-    $APPUTILS_COMPLETION_DEBUG && _debug "COMPLETING $type FOR '$cur'"
+    _bourbaki_debug "COMPLETING $type FOR '$cur'"
     COMPREPLY=("${COMPREPLY[@]}" $($genfunc "$cur"))
-    $APPUTILS_COMPLETION_DEBUG && _application_debug_total_completions
+    _bourbaki_debug_total_completions
 }
 
-_application_complete_floats() {
-    _application_complete_simple_call _compgen_floats "FLOATING POINT VALUES"
+_bourbaki_complete_floats() {
+    _bourbaki_complete_simple_call _compgen_floats "FLOATING POINT VALUES"
 }
 
-_application_complete_ints() {
-    _application_complete_simple_call _compgen_ints "INTEGER VALUES"
+_bourbaki_complete_ints() {
+    _bourbaki_complete_simple_call _compgen_ints "INTEGER VALUES"
 }
 
-_application_complete_bools() {
-    _application_complete_simple_call _compgen_bools "BOOLEAN VALUES"
+_bourbaki_complete_bools() {
+    _bourbaki_complete_simple_call _compgen_bools "BOOLEAN VALUES"
 }
 
 _isint() {
@@ -600,14 +655,14 @@ _compgen_floats() {
     fi
 }
 
-_application_debug_total_completions() {
-    _debug "TOTAL COMPLETIONS: ${#COMPREPLY[@]}"
+_bourbaki_debug_total_completions() {
+    $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "TOTAL COMPLETIONS: ${#COMPREPLY[@]}"
 }
 
-_application_debug_completions() {
-    echo $'\033[31m'"${COMPREPLY[@]}"$'\033[0m' >&2
+_bourbaki_debug_completions() {
+    $BOURBAKI_COMPLETION_DEBUG && echo $'\033[31m'"${COMPREPLY[@]}"$'\033[0m' >&2
 }
 
-_debug() {
-    echo $'\033[33m'"$@"$'\033[0m' >&2
+_bourbaki_debug() {
+    $BOURBAKI_COMPLETION_DEBUG && echo $'\033[33m'"$@"$'\033[0m' >&2
 }

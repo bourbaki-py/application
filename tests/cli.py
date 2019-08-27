@@ -7,6 +7,7 @@ from decimal import Decimal
 from enum import Enum
 from fractions import Fraction
 from numbers import Number
+from pathlib import Path
 from urllib.parse import ParseResult as URL
 from uuid import UUID, uuid4
 import ipaddress
@@ -23,6 +24,12 @@ class FooEnum(Enum):
     foo = "foo"
     bar = "bar"
     baz = "baz"
+
+
+class FooTuple(NamedTuple):
+    foo: FooEnum
+    bar: Path
+    baz: datetime.date
 
 
 def pprint_(value, outfile: Optional[File['w']] = None, *, pretty: bool = False, literal: bool = False):
@@ -70,7 +77,7 @@ class MyCommandLineApp(Generic[Num], Logged):
     You can also add lots of extensive documentation down here.
     """
     @cli_spec.config_subsection("__main__")
-    def __init__(self, a: Num=1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None):
+    def __init__(self, a: Num = 1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None):
         """
         :param a: an number called a
         :param b: a list of numbers called b
@@ -95,7 +102,6 @@ class MyCommandLineApp(Generic[Num], Logged):
 
     @cli_spec.ignore_on_cmd_line("cant_parse_me")
     @cli_spec.command_prefix("cant")
-    @cli_spec.require_output_keyword_args
     def cant_parse(self, can_parse_me: List[str], cant_parse_me: Optional[List[List[str]]] = None):
         print("cant_parse_me:", cant_parse_me or [])
         return can_parse_me
@@ -107,6 +113,15 @@ class MyCommandLineApp(Generic[Num], Logged):
 
         print all the entries in a tuple that was passed
         :param tup: a tuple of three things
+        :return:
+        """
+        return tup
+
+    @cli_spec.command_prefix("print")
+    def print_named_tuple(self, tup: FooTuple = FooTuple(FooEnum.foo, Path("."), datetime.date.today())):
+        """
+        print an instance of a namedtuple
+        :param tup: a namedtuple class with 3 fields of mixed type
         :return:
         """
         return tup
@@ -145,7 +160,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         """
         return ips, named_ips
 
-    @cli_spec.require_output_keyword_args
+    @cli_spec.command_prefix("leading")
     def leading_list(self, l_1: List[float], i_2: int):
         """
         demonstrates that positional variable-length args can be safely handled as the last arg of a command
@@ -197,7 +212,6 @@ class MyCommandLineApp(Generic[Num], Logged):
         return b
 
     @cli_spec.command_prefix("print")
-    @cli_spec.require_output_keyword_args
     def url(self, url: URL):
         """
         print a URL
@@ -205,6 +219,15 @@ class MyCommandLineApp(Generic[Num], Logged):
         :return:
         """
         return url
+
+    @cli_spec.command_prefix("print")
+    def mapping(self, foo_to_date: Mapping[FooEnum, datetime.date]):
+        """
+        print a complex mapping
+        :param foo_to_date: a mapping of FooEnum to dates
+        :return:
+        """
+        return foo_to_date
 
     @cli_spec.command_prefix("print")
     @cli_spec.no_output_handler
@@ -222,7 +245,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         print("flag2:", flag2)
         return boolean1, boolean2, flag1, flag2
 
-    def types(self, number: Type[Num], **types: type):
+    def types(self, number: Type[Num], **types: Type[Mapping]):
         """
         Inflate python types from classpaths
         :param types: a bunch of python types

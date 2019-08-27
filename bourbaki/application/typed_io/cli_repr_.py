@@ -3,12 +3,12 @@ import typing
 from enum import Enum
 from itertools import repeat
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
-from bourbaki.introspection.types import issubclass_generic, is_top_type, LazyType, NonStrCollection
+from bourbaki.introspection.types import (issubclass_generic, is_named_tuple_class, get_named_tuple_arg_types,
+                                          is_top_type, LazyType, NonStrCollection)
 from .exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
 from .parsers import bool_constants, EnumParser
-from .cli_parse import KEY_VAL_JOIN_CHAR
 from .utils import byte_repr, any_repr, classpath_function_repr, default_repr_values
-from .utils import type_spec
+from .utils import type_spec, KEY_VAL_JOIN_CHAR
 
 NoneType = type(None)
 
@@ -59,14 +59,20 @@ def cli_repr_union(u, *types):
 
 @cli_repr.register(typing.Tuple)
 def cli_repr_tuple(t, *types):
+    if not types and is_named_tuple_class(t):
+        types = get_named_tuple_arg_types(t)
+        return tuple(map(cli_repr, types))
+
     if any(issubclass_generic(t_, NonStrCollection) for t_ in types if t_ is not Ellipsis):
         raise CLINestedCollectionsNotAllowed((t, *types))
+
     if types and Ellipsis not in types:
         return tuple(map(cli_repr, types))
     elif not types:
         t = typing.Any
     else:
         t = types[0]
+
     return cli_repr(t)
 
 

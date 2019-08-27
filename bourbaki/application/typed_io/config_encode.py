@@ -14,10 +14,10 @@ from functools import partial
 from operator import attrgetter
 from urllib.parse import ParseResult as URL, urlunparse
 from bourbaki.introspection.classes import classpath, parameterized_classpath
-from bourbaki.introspection.types import LazyType
+from bourbaki.introspection.types import LazyType, NamedTupleABC
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
 from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, TupleWrapper, MappingWrapper,
-                                                                UnionWrapper, LazyWrapper)
+                                                             UnionWrapper, LazyWrapper)
 from .parsers import EnumParser, FlagParser
 from .exceptions import ConfigIOUndefined, ConfigTypedOutputError, ConfigTypedKeyOutputError, ConfigUnionOutputError
 from .utils import Empty, identity, IODispatch, TypeCheckOutput, TypeCheckOutputFunc, TypeCheckOutputType
@@ -216,9 +216,22 @@ class ConfigCounterEncoder(ConfigMappingEncoder):
 
 @config_encoder.register(typing.Tuple)
 class ConfigTupleEncoder(TupleWrapper):
-    reduce = list
     getter = config_encoder
     _collection_cls = ConfigCollectionEncoder
+
+
+class _DictFromNamedTupleIter:
+    def __init__(self, tuple_cls):
+        self.tuple_cls = tuple_cls
+
+    def __call__(self, iter_):
+        return dict(zip(self.tuple_cls._fields, iter_))
+
+
+@config_encoder.register(NamedTupleABC)
+class ConfigNamedTupleEncoder(TupleWrapper):
+    getter = config_encoder
+    get_reducer = staticmethod(_DictFromNamedTupleIter)
 
 
 @config_encoder.register(typing.Union)

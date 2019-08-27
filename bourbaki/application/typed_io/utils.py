@@ -11,17 +11,17 @@ import fractions
 import ipaddress
 import numbers
 import pathlib
-import uuid
 import sys
+import uuid
 from urllib.parse import ParseResult as URL
 from functools import lru_cache, singledispatch
 from inspect import Parameter
 from multipledispatch import Dispatcher
-from bourbaki.introspection.types import deconstruct_generic, reconstruct_generic
+from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class, get_constructor_for
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import CallableDocs, ParamDocs, ParamDoc
 from bourbaki.introspection.imports import import_object
-from bourbaki.introspection.callables import function_classpath
+from bourbaki.introspection.callables import function_classpath, UnStarred
 from bourbaki.introspection.classes import classpath, parameterized_classpath
 from bourbaki.introspection.generic_dispatch_helpers import PicklableWithType
 from .exceptions import TypedInputError, TypedOutputError
@@ -36,7 +36,7 @@ WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+'}
 
 NARGS_OPTIONS = (ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL, None)
 CLI_PREFIX_CHAR = '-'
-
+KEY_VAL_JOIN_CHAR = '='
 
 
 class _FileHandleConstructor(type):
@@ -235,6 +235,12 @@ def type_spec(type_):
 @type_spec.register(str)
 def type_spec_str(s):
     return "<{}>".format(s)
+
+
+def parser_constructor_for_collection(cls):
+    if is_named_tuple_class(cls):
+        return UnStarred(cls)
+    return get_constructor_for(cls)
 
 
 byte_repr = '<0-255>'

@@ -10,8 +10,8 @@ from bourbaki.introspection.classes import classpath, parameterized_classpath, m
 from bourbaki.introspection.callables import has_varargs, get_globals, get_callable_params
 from bourbaki.introspection.wrappers import lru_cache_sig_preserving
 from bourbaki.introspection.types import (issubclass_generic, is_top_type, fully_concretize_type,
-                                             get_generic_params, BuiltinAtomic, NonStrCollection, NonStdLib,
-                                             LazyType)
+                                          get_generic_params, get_named_tuple_arg_types,
+                                          BuiltinAtomic, NonStrCollection, NonStdLib, LazyType, NamedTupleABC)
 from .exceptions import ConfigIOUndefined, ConfigIOUndefinedForKeyType, ConfigCollectionKeysNotAllowed
 from .utils import type_spec, default_repr_values, byte_repr, any_repr, ellipsis_, Empty
 from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
@@ -229,6 +229,13 @@ def config_repr_tuple(t, *types):
         return [any_repr, ellipsis_]
     else:
         return [config_repr(types[0]), ellipsis_]
+
+
+@config_repr.register(NamedTupleABC)
+def config_repr_namedtuple(t, *types):
+    if not types:
+        types = get_named_tuple_arg_types(t)
+    return dict(zip(t._fields, map(config_repr, types)))
 
 
 @config_repr.register(typing.Mapping)
