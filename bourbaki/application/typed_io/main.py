@@ -292,7 +292,7 @@ class TypedIO(PicklableWithType):
             if not isinstance(type_str, (str, type(None))):
                 type_str = ' '.join(type_str)
                 
-            if positional and not isinstance(metavar, str):
+            if positional and not isinstance(metavar, (str, type(None))):
                 # hack to deal with the fact that argparse handles fixed-length positionals differently than
                 # fixed-length options when formatting help strings
                 metavar = PositionalMetavarFormatter(*(metavar or ()), name=name.upper())
