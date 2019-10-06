@@ -1,0 +1,108 @@
+[__main__]
+a = 1
+b = [ 1, 2, 3,]
+
+[args-and-kwargs]
+ips = [ "<ipv6addr>", "...",]
+pretty = false
+literal = false
+
+[types]
+number = "path.to.type[type,params]"
+pretty = false
+literal = false
+
+[args]
+args = [ "foo|bar|baz", "...",]
+pretty = false
+literal = false
+
+[print.ns]
+pretty = false
+literal = false
+
+[print.named-tuple]
+pretty = false
+literal = false
+
+[print.enum]
+pretty = false
+literal = false
+
+[print.uuid]
+pretty = false
+literal = false
+
+[print.numbers]
+pretty = false
+literal = false
+
+[print.bytes]
+b = [ "<str>", "...",]
+pretty = false
+literal = false
+
+[print.url]
+url = "scheme://netloc[/path][;params][?query][#fragment]"
+pretty = false
+literal = false
+
+[print.mapping]
+pretty = false
+literal = false
+
+[print.flags]
+boolean1 = "{0|1|true|false}"
+boolean2 = false
+flag1 = false
+flag2 = true
+
+[cant.parse]
+can_parse_me = [ "<str>", "...",]
+pretty = false
+literal = false
+
+[args-and-kwargs.named_ips]
+"<str>" = "<ipaddr>"
+"..." = "..."
+
+[leading.list]
+i_2 = "<int>"
+l_1 = [ "<float>", "...",]
+pretty = false
+literal = false
+
+[types.types]
+"<str>" = "path.to.type[type,params]"
+"..." = "..."
+
+[get.attr]
+attr = "<str>"
+pretty = false
+literal = false
+
+[init.config]
+
+[print.tuple.kwarg]
+tup = [ "<int>", "<int> OR <int>[/<int>]", "<float>",]
+pretty = false
+literal = false
+
+[print.tuple.pos]
+tup = [ "<int>", "<int> OR <int>[/<int>]", "<float>",]
+pretty = false
+literal = false
+
+[print.tuple.union-kwarg]
+tup = [ [ "<int> OR <int>[/<int>]", "<str>",], "OR", [ "<str>", "<bool>",],]
+pretty = false
+literal = false
+
+[print.named-tuple.tup]
+foo = "foo"
+bar = "."
+baz = "2019-08-27"
+
+[print.mapping.foo_to_date]
+"foo|bar|baz" = "YYYY-MM-DD"
+"..." = "..."

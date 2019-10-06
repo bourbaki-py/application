@@ -182,7 +182,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         return foo
 
     @cli_spec.command_prefix("print")
-    def uuid(self, uuid: Optional[UUID]=None):
+    def uuid(self, uuid: Optional[UUID] = None):
         """
         print a UUID; if one isn't passed, generate one
         :param uuid: optional UUID

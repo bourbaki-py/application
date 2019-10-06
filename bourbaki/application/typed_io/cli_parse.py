@@ -108,23 +108,29 @@ def _validate_parser(func):
 
 
 class CLIParserDispatch(GenericTypeLevelSingleDispatch):
-    def register(self, *sig, debug: bool=DEBUG, as_const: bool=False):
+    def register(self, *sig, debug: bool=DEBUG, as_const: bool=False,
+                 derive_nargs: bool=False, derive_repr: bool=False, derive_completer: bool=False):
         """
-        Register a parser for a type, and if the following are derivable and not yet registered, register them too:
+        Register a parser for a type, and optionally, if the following are defined for the parser's single arg
+        annotation type and not yet registered, register them too for the type:
         - cli_nargs
         - cli_repr
         - cli_completer
+        when derive_nargs, derive_repr, derive_completer respectively are True.
         """
         dec = super().register(*sig, debug=debug, as_const=as_const)
         if not as_const:
             return dec
 
-        def maybe_register_nargs(f):
+        def maybe_register_nargs_repr_completer(f):
             # register an inferred nargs with cli_nargs if possible
             func, type_ = _validate_parser(f)
             if type_ is not None and type_ is not Parameter.empty:
-                for dispatcher in (cli_nargs, cli_repr, cli_completer):
-                    if sig not in dispatcher.funcs:
+                for derive, dispatcher in [(derive_nargs, cli_nargs),
+                                           (derive_repr, cli_repr),
+                                           (derive_completer, cli_completer)]:
+                    # if derivation is indicated and the signature is not already registered
+                    if derive and sig not in dispatcher.funcs:
                         try:
                             value = dispatcher(type_)
                         except NotImplementedError:
@@ -134,7 +140,7 @@ class CLIParserDispatch(GenericTypeLevelSingleDispatch):
 
             return dec(f)
 
-        return maybe_register_nargs
+        return maybe_register_nargs_repr_completer
 
 
 cli_parser = CLIParserDispatch(__name__, isolated_bases=[typing.Union])

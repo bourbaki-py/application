@@ -1,19 +1,17 @@
 #!/usr/bin/env python
 # coding:utf-8
-import pytest
 from typing import *
 from typing import ChainMap
-import datetime
-import ipaddress
-import itertools
-from operator import eq
+from argparse import ZERO_OR_MORE
 import collections
+import itertools
 from numbers import Number
-from inspect import signature
+
+import pytest
+
 from bourbaki.introspection.types import LazyType, get_generic_args
 from bourbaki.introspection.types.compat import NEW_TYPING
 from bourbaki.introspection.callables import call_repr
-from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.application.typed_io import TypedIO
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.exceptions import *
@@ -21,9 +19,8 @@ from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr, KEY_VAL_JOIN_
 from bourbaki.application.typed_io.utils import byte_repr
 from bourbaki.application.typed_io.config_repr_ import config_repr, bool_config_repr, bytes_config_repr
 from bourbaki.application.typed_io.config_encode import config_encoder
-from bourbaki.application.typed_io.cli_nargs_ import cli_nargs
 from bourbaki.application.typed_io.inflation import CLASSPATH_KEY, ARGS_KEY, KWARGS_KEY
-from argparse import ZERO_OR_MORE
+from bourbaki.application.typed_io.cli_parse import cli_parser, cli_nargs, cli_repr
 
 undefined = object()
 skip = object()
@@ -286,6 +283,11 @@ class SimpleConfigReprGenericMeta(ConfigReprMeta, *_SimpleConfigReprGenericMeta_
         return [config_repr(args[0]), ellipsis_]
 
 
+class FooTup(NamedTuple):
+    foo: int
+    bar: str
+
+
 class custom_generic_class(SimpleConfigRepr, Generic[T_co], metaclass=SimpleConfigReprGenericMeta):
     def __init__(self, *args: T_co, xs: Mapping[int, T_co]):
         self.xs = xs
@@ -390,6 +392,10 @@ test_cases = [
     _TestCase(Tuple[bool, datetime.datetime, ipaddress.IPv4Address], 3,
               (bool_cli_repr, datetime_repr, ipv4_repr), [bool_config_repr, datetime_repr, ipv4_repr],
               (False, datetime_, ipv4), [['0', datetime_str, ipv4_str]], [[False, datetime_str, ipv4_str], [False, datetime_int, ipv4_int]],
+              multi_test=True),
+    _TestCase(FooTup, 2, (type_spec(int), type_spec(str)),
+              {"foo": type_spec(int), "bar": type_spec(str)},
+              FooTup(1, '2'), [['1', 2]], [{"foo": 1, "bar": '2'}, [1, '2']],
               multi_test=True),
     # Lazy types
     # type_spec here rather than the usual cli_repr because we don't want to load the type to print CLI help

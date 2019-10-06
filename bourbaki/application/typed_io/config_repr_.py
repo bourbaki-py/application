@@ -19,6 +19,8 @@ from .parsers import EnumParser
 
 NoneType = type(None)
 
+null_config_repr = '<null>'
+
 bytes_config_repr = [byte_repr, ellipsis_]
 bool_config_repr = type_spec(bool)
 
@@ -28,13 +30,14 @@ bool_config_key_repr = "{}|{}".format(repr(True), repr(False))
 config_repr_values = default_repr_values.copy()
 config_repr_values.update([(typing.ByteString, bytes_config_repr),
                            (bool, bool_config_repr),
-                           (type(None), None)])
+                           (NoneType, null_config_repr)])
 
 config_key_repr_values = default_repr_values.copy()
 config_key_repr_values.update([(bool, bool_config_key_repr),
                                (typing.ByteString, bytes_config_key_repr),
                                # don't try to parse complex types for keys
-                               (typing.Any, any_repr)])
+                               (typing.Any, any_repr),
+                               (NoneType, null_config_repr)])
 
 
 ONLY_REQUIRED_ARGS = False

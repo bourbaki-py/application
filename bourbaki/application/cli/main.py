@@ -1555,6 +1555,9 @@ class SubCommandFunc(Logged):
             if has_default and only_required_args:
                 continue
 
+            # for the purposes of a representative config value, None doesn't count as a default
+            has_default = has_default and param.default is not None
+
             tio = typed_io[name]
             if name in self.parse_config_as_cli:
                 # can't cli-encode a value, so even if literal_defaults is True, we leave this as a type repr

@@ -13,7 +13,8 @@ import uuid
 from functools import partial
 from operator import attrgetter
 from urllib.parse import ParseResult as URL, urlunparse
-from bourbaki.introspection.classes import classpath, parameterized_classpath
+from bourbaki.introspection.classes import classpath
+from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.types import LazyType, NamedTupleABC
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
 from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, TupleWrapper, MappingWrapper,
@@ -128,8 +129,8 @@ config_encoder_methods = {
     range: repr_range,
     pathlib.Path: str,
     uuid.UUID: str,
-    types.FunctionType: classpath,
-    types.BuiltinFunctionType: classpath,
+    types.FunctionType: function_classpath,
+    types.BuiltinFunctionType: function_classpath,
     datetime.date: datetime.date.isoformat,
     datetime.datetime: datetime.datetime.isoformat,
     ipaddress.IPv4Address: str,
@@ -217,6 +218,7 @@ class ConfigCounterEncoder(ConfigMappingEncoder):
 @config_encoder.register(typing.Tuple)
 class ConfigTupleEncoder(TupleWrapper):
     getter = config_encoder
+    reduce = staticmethod(list)
     _collection_cls = ConfigCollectionEncoder
 
 
