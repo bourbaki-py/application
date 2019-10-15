@@ -7,7 +7,7 @@ from bourbaki.introspection.types import (issubclass_generic, is_named_tuple_cla
                                           is_top_type, LazyType, NonStrCollection)
 from .exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
 from .parsers import bool_constants, EnumParser
-from .utils import byte_repr, any_repr, classpath_function_repr, default_repr_values
+from .utils import byte_repr, any_repr, classpath_function_repr, default_repr_values, repr_type
 from .utils import type_spec, KEY_VAL_JOIN_CHAR
 
 NoneType = type(None)
@@ -94,6 +94,9 @@ def cli_repr_seq(s, t=typing.Any):
 @cli_repr.register(Enum)
 def cli_repr_enum(enum_):
     return EnumParser(enum_).cli_repr()
+
+
+cli_repr.register(typing.Type)(repr_type)
 
 
 @cli_repr.register(LazyType)

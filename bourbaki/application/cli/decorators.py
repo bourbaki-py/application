@@ -1,6 +1,7 @@
 # coding:utf-8
 # decorators for functions defined in a class def context to override default behaviors for how they are configured
 # as subcommands
+from typing import Dict, Collection
 from .helpers import _maybe_bool, _validate_parse_order
 
 NO_OUTPUT_HANDLER = object()
@@ -143,6 +144,15 @@ class cli_spec:
     def no_output_handler(func):
         return cli_spec.output_handler(NO_OUTPUT_HANDLER)(func)
 
+    @staticmethod
+    def named_groups(**name_to_argnames: Collection[str]):
+        def dec(f):
+            f.__named_groups__ = {name.replace('_', ' '): {argnames} if isinstance(argnames, str) else set(argnames)
+                                  for name, argnames in name_to_argnames.items()}
+            return f
+
+        return dec
+
 
 class cli_attrs:
     """retrieve properties set on functions by cli_spec methods"""
@@ -208,3 +218,7 @@ class cli_attrs:
     @staticmethod
     def output_handler(f, default=None):
         return getattr(f, "__output_handler__", default)
+
+    @staticmethod
+    def named_groups(f, default=None):
+        return getattr(f, "__named_groups__", default)
