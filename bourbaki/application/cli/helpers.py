@@ -10,9 +10,21 @@ from typing import Dict, List, Tuple, Optional, Union
 from bourbaki.introspection.docstrings import CallableDocs
 from ..logging import ProgressLogger, TimedTaskContext
 from ..logging.defaults import PROGRESS, ERROR
+from ..typed_io.main import ArgSource
 from ..typed_io.cli_nargs_ import cli_nargs
 
 VARIADIC_NARGS = (ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE)
+
+
+class LookupOrderConfigError(ValueError):
+    def __init__(self, name_or_names):
+        self.args = ("all names in lookup_order must be in {}; got {}".format(tuple(s.name for s in ArgSource), name_or_names),)
+
+
+class LookupOrderRepeated(LookupOrderConfigError):
+    def __init__(self, name_or_names):
+        self.args = ("names in lookup_order must be unique; got {}".format(name_or_names),)
+
 
 _sentinel = object()
 
@@ -102,6 +114,28 @@ def _help_kwargs_from_docs(docs: CallableDocs, long_desc_as_epilog: bool=False, 
     return kw
 
 
+def _validate_lookup_order(*lookup_order: ArgSource):
+    order = []
+    missing = []
+    for s in lookup_order:
+        if isinstance(s, str):
+            source = getattr(ArgSource, s, None)
+        else:
+            source = s
+
+        if not isinstance(source, ArgSource):
+            missing.append(s)
+        else:
+            order.append(source)
+
+    if missing:
+        raise LookupOrderConfigError(lookup_order)
+    if len(set(lookup_order)) != len(lookup_order):
+        raise LookupOrderRepeated(lookup_order)
+
+    return order
+
+
 def _validate_parse_order(*parse_order):
     if not parse_order:
         raise ValueError("can't make sense of an empty parse_order: {}".format(parse_order))
@@ -112,19 +146,23 @@ def _validate_parse_order(*parse_order):
     return parse_order
 
 
-def _to_name_set(maybe_names, default_set=None):
+def _to_name_set(maybe_names, default_set=None, metavar=None):
     if isinstance(maybe_names, str):
-        maybe_names = {maybe_names}
+        names = {maybe_names}
     elif maybe_names is True:
-        if default_set is not None:
-            maybe_names = default_set
-        else:
-            raise ValueError()
+        # no need to check
+        return default_set
     elif not maybe_names:  # None, False
-        maybe_names = set()
+        names = set()
     else:  # collection
-        maybe_names = set(maybe_names)
-    return maybe_names
+        names = set(maybe_names)
+
+    if default_set is not None:
+        extra = names.difference(default_set)
+        if extra:
+            raise NameError("{} must all be in {}; values {} are not"
+                            .format(metavar or 'names', default_set, extra))
+    return names
 
 
 def _maybe_bool(names, fallback=_to_name_set):

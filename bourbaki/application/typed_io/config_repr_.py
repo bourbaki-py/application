@@ -13,7 +13,7 @@ from bourbaki.introspection.types import (issubclass_generic, is_top_type, fully
                                           get_generic_params, get_named_tuple_arg_types,
                                           BuiltinAtomic, NonStrCollection, NonStdLib, LazyType, NamedTupleABC)
 from .exceptions import ConfigIOUndefined, ConfigIOUndefinedForKeyType, ConfigCollectionKeysNotAllowed
-from .utils import type_spec, default_repr_values, byte_repr, any_repr, ellipsis_, Empty
+from .utils import type_spec, default_repr_values, byte_repr, any_repr, ellipsis_, repr_type, Empty
 from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
 from .parsers import EnumParser
 
@@ -262,6 +262,10 @@ def config_repr_seq(s, t=Empty, e=ellipsis_):
 @config_repr.register(LazyType)
 def lazy_config_repr(lazy, ref):
     return LazyConfigRepr(lazy, ref)()
+
+
+config_repr.register(typing.Type)(repr_type)
+config_key_repr.register(typing.Type)(repr_type)
 
 
 class LazyConfigRepr(LazyWrapper):

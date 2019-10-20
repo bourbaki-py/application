@@ -110,10 +110,10 @@ CONFIG = {
         'named_ips': {type_spec(str): ipv4_repr, ellipsis_: ellipsis_}
     },
     "types": {
-        "number": classpath_type_repr,
+        "number": classpath_type_repr + '<:Union[int,fractions.Fraction]',
         **output_args,
         "types": {
-            type_spec(str): classpath_type_repr,
+            type_spec(str): classpath_type_repr + '<:Mapping',
             ellipsis_: ellipsis_,
         },
     },

@@ -250,7 +250,7 @@ date_repr = 'YYYY-MM-DD'
 path_repr = '<path>'
 binary_path_repr = '<binary-file>'
 text_path_repr = '<text-file>'
-classpath_type_repr = 'path.to.type[type,params]'
+classpath_type_repr = 'path.to.type[params]'
 classpath_function_repr = 'path.to.function'
 int_repr = type_spec(int)
 float_repr = type_spec(float)
@@ -288,13 +288,18 @@ default_repr_values = {
     URL: url_repr,
     uuid.UUID: uuid_repr,
     Empty: any_repr,
-    type: classpath_type_repr,
     types.FunctionType: classpath_function_repr,
     types.BuiltinFunctionType: classpath_function_repr,
-    numbers.Number: "|".join((int_repr, float_repr, complex_repr)),
+    numbers.Number: "|".join((int_repr, float_repr, complex_repr.replace('[', '').replace(']', ''))),
     numbers.Real: "|".join((int_repr, float_repr)),
     numbers.Integral: int_repr,
 }
+
+
+def repr_type(type_, supertype=None):
+    if supertype is None:
+        return classpath_type_repr
+    return "{}<:{}".format(classpath_type_repr, parameterized_classpath(supertype))
 
 
 def maybe_map(f, it, exc=Exception):
