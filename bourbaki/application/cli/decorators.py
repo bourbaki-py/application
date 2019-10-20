@@ -1,7 +1,7 @@
 # coding:utf-8
 # decorators for functions defined in a class def context to override default behaviors for how they are configured
 # as subcommands
-from typing import Dict, Collection
+from typing import Collection
 from .helpers import _maybe_bool, _validate_parse_order
 
 NO_OUTPUT_HANDLER = object()
@@ -32,6 +32,26 @@ class cli_spec:
 
     @staticmethod
     def command_prefix(*prefix):
+        """map a function to a nested command. The function name is tokenized, and any tokens from the _tail_ of the
+        specified prefix that match those at the _head_ of the function name are only present once in the command path.
+        Any remaining (tail) tokens in the function name are also present in the command path.
+
+        The idea is to allow easy nesting of functions under shared command prefixes while yielding succint,
+        interpretable command names.
+
+        Example:
+            >>> @cli_spec.command_prefix("do", "something")
+            >>> def do_something_fast(*args):
+            >>>     ...
+
+            This will register `do_something_fast` under the command 'do something fast'
+
+            >>> @cli_spec.command_prefix("do")
+            >>> def do_something_fast(*args):
+            >>>     ...
+
+            This will register `do_something_fast` under the command 'do something-fast'
+        """
         def dec(func):
             func.__command_prefix__ = prefix
             return func
@@ -116,7 +136,7 @@ class cli_spec:
     @staticmethod
     def metavars(**renames):
         """mark argument names with metavar names as they will appear in the CLI help string, using
-        @metavars(original_var_name=metavar_name, ...) syntax"""
+        `@cli_spec.metavars(original_var_name=metavar_name, ...)` syntax"""
         def dec(f):
             f.__metavars__ = renames
             return f
