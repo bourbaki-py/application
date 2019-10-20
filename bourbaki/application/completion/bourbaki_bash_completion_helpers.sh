@@ -5,18 +5,18 @@
 #    _complete_my_awesome_cli() {
 #    _bourbaki_complete """
 #    - complete pos1
-#    - 2 complete pos2
+#    - 2 complete pos2 first; complete pos2 second
 #    - * complete pos3
 #    --arg1 1 complete arg1
 #    a
 #      - 1 complete apos1
 #      - 1 complete apos2
 #      --aarg1 complete aarg1
-#      --aarg2 2 complete aarg2
+#      --aarg2 2 complete aarg2 first; complete aarg2 second
 #      aa
 #        --aaarg1 3 complete aaarg1
 #      ab
-#        - 2 complete abpos1
+#        - 2 complete abpos1 first; complete abpos1 second
 #        --abarg1 * complete abarg1
 #      ac
 #        --acarg1 3 complete acarg1
@@ -36,7 +36,7 @@
 #        --egarg1 complete egarg1
 #    """
 #    }
-#    complete -o filenames bashdefault -F _complete_my_awesome_cli my_awesome_cli
+#    _bourbaki_register_completion _complete_my_awesome_cli my_awesome_cli
 
 
 export BOURBAKI_COMPLETION_DEBUG=false
@@ -46,6 +46,17 @@ export BOURBAKI_TUPLE_SPLIT=" ; "
 BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
 BASH_COMPLETION_FILEDIR="_filedir"
 BASH_COMPLETION_CUR_WORD="_get_comp_words_by_ref"
+
+
+_bourbaki_register_completion() {
+    local completer="$1" command="$2"; shift 2
+    local completion_opts=($@) include_defaults=true
+    for opt in "${completion_opts[@]}"; do
+        [ "$opt" == "-o" ] && include_defaults=false && break
+    done
+    $include_defaults && completion_opts=($@ -o filenames bashdefault)
+    complete "${completion_opts[@]}" -F "$completer" "$command"
+}
 
 
 _bourbaki_complete() {
