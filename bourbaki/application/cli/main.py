@@ -1,12 +1,13 @@
 # coding:utf-8
 from typing import Generic, Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
 from types import FunctionType
+from collections import Counter
 import os
 import sys
 import shlex
 import shutil
 from pathlib import Path
-from itertools import chain
+from itertools import chain, repeat
 from warnings import warn, filterwarnings
 from collections import OrderedDict, ChainMap
 from logging import Logger, DEBUG, _levelToName, getLogger
@@ -25,7 +26,6 @@ from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 # callables.signature is an lru_cache'ed inspect.signature
 from bourbaki.introspection.callables import (signature, fully_concrete_signature, funcname, is_method,
                                               leading_positionals)
-from ..paths import is_newer
 from ..completion.completers import CompleteFiles, install_shell_completion
 from ..logging import configure_default_logging, Logged, LoggedMeta, ProgressLogger
 from ..logging.helpers import validate_log_level_int
@@ -35,7 +35,7 @@ from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_
 from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
 from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _to_output_sig,
-                      get_task, NamedChainMap, strip_command_prefix, update_in)
+                      get_task, NamedChainMap, strip_command_prefix, update_in, _validate_lookup_order)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
 
 # only need to parse docs once for any function
@@ -52,6 +52,7 @@ VERBOSITY_ATTR = 'verbosity'
 QUIET_ATTR = 'quiet'
 RESERVED_NAMESPACE_ATTRS = (CONFIG_FILE_ATTR, LOGFILE_ATTR, VERBOSITY_ATTR, QUIET_ATTR,
                             SUBCOMMAND_ATTR, SUBCOMMAND_PATH_ATTR)
+OUTPUT_GROUP_NAME = 'output control'
 MIN_VERBOSITY = 1
 NoneType = type(None)
 ALLOWED_SUBCOMMAND_TYPES = (FunctionType, LazyImportsCallable)
@@ -81,11 +82,6 @@ signature = lru_cache(None)(signature)
 
 
 # exceptions
-
-class LookupOrderConfigError(ValueError):
-    def __init__(self, name_or_names):
-        self.args = ("all names in lookup_order must be in {}; got {}".format(tuple(iter(ArgSource)), name_or_names),)
-
 
 class ReservedNameError(AttributeError):
     def __init__(self, reserved, what_names, which_lookup):
@@ -427,7 +423,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             raise TypeError("logger_cls must be a subclass of {}; got {}".format(Logger, logger_cls))
 
         # make a mutable set to we can remove reserved namespace attributes as needed
-        self.reserved_attrs = set(self.reserved_attrs)
+        self.reserved_attrs = set(RESERVED_NAMESPACE_ATTRS)
 
         if use_verbose_flag:
             self._add_argument(*VERBOSE_FLAGS, action='count', dest=VERBOSITY_ATTR, default=MIN_VERBOSITY,
@@ -478,7 +474,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             self.reserved_attrs.remove(CONFIG_FILE_ATTR)
 
         if arg_lookup_order:
-            self.configure_lookup(*arg_lookup_order)
+            self.lookup_order = _validate_lookup_order(*arg_lookup_order)
 
         if use_execution_flag:
             if isinstance(use_execution_flag, str):
@@ -532,7 +528,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.use_subconfig_for_commands = bool(use_subconfig_for_commands)
         self.require_config = bool(require_config)
         self.default_configfile = default_configfile
-        self.parse_config_as_cli = _to_name_set(parse_config_as_cli, default_set=True)
+        self.parse_config_as_cli = _to_name_set(parse_config_as_cli, default_set=True, metavar='parse_config_as_cli')
         self.typecheck = bool(typecheck)
         self.output_handler = output_handler
 
@@ -591,14 +587,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         self._builtin_commands_added = True
         return self
-
-    def configure_lookup(self, *lookup_order: ArgSource):
-        lookup_order = tuple(getattr(ArgSource, s) if isinstance(s, str) else s for s in lookup_order)
-
-        if not all(isinstance(l, ArgSource) for l in lookup_order):
-            raise LookupOrderConfigError(lookup_order)
-
-        self.lookup_order = lookup_order
 
     def add_argument(self, *args, completer=None, **kwargs):
         dest = kwargs.get('dest', get_dest_name(args, self.prefix_chars))
@@ -817,12 +805,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def subcommand(self, command_prefix=None, config_subsections=None, implicit_flags=None,
                    ignore_on_cmd_line=None, ignore_in_config=None, cmd_line_args=None,
                    parse_config_as_cli=None, parse_order=None, typecheck=None,
-                   output_handler=None, require_keyword_args=None, require_output_keyword_args=None,
+                   output_handler=None, named_groups=None, require_keyword_args=None, require_output_keyword_args=None,
                    name=None, from_method=False, metavars=None, tvar_map=None, _main=False, _builtin=False):
-        if (not from_method) and (ignore_on_cmd_line is None) and (cmd_line_args is None):
-            # otherwise when from_method these are namespaced in `self`
-            ignore_on_cmd_line = self.reserved_attrs
-
         if require_keyword_args is None:
             require_keyword_args = self.require_keyword_args or _main
 
@@ -858,6 +842,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                   ignore_in_config=ignore_in_config,
                   parse_config_as_cli=parse_config_as_cli,
                   cmd_line_args=cmd_line_args,
+                  named_groups=named_groups,
                   typecheck=typecheck,
                   output_handler=output_handler,
                   name=name,
@@ -884,7 +869,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def main(self, config_subsections=None, implicit_flags=None,
              ignore_on_cmd_line=None, ignore_in_config=None,
              cmd_line_args=None, parse_config_as_cli=None, parse_order=None, typecheck=None,
-             output_handler=None,
+             output_handler=None, named_groups=None,
              name=None, from_method=False, metavars=None, tvar_map=None):
         return self.subcommand(config_subsections=config_subsections,
                                implicit_flags=implicit_flags,
@@ -895,6 +880,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                                cmd_line_args=cmd_line_args,
                                typecheck=typecheck,
                                output_handler=output_handler,
+                               named_groups=named_groups,
                                parse_order=parse_order,
                                metavars=metavars,
                                name=name,
@@ -970,6 +956,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                 config_subsections=cli_attrs.config_subsections(f, default_subsections),
                 parse_config_as_cli=parse_config_as_cli_,
                 parse_order=cli_attrs.parse_order(f),
+                named_groups=cli_attrs.named_groups(f),
                 metavars=metavars,
                 tvar_map=tvar_map,
             )
@@ -1026,13 +1013,17 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def _add_arguments_from(parser, subcmd_func: 'SubCommandFunc'):
         params = subcmd_func.signature.parameters
         allow_positionals = not subcmd_func.require_keyword_args
+        arg_to_group = subcmd_func.arg_to_group_name
+        named_groups = {name: parser.add_argument_group(name) for name in subcmd_func.named_groups}
 
         positional_args = []
         for name, io_methods in subcmd_func.typed_io.items():
             if name in subcmd_func.ignore_on_cmd_line:
                 continue
             param = params[name]
-            action = io_methods.add_argparse_arg(parser, param,
+            group_name = arg_to_group.get(name)
+            group = parser if group_name is None else named_groups[group_name]
+            action = io_methods.add_argparse_arg(group, param,
                                                  allow_positionals=allow_positionals,
                                                  implicit_flags=subcmd_func.implicit_flags,
                                                  has_fallback=(name not in subcmd_func.ignore_in_config
@@ -1240,6 +1231,7 @@ class SubCommandFunc(Logged):
                  func: Callable, *,
                  argparser_cmd_name=None,
                  lookup_order=None,
+                 named_groups=None,
                  implicit_flags=False,
                  command_prefix=None,
                  config_subsections=None,
@@ -1272,6 +1264,10 @@ class SubCommandFunc(Logged):
         elif command_prefix is None:
             command_prefix = ()
 
+        if not named_groups:
+            named_groups = {}
+
+        lookup_order = _validate_lookup_order(*lookup_order)
         cmd_name = to_cmd_line_name(strip_command_prefix(command_prefix, func_name))
         command_prefix = tuple(map(to_cmd_line_name, command_prefix))
 
@@ -1308,6 +1304,12 @@ class SubCommandFunc(Logged):
                                     params=chain(docs.params.values(), output_docs.params.values()),
                                     returns=docs.returns,
                                     raises=docs.raises + output_docs.raises)
+
+            if OUTPUT_GROUP_NAME in named_groups:
+                raise NameError("'{}' is a group name reserved for output handler args, when an output handler "
+                                "is specified".format(OUTPUT_GROUP_NAME))
+            else:
+                named_groups[OUTPUT_GROUP_NAME] = output_param_names
         else:
             output_docs = None
             output_param_names = set()
@@ -1339,28 +1341,61 @@ class SubCommandFunc(Logged):
         self.output_docs = output_docs
         self.func = func
         self.output_handler = output_handler
-        self.from_method = from_method
-        self.metavars = metavars
+        self.from_method = bool(from_method)
+
+        # parameter names
         self.param_names = param_names
-        self.output_param_names = output_param_names
         self.positional_names = positional_names
+        self.output_param_names = output_param_names
         self.output_positional_names = output_positional_names
         self.defaults = defaults
-        self.parse_order = self.compute_parse_order(parse_order, param_names)
         self.signature = cli_sig
         self.implicit_flags = bool(implicit_flags)
         self.require_keyword_args = bool(require_keyword_args)
         self.require_output_keyword_args = bool(require_output_keyword_args)
-        self.ignore_on_cmd_line = _to_name_set(ignore_on_cmd_line, default_set=param_names.difference(cmd_line_args))
-        self.ignore_in_config = _to_name_set(ignore_in_config, default_set=param_names)
-        self.parse_config_as_cli = _to_name_set(parse_config_as_cli, default_set=param_names)
-        self.parse_env = parse_env or {}
-        self.typecheck = _to_name_set(typecheck, default_set=param_names)
         self.lookup_order = lookup_order
+
+        # these all require validation against the set of argument names
+        # NOTE: order is important here! some things use properties, so that the self.<name> reference later
+        # may be a validated version
+        self.ignore_on_cmd_line = _to_name_set(
+            ignore_on_cmd_line,
+            default_set=param_names.difference(cmd_line_args),
+            metavar='ignore_on_cmd_line',
+        )
+        self.ignore_in_config = _to_name_set(
+            ignore_in_config,
+            default_set=param_names,
+            metavar='ignore_in_config',
+        )
+        self.parse_config_as_cli = _to_name_set(
+            parse_config_as_cli,
+            default_set=param_names,
+            metavar='parse_config_as_cli',
+        )
+        self.typecheck = _to_name_set(
+            typecheck,
+            default_set=param_names,
+            metavar='typecheck',
+        )
+        self.parse_env = parse_env
+        self.parsed_param_names = {
+            name for name in self.param_names
+            if name not in self.ignore_in_config
+            or name not in self.ignore_on_cmd_line
+            or name in self.parse_env
+        }
+        self.parse_order = self.compute_parse_order(parse_order, self.parsed_param_names)
+        self.metavars = metavars
+        self.named_groups = named_groups
+        self.arg_to_group_name = dict(
+            chain.from_iterable(zip(argnames, repeat(groupname))
+                                for groupname, argnames in self.named_groups.items())
+        )
+
         self.typed_io = OrderedDict([(name, TypedIO.from_parameter(param))
                                      for name, param in cli_sig.parameters.items()
-                                     if name not in self.ignore_in_config or name not in self.ignore_on_cmd_line
-                                     or name in parse_env])
+                                     if name in self.parsed_param_names])
 
         if config_subsections in (False, None):
             self.config_subsections = None
@@ -1377,6 +1412,39 @@ class SubCommandFunc(Logged):
             self.config_subsections = [(t,) if isinstance(t, (str, int)) else t for t in config_subsections]
 
     @property
+    def named_groups(self):
+        return self._named_groups
+
+    @named_groups.setter
+    def named_groups(self, named_groups: Opt[Mapping[str, Set[str]]]):
+        if not named_groups:
+            named_groups = {}
+        else:
+            named_groups = {name: _to_name_set(argnames, self.param_names, metavar="args in named group '{}'".format(name))
+                            for name, argnames in named_groups.items()}
+            counts = Counter(chain.from_iterable(named_groups.values()))
+            repeated = [argname for argname, count in counts.items() if count > 1]
+            if repeated:
+                raise ValueError(
+                    "arguments {} were repeated across {} named groups respectively for command with function name '{}'"
+                    .format(list(repeated), [counts[n] for n in repeated], self.func_name)
+                )
+        self._named_groups = named_groups
+
+    @property
+    def parse_env(self):
+        return self._parse_env
+
+    @parse_env.setter
+    def parse_env(self, parse_env: Opt[Mapping[str, str]]):
+        self._parse_env = self._validate_arg_keys(parse_env, 'parse_env')
+
+    def _validate_arg_keys(self, dict_, group_name):
+        # simply throw an error if there are unknown keys
+        _ = _to_name_set(dict_, self.param_names, metavar=group_name)
+        return dict_ or {}
+
+    @property
     def cmd_path(self):
         return (*self.cmd_prefix, self.cmd_name)
 
@@ -1385,6 +1453,10 @@ class SubCommandFunc(Logged):
         if parse_order is None:
             return list(param_names)
         parse_order = _validate_parse_order(*parse_order)
+
+        if any((n not in param_names) or (n is not Ellipsis) for n in parse_order):
+            raise NameError("parse_order entries must all be in {}; got {}".format(param_names, parse_order))
+
         try:
             ellipsis_ix = parse_order.index(Ellipsis)
         except ValueError:
@@ -1461,8 +1533,7 @@ class SubCommandFunc(Logged):
         cli = {name: value for name, value in cli.items() if value is not missing}
 
         lookup = {CLI: cli, ENV: env, CONFIG: conf, DEFAULTS: self.defaults}
-        lookup_order = (CLI, *self.lookup_order) if CLI not in self.lookup_order else self.lookup_order
-        lookup_order = (*lookup_order, DEFAULTS)
+        lookup_order = (CLI, *self.lookup_order, DEFAULTS) if CLI not in self.lookup_order else (*self.lookup_order, DEFAULTS)
         sources = []
         for source in lookup_order:
             ns = lookup[source]

@@ -325,7 +325,7 @@ test_cases = [
     _TestCase(ipaddress.IPv4Address, None, ipv4_repr, ipv4_repr, ipv4, ipv4_str, ipv4_str),
     _TestCase(ipaddress.IPv6Address, None, ipv6_repr, ipv6_repr, ipv6, ipv6_str, ipv6_str),
     # types and functions
-    _TestCase(Type[Number], None, classpath_type_repr, classpath_type_repr,
+    _TestCase(Type[Number], None, classpath_type_repr + '<:numbers.Number', classpath_type_repr + '<:numbers.Number',
               test_val=complex, cli_test_val="builtins.complex", config_test_val="complex"),
     _TestCase(types.FunctionType, None, classpath_function_repr, classpath_function_repr,
               test_val=equal_contents, cli_test_val="{}.equal_contents".format(__name__),
@@ -363,7 +363,7 @@ test_cases = [
               test_val=map_int_or_date_tup_any_ip_,
               cli_test_val=undefined,
               config_test_val=map_int_or_date_tup_any_ip_config),
-    _TestCase(ChainMap[Type[Number], datetime.date], ZERO_OR_MORE,
+    _TestCase(ChainMap[Type, datetime.date], ZERO_OR_MORE,
               cli_repr=mapping_cli_repr_str(classpath_type_repr, date_repr),
               config_repr={classpath_type_repr: date_repr, ellipsis_: ellipsis_},
               test_val=collections.ChainMap({int: date_, complex: date_epoch}),

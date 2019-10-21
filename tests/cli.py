@@ -148,6 +148,8 @@ class MyCommandLineApp(Generic[Num], Logged):
         """
         return tup
 
+    @cli_spec.named_groups(star_args='ips', kwargs=['named_ips'])
+    @cli_spec.require_output_keyword_args
     def args_and_kwargs(self, *ips: ipaddress.IPv6Address, **named_ips: ipaddress.IPv4Address):
         """
         print some named ipv4 addresses

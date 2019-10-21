@@ -13,7 +13,7 @@ from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
-from .utils import Empty, Doc, to_param_doc, to_cmd_line_name, cmd_line_arg_names, CLI_PREFIX_CHAR
+from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR
 from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity
 
 
@@ -337,6 +337,7 @@ class TypedIO(PicklableWithType):
 
     def add_argparse_arg(self, parser: ArgumentParser,
                          param: Parameter,
+                         group_name: Optional[str]=None,
                          allow_positionals=False,
                          implicit_flags=False,
                          has_fallback=False,
@@ -347,7 +348,15 @@ class TypedIO(PicklableWithType):
                                                    implicit_flags=implicit_flags, include_default=include_default,
                                                    has_fallback=has_fallback, metavar=metavar, docs=docs)
 
-        action = parser.add_argument(*names, **kw)
+        if group_name is None:
+            group = parser
+        else:
+            try:
+                group = next(g for g in parser._action_groups if g.title == group_name)
+            except StopIteration:
+                group = parser.add_argument_group(group_name)
+
+        action = group.add_argument(*names, **kw)
         try:
             completer = self.cli_completer
         except (TypeError, NotImplementedError):
