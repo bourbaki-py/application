@@ -581,9 +581,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                 if arg.choices is None:
                     arg.choices = set()
                 arg.choices.update(map(' '.join, (t[0] for t in self.all_subcommands() if t[0])))
-                arg.metavar = "<cmd-name>"
+                arg.metavar = "CMD-NAME"
                 choices_str = "{{{}}}".format(",".join(map(shlex.quote, sorted(arg.choices)))) if arg.choices else None
-                arg.help = '; '.join(s for s in (choices_str, arg.help) if s)
+                help = arg.help[arg.help.index(':') + 1:] if arg.help and ':' in arg.help else arg.help
+                arg.help = ': '.join(s for s in (choices_str, help) if s)
 
         self._builtin_commands_added = True
         return self

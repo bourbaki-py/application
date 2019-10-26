@@ -13,7 +13,7 @@ from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
-from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR
+from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR
 from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity
 
 
@@ -294,11 +294,17 @@ class TypedIO(PicklableWithType):
             if isinstance(metavar, dict):
                 metavar = metavar.get(name)
 
+            type_str = self.cli_repr
+
             if metavar is None:
-                metavar = type_str = self.cli_repr
-            else:
-                type_str = self.cli_repr
-                
+                if kind == Parameter.VAR_KEYWORD:
+                    metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
+                elif positional:
+                    metavar = name.upper()
+                else:
+                    metavar = type_str
+                    type_str = None
+
             if not isinstance(type_str, (str, type(None))):
                 type_str = ' '.join(type_str)
                 

@@ -2,13 +2,11 @@
 
 # completions can be registered like so:
 
-#    _complete_my_awesome_cli() {
-#    _bourbaki_complete """
+#    MY_AWESEOME_CLI_SPEC="""
 #    - complete pos1
 #    - 2 complete pos2 first; complete pos2 second
-#    - * complete pos3
-#    --arg1 1 complete arg1
-#    a
+#    --arg1 1(1) complete arg1
+#    cmd_a
 #      - 1 complete apos1
 #      - 1 complete apos2
 #      --aarg1 complete aarg1
@@ -35,175 +33,322 @@
 #        - complete egpos1
 #        --egarg1 complete egarg1
 #    """
-#    }
-#    _bourbaki_register_completion _complete_my_awesome_cli my_awesome_cli
+#
+#    _bourbaki_register_completion_from_spec my_awesome_cli "$MY_AWESOME_CLI_SPEC"
 
-
-export BOURBAKI_COMPLETION_DEBUG=false
+[ "${BOURBAKI_COMPLETION_DEBUG+x}" ] || export BOURBAKI_COMPLETION_DEBUG=false
 export BOURBAKI_KEYVAL_SPLIT_CHAR="="
-export BOURBAKI_UNION_SPLIT=" && "
-export BOURBAKI_TUPLE_SPLIT=" ; "
-BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
+export BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
 BASH_COMPLETION_FILEDIR="_filedir"
 BASH_COMPLETION_CUR_WORD="_get_comp_words_by_ref"
 
 
 _bourbaki_register_completion() {
-    local completer="$1" command="$2"; shift 2
+    local command="$1" completer="$2"; shift 2
     local completion_opts=($@) include_defaults=true
     for opt in "${completion_opts[@]}"; do
         [ "$opt" == "-o" ] && include_defaults=false && break
     done
-    $include_defaults && completion_opts=($@ -o filenames bashdefault)
+    $include_defaults && completion_opts=($@ -o filenames -o bashdefault)
     complete "${completion_opts[@]}" -F "$completer" "$command"
 }
 
 
+_bourbaki_register_completion_from_spec() {
+    local command="$1" spec="$2"; shift 2
+    local funcname="_complete_$command"
+    local funcdef="""$funcname() {
+_bourbaki_complete \"\"\"$spec\"\"\"
+}
+"""
+    eval "$funcdef"
+    _bourbaki_register_completion "$command" "$funcname" "$@"
+}
+
+
 _bourbaki_complete() {
-    # temp vars
-    #     option str  arg spec    positional     cmd name   cmd spec
-    local cur_opt='' cur_spec='' cur_pos=0 ix=0 cur_cmd='' cmd_tree="$1"; shift
-    local cur_token token nargs ntokens add completer positional new_command
-    # the command line to complete
-    local ARGS
-    # should we complete command names?
-    local complete_commands=false
-    # should we complete --options?
-    local complete_options=false
-    # number of positional args in the cmd spec
-    local npos="$(_n_positionals "$cmd_tree")"
+    local tree="$1"; shift
+    local tokens
+    [ "$#" -gt 0 ] && tokens=("$@") || tokens=("${COMP_WORDS[@]:1:$COMP_CWORD}")
 
-    if [ $# -eq 0 ]; then
-        # if no args passed, use the bash default
-        ARGS=("${COMP_WORDS[@]}")
-        cur_token="${COMP_WORDS[$COMP_CWORD]}"
-    else
-        # else treat the args as the command line to be completed
-        ARGS=("$@")
-        cur_token="${ARGS[-1]}"
-    fi
-    # total number of tokens in the command line
-    ntokens="${#ARGS[@]}"
-
-    _bourbaki_debug
-
-    # figure out what to complete by going through the tokens
-    while [ "${#ARGS[@]}" -ge 1 ]; do
-        # first token
-        token="${ARGS[0]}"
-        _bourbaki_debug "ARGS: ${#ARGS[@]}: $(_print_args "${ARGS[@]}")" && _bourbaki_debug "TOKEN: '$token' INDEX: $ix"
-        nargs=''
-        positional=false
-        new_command=false
-        complete_commands=false
-        complete_options=false
-
-        if [ "${#ARGS[@]}" -eq 1 ] && ([ -z "$token" ] || _is_optional "$token"); then
-            # only one token, which is an --option or empty; complete available options
-            complete_options=true
-            _bourbaki_debug "LAST TOKEN '$token' IS OPTION; COMPLETE OPTIONS"
-        fi
-
-        if _is_optional "$token" && _is_option "$cmd_tree" "$token"; then
-            # if the current token is an --option for the current command, get the completion spec for this option;
-            # consume the token / advance forward 1
-            cur_opt="$token"
-            cur_spec="$(_argspec_for_optional "$cmd_tree" "$cur_opt")"
-            # skip the flag
-            _bourbaki_debug "KNOWN OPTION: '$token'; SKIPPING AHEAD 1" &&
-            _bourbaki_debug "NEW OPTION SPEC: $cur_spec"
-            ARGS=("${ARGS[@]:1}")
-            ((ix+=1))
-        else
-            # not an --option
-            cur_opt=''
-            if _positionals_are_consumed "$npos" "$cur_pos" "$token" "$cmd_tree"; then
-                # if there are no positionals left to complete for, then
-                _bourbaki_debug "CONSUMED POSITIONALS FOR COMMAND $cur_cmd: $cur_pos out of $npos"
-
-                if _has_suffix "$npos" '-'; then
-                    # variadic positional allows more positionals to be consumed; continue
-                    cur_spec="$(_argspec_for_positional "$cmd_tree" "$((cur_pos))")"
-                    positional=true
-                    _bourbaki_debug "PARSE CONTINUED POSITIONALS FOR SPEC $cur_spec"
+    _increment_optcount() {
+        local opt=$1 opt_ ix=0 count break_=false
+        opt_=$(_rstrip $opt $'\n')
+        while [ "$ix" -lt "${#optgroups[@]}" ] && ! $break_; do
+            for opt_ in $(_comma_sep_tokens "${optgroups[$ix]}"); do
+                if [ "$opt_" = "$opt" ]; then
+                    count="${optcounts[$ix]}"
+                    optcounts[$ix]="$((count+1))"
+                    break_=true
+                    break
                 fi
+            done
+            ((ix++))
+        done
+        $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "new option group repetition counts: $(_optcounts)"
+    }
 
-                if [ "${#ARGS[@]}" -eq 1 ]; then
-                    # last token is a potential subcommand; don't parse subtree so we can use it to complete commands
-                    complete_commands=true
-                    _bourbaki_debug "LAST TOKEN NON-OPTION; ALLOW COMMAND COMPLETION"
-                elif _is_subcommand "$cmd_tree" "$token"; then
-                    # get the tree for the subcommand and start processing args for it
-                    cur_cmd="$token"
-                    cmd_tree="$(_subtree "$cmd_tree" "$token")"
-                    npos="$(_n_positionals "$cmd_tree")"
-                    cur_pos=0
-                    new_command=true
-                    _bourbaki_debug "FOUND COMMAND $cur_cmd; NEW TREE:" && _bourbaki_debug "$cmd_tree"
-                fi
-                # else an error - unknown positional; make sure no completions take effect, and skip forward 1
-            elif ! _is_optional "$token"; then
-                # process positional arg normally
-                cur_spec="$(_argspec_for_positional "$cmd_tree" "$((cur_pos))")"
-                positional=true
-                _bourbaki_debug "POSITIONALS CONSUMED: $cur_pos" &&
-                    _bourbaki_debug "CURRENT POSITIONAL SPEC: $cur_spec"
-            fi
-        fi
+    _remaining_opts() {
+        local check
+        [ "$1" == '-r' ] && check=_group_consumed || check=_group_exhausted
+        local ix=0 count limit
+        while [ "$ix" -lt "${#optcounts[@]}" ]; do
+            count="$(_rstrip "${optcounts[$ix]}" $'\n')"
+            limit="$(_rstrip "${optlimits[$ix]}" $'\n')"
+            ! $check "$limit" $count && _comma_sep_tokens "${optgroups[$ix]}"
+            ((ix++))
+        done
+    }
 
-        if [ -z "$cur_spec" ] || "$new_command"; then
-            # unknown argument; skip forward 1
-            $new_command && completer="complete_command" || completer=''
-            ARGS=("${ARGS[@]:1}")
-            ((ix+=1))
-            { $new_command && _bourbaki_debug "NEW COMMAND; CONSUMING 1 TOKEN" ||
-                              _bourbaki_debug "UNKNOWN ARG; CONSUMING 1 TOKEN"; }
-        else
-            completer="$(_completer_from_spec "$cur_spec")"
-            nargs="$(_nargs_from_spec "$cur_spec")"
-            if _is_numeric "$nargs"; then
-                add="$nargs"
-            else
-                add=$(_n_non_flags "${ARGS[@]}")
-                if [ "$nargs" == '?' ]; then
-                    add=$(_min 1 "$add")
-                fi
-            fi
-            add="$(_min $((ntokens-$ix)) $add)"
-            $positional && ((cur_pos+=$add))
-            ((ix+=$add))
-            ARGS=("${ARGS[@]:$add}")
-            _bourbaki_debug "CONSUMING $add TOKENS"
-        fi
+    _optcounts() {
+        local ix=0 opt limit arr
+        [ "$1" = "limit" ] && arr=("${optlimits[@]}") || arr=("${optcounts[@]}")
+        while [ "$ix" -lt "${#optgroups[@]}" ]; do
+            opt="${optgroups[$ix]}"
+            limit="$(_lstrip "${arr[$ix]}" '\\')"
+            printf ' %s' "${opt%$'\n'}=${limit%$'\n'}"
+            ((ix++))
+        done
+    }
+
+    local pos_specs=() opts=() optgroups=() optcounts=() optlimits=() remaining_opts=() cmd_names=() opt=''
+    readarray pos_specs < <(_positional_argspecs "$tree")
+    opts=($(_options "$tree"))
+    optgroups=($(_option_groups "$tree"))
+    optcounts=($(for opt in "${optgroups[@]}"; do echo 0; done))
+    optlimits=($(_optional_argspecs_nreps "$tree"))
+    cmd_names=($(_subcommand_names "$tree"))
+
+    local token ix=0 group_ix=0 group_nargs spec positionals_consumed kind
+    local complete_opts=false complete_cmds=false complete_group=false advance=true last=false
+    local state=READ next_state=READ
+
+    _bourbaki_debug $'\n'"completing ${#tokens[@]} tokens: $(_print_args_array "${tokens[@]}")"
+    $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "option group repetition limits: $(_optcounts limit)"
+
+    while [ "${#tokens[@]}" -gt 0 ]; do
+        state="$next_state"
         _bourbaki_debug
+        _bourbaki_debug -g "ENTER LOOP: STATE = $state"
+        kind="$(_arg_kind_from_state "$state")"
+        token="${tokens[0]}"
+        _bourbaki_debug "TOKEN: '$token'  INDEX: $ix  ${#tokens[@]} ARGS: $(_print_args_array "${tokens[@]}")"
+        [ "${#tokens[@]}" -eq 1 ] && last=true || last=false
+
+        case $state in
+            READ)
+                if _is_optional "$token"; then
+                    # if the token is an --option, definitely complete --options, possibly prepare to
+                    # complete this current --option if present in this tree and not the last token
+                    _bourbaki_debug "found option $token"
+                    # advance past the --option token
+                    advance=true
+                    # complete --options if the last token
+                    complete_opts=$last
+
+                    # if this is a known --option, prepare to complete for it
+                    if _is_option "$tree" "$token" && ! $last; then
+                        # move to next token and begin completing this option, _but not_ if we're on the last token
+                        _bourbaki_debug "option present in current command tree; completing"
+                        opt="$token"
+                        spec="$(_argspec_for_optional "$tree" "$opt")"
+                        group_nargs="$(_nargs_from_spec "$spec")"
+                        _bourbaki_debug "incrementing count for option $opt"
+                        _increment_optcount "$opt"
+                        # start at -1; since advance=true, we'll end up at 0 on increment
+                        group_ix=-1
+                        next_state=READ_OPT
+                        # re-enter READ state if this is a simple --flag, otherwise begin reading tokens for this --option
+                        [ "$group_nargs" = "0" ] && next_state=READ || next_state=READ_OPT
+                    else
+                        # otherwise enter the empty begin state; look for more --options, positionals, or commands;
+                        # i.e, ignore the unknown --option; assume the user knows what they're up to
+                        next_state=READ
+                    fi
+                else
+                    # if we're in READ state at an empty token then we're always completing --options
+                    [ -z "$token" ] && complete_opts=$last
+
+                    # if all the positional args are processed,
+                    if [ "${#pos_specs[@]}" -eq 0 ]; then
+                        # then complete command names
+                        complete_cmds=$last
+                        # but if this is a known command, recurse into the subtree for this command and return
+                        if _is_subcommand "$tree" "$token"; then
+                            _bourbaki_debug "$token is a subcommand; recursing to subtree"
+                            tree="$(_subtree "$tree" "$token")"
+                            _bourbaki_complete "$tree" "${tokens[@]:1}"
+                            return $?
+                        fi
+                        # token is not a --flag and no more positionals are left; assume the user knows what they're
+                        # up to and simply move on
+                        advance=true
+                    else
+                        # otherwise, determine the specification for the next positional arg, and enter READ_POS state
+                        spec="${pos_specs[0]}"
+                        pos_specs=("${pos_specs[@]:1}")
+                        group_nargs="$(_nargs_from_spec "$spec")"
+                        opt=''
+                        # we're at first index in the argument group
+                        group_ix=0
+                        next_state=READ_POS
+                        complete_cmds=false
+                        # don't consume the token; let the READ_POS state decide what to do with it
+                        advance=false
+                    fi
+                fi
+            ;;
+            # reading positional and optional args are handled identically since we advance past the --option
+            # token in READ state in that case
+            READ_POS|READ_OPT)
+                _bourbaki_debug "processing required positions of current $kind arg $opt"
+                _bourbaki_debug "group nargs = $group_nargs;  index in group = $group_ix"
+                # always advance to the next token
+                advance=true
+                # never complete commands while starting to read an argument group; only if interrupted by an --option
+                complete_cmds=false
+                # complete for the group if we're on the last token
+                complete_group="$last"
+
+                # if all the required tokens are consumed for this argument group after advancing,
+                if _group_consumed "$group_nargs" "$((group_ix+1))"; then
+                    _bourbaki_debug "all required tokens of current $kind group are consumed"
+                    if _isint "$group_nargs"; then
+                        # and the nargs is a fixed int, we definitely can't read any more tokens for this arg;
+                        # enter READ state on next token
+                        next_state=READ
+                        # can't complete --options while at the last index of this fixed-length group
+                        complete_opts=false
+                    else
+                        # else begin reading non-required tokens for this arg
+                        [ "$state" = READ_POS ] && next_state=READ_TAIL_POS || next_state=READ_TAIL_OPT
+                        (_is_optional "$token" || [ -z "$token" ]) && complete_opts=$last
+                    fi
+                else
+                    complete_opts=false
+                    next_state="$state"
+                fi
+
+                # however, if we're reading a positional and we're at index 0, complete options also; ambiguous state
+                if [ "$group_ix" -eq 0 ] && [ "$state" = READ_POS ]; then
+                    if _is_option "$token" || [ -z "$token" ]; then
+                        _bourbaki_debug "position 0 of a $kind group; completing --options"
+                        complete_opts=$last
+                    fi
+                fi
+            ;;
+            # reading non-required trailing args for variadic argument groups
+            READ_TAIL_POS|READ_TAIL_OPT)
+                _bourbaki_debug "processing optional tail positions of variadic $kind arg $opt"
+                # in this case, we always allow an --option token to interrupt the read and begin a new group
+                complete_opts=$last
+                # we don't allow the ambiguous case of a subcommand name interrupting a variadic argument's tokens
+                complete_cmds=false
+                # continue completing for this group in the case of an ambiguous '-' char - could begin an int expression;
+                # but otherwise cease processing this group upon encountering an --option
+                if _is_optional "$token" && [ "$token" != "-" ]; then
+                    _bourbaki_debug "found --option while processing tail of variadic arg; ceasing completion"
+                    complete_group=false
+                    # break reading tail tokens for this arg; enter READ state
+                    next_state=READ
+                    # don't consume this token; let the READ state determine how to proceed
+                    advance=false
+                elif [ "$group_nargs" = "?" ]; then
+                    _bourbaki_debug "nargs=?; breaking processing of tail positions of $kind arg $opt"
+                    # if nargs = '?', this group is already exhausted;
+                    # don't complete this group further
+                    complete_group=false
+                    # enter the READ state
+                    next_state=READ
+                    # and don't consume this token
+                    advance=false
+                else
+                    # otherwise, continue completing for this group
+                    complete_group=$last
+                    # remain in the tail-read state if this group's nargs != ?
+                    next_state="$state"
+                    # and advance to the next token
+                    advance=true
+                fi
+            ;;
+        esac
+
+        if $advance; then
+            if ! $last; then
+                ((ix+=1))
+                ((group_ix+=1))
+                _bourbaki_debug "advanced 1 token; new index is $ix; new argument index is $group_ix"
+            fi
+            tokens=("${tokens[@]:1}")
+        fi
     done
 
-    if $complete_options; then
-        _bourbaki_complete_choices $(_flags "$cmd_tree")
-    fi
-    if $complete_commands; then
-        _bourbaki_complete_choices $(_subcommand_names "$cmd_tree")
-    fi
-    if [ -n "$completer" ]; then
-        # this is assumed to mutate COMPREPLY directly as the bash_completion functions do
-        _eval_completer "$completer" "$subpos"
+    _bourbaki_debug -r $'\n'"EXIT LOOP: STATE = $state"
+
+    remaining_opts=($(_remaining_opts -r))
+    # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
+    if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
+        _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"
+        complete_cmds=false
     fi
 
-    if $BOURBAKI_COMPLETION_DEBUG; then
-        _bourbaki_debug
-        _bourbaki_debug "COMMAND: '$cur_cmd'"
-        _bourbaki_debug "LAST OPTION: '$cur_opt' WITH ARG SPEC: $cur_spec"
-        _bourbaki_debug "CONSUMED POSITIONALS: $cur_pos"
-        _bourbaki_debug "COMPLETER: $completer"
-        _bourbaki_debug "CURRENT TOKEN: '$cur_token'"
-        _bourbaki_debug "REMAINDER: ${ARGS[@]}"
-        _bourbaki_debug "COMPLETE COMMANDS? $complete_commands"
-        _bourbaki_debug "COMPLETE OPTIONS? $complete_options"
-        _bourbaki_debug "COMPLETIONS:"
-        _bourbaki_debug
-        _bourbaki_debug_completions
-        _bourbaki_debug
+    _bourbaki_debug "complete commands: $complete_cmds; complete options: $complete_opts; complete arg $complete_group"
+    $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "option group repetition limits: $(_optcounts limit)" &&\
+                                  _bourbaki_debug "new option group repetition counts: $(_optcounts)" &&\
+                                  _bourbaki_debug "required --options remaining: $(_print_args_array "${remaining_opts[@]}")"
+
+
+    $BASH_COMPLETION_CUR_WORD cur
+    _bourbaki_debug -g $'\n'"completing for token '$cur'"
+    if $complete_cmds; then
+        _bourbaki_debug -b $'\n'"completing commands"
+        _bourbaki_complete_choices $(_subcommand_names "$tree")
     fi
+    if $complete_opts; then
+        _bourbaki_debug -b $'\n'"completing nonexhausted options"
+        _bourbaki_complete_choices $(_remaining_opts)
+    fi
+    if $complete_group; then
+        _bourbaki_debug -b $'\n'"completing current $kind argument"
+        completer="$(_completer_from_spec "$spec")"
+        _eval_completer "$completer" "$group_ix"
+    fi
+    _bourbaki_debug -r $'\n'"END COMPLETION"$'\n'
+}
+
+_arg_kind_from_state() {
+    local state="$1"
+    if _has_suffix "$state" "POS"; then
+        echo positional
+    elif _has_suffix "$state" "OPT"; then
+        echo --option
+    else
+        echo ''
+    fi
+}
+
+_group_consumed() {
+    local nargs="$1" group_ix="$2"
+    [ "$nargs" = "\*" ] && nargs="*"
+    case "$nargs" in
+        '?'|'*') [ "$group_ix" -ge 0 ] && return 0 || return 1 ;;
+        '+') [ "$group_ix" -gt 0 ] && return 0 || return 1 ;;
+        *)  if _isint "$nargs"; then
+                [ "$group_ix" -ge "$((nargs))" ] && return 0 || return 1
+            else
+                return 0
+            fi ;;
+    esac
+}
+
+_group_exhausted() {
+    local nargs="$1" group_ix="$2"
+    [ "$nargs" = "\*" ] && nargs="*"
+    case "$nargs" in
+        '*'|'+') return 1 ;;
+        '?') [ "$group_ix" -gt 0 ] && return 0 || return 1 ;;
+        *) _isint "$nargs" && [ "$group_ix" -ge "$((nargs))" ] && return 0 || return 1 ;;
+    esac
 }
 
 _subtree() {
@@ -232,81 +377,62 @@ _optional_argspecs() {
     _argspecs optional "$1"
 }
 
+_options() {
+    _argspecs names "$1"
+}
+
+_option_groups() {
+    _argspecs groups "$1"
+}
+
+_optional_argspecs_nreps() {
+    local line spec
+    _optional_argspecs "$1" | while read line; do
+        spec="$(_lstrip "$line" "* ")"
+        _nreps_from_spec "$spec"
+    done
+}
+
 _argspecs() {
-    # print either
+    # print either:
     # opt*: optional arg specs
     # pos*: positional arg specs
     # name*: names of optional args
-    local check strip prefix
+    # group*: groups of --options
+    local check strip affix iter=echo
     case "$1" in
-        opt*) check=_is_optional strip=_lstrip_chars prefix='-';;
-        pos*) check=_is_positional strip=_lstrip prefix='- ';;
-        name*) check=_is_optional strip=_rstrip prefix=' *';;
+        opt*) check=_is_optional strip=_rstrip affix='' ;;
+        pos*) check=_is_positional strip=_lstrip affix='- ' ;;
+        name*) check=_is_optional strip=_rstrip affix=' *' iter=_comma_sep_tokens ;;
+        group*) check=_is_optional strip=_rstrip affix=' *' ;;
     esac
     local cmdtree="$2" line
     printf '%s\n' "$cmdtree" | {
     local IFS=$'\n'
     while read line; do
         [ -z "$line" ] && continue
-        $check $line && $strip "$line" "$prefix"
+        $check $line && $iter "$($strip "$line" "$affix")"
         _has_prefix "$line" ' ' && break
     done
     }
 }
 
-_flags() {
-    _argspecs names "$1"
-}
-
-_argnames() {
-    local line
-    _flags "$1" | {
-    while read line; do
-        _lstrip_chars "$line" '-'
-    done
-    }
-}
-
-_n_positionals() {
-    local cmdtree="$1" spec nargs total=0
-    _positional_argspecs "$cmdtree" | {
-        while read spec; do
-            nargs="$(_nargs_from_spec "$spec")"
-            if _is_numeric "$nargs"; then
-                ((total+="$nargs"))
-            else
-                case "$nargs" in
-                    '*') total="$total-"; break;;
-                    '+') ((total+=1)); total="$total-"; break;;
-                esac
-            fi
-        done
-        echo "$total"
-    }
-}
-
 _argspec_for_optional() {
-    local cmdtree="$1" arg="$(_lstrip_chars "$2" '-')" line
+    local cmdtree="$1" flag="$2" flag_ line break_=false
     _optional_argspecs "$cmdtree" | {
-    while read line; do
-        _has_prefix "$line" "$arg " && _lstrip "$line" "$arg " && break
-    done
-    }
-}
-
-_argspec_for_positional() {
-    local cmdtree="$1" cur_pos="$2" spec nargs total=0
-    _positional_argspecs "$cmdtree" | {
-        while read spec; do
-            nargs="$(_nargs_from_spec "$spec")"
-            if _is_numeric "$nargs"; then
-                ((total+="$nargs"))
-                [ "$total" -ge "$cur_pos" ] && break
-            else
-                break
-            fi
+    while read line && ! $break_; do
+        for flag_ in $(_comma_sep_tokens "${line% *}"); do
+            [ "$flag" = "$flag_" ] && break_=true && break
         done
-        echo "$spec"
+        if $break_; then
+            line="${line#* }"
+            case "${line[0]}" in
+                '?'|'+'|'*'|'(') _lstrip_chars "$(_lstrip "$line" "* ")" " " ;;
+                *) _isint "${line[0]}" && _lstrip_chars "$(_lstrip "$line" "* ")" " " || echo "$line" ;;
+            esac
+            break
+        fi
+    done
     }
 }
 
@@ -337,7 +463,7 @@ _is_subcommand() {
 _is_option() {
     # the prefix is an option for the command represented by cmdtree
     local cmdtree="$1" prefix="$2" arg
-    _flags "$cmdtree" | {
+    _options "$cmdtree" | {
         while read arg; do
             [ "$arg" == "$prefix" ] && return 0
         done
@@ -347,59 +473,56 @@ _is_option() {
 }
 
 _nargs_from_spec() {
-    local first="$(_rstrip "$1" ' *')"
-    _is_numeric "$first" && _rstrip "$first" ' *' || case "$first" in
-        '*'|'+'|'?') echo "$first" ;;
+    local positional=false
+    if [ $# -gt 1 ]; then
+        if [ "$1" = '-p' ]; then
+            positional=true
+        fi
+        shift
+    fi
+    local first="$(_rstrip "$1" ' *')"  # strip everything after the first space
+    local nargs="$(_rstrip "$first" '(*')"
+    _is_numeric "$nargs" && echo "$nargs" ||
+    case "$nargs" in
+        '+'|'?') echo "$nargs" ;;
+        '*') echo "\*" ;;
+        '') if $positional; then
+                echo 1
+            else
+                # assume a simple --flag if no nargs and no completer
+                [ -z "$(_completer_from_spec "$1")" ] && echo 0 || echo 1
+            fi
+            ;;
+        *) echo 1;;  # case where a completer follows directly after the --option
+    esac
+}
+
+_nreps_from_spec() {
+    local first="$(_rstrip "$1" ' *')"  # strip everything after the first space
+    local nargs="$(_nargs_from_spec "$1")"  # find nargs
+    local nreps
+    case "$nargs" in
+        '*'|'+'|'?'|'\*') nreps="${first:1}" ;;
+        *) nreps="$(_lstrip "$first" "$nargs")" ;;
+    esac
+    nreps="$(_rstrip "$(_lstrip "$nreps" "(")" ")")"
+    case "$nreps" in
+        '+'|'?') echo "$nreps" ;;
+        '*') echo "\*" ;;
+        *) _is_numeric "$nreps" && echo "$nreps" || echo "\*" ;;
     esac
 }
 
 _completer_from_spec() {
-    local spec="$@"
-    local nargs="$(_nargs_from_spec "$spec")"
-    [ "$spec" == "$nargs" ] && echo || _lstrip "$spec" '\'"$nargs "
+    local spec="$(_lstrip_chars "$1" " ")"
+    local first="${spec:0:1}"
+    case "$first" in
+        '?'|'+'|'*'|'(') _lstrip_chars "$(_lstrip "$spec" "* ")" " " ;;
+        *) _isint "$first" && _lstrip_chars "$(_lstrip "$spec" "* ")" " " || echo "$spec" ;;
+    esac
 }
 
-_positionals_are_consumed() {
-    # are all positional arguments consumed for the command represented by cmdtree?
-    local npos="$1" cur_pos="$2" token="$3" cmdtree="$4"
-    if _has_suffix "$npos" '-'; then
-        # variadic; only consumed if numeric part exceeded *and* token is an option or a command name
-        _bourbaki_debug "check variadic positionals consumed: $cur_pos out of $npos"
-        if [ "$cur_pos" -ge "$(_rstrip "$npos" -)" ]; then
-            _bourbaki_debug "positionals minimum exceeded"
-            if _is_optional "$token"; then
-                _bourbaki_debug "'$token' is an option; positionals consumed"
-                return 0
-            elif _is_subcommand "$cmdtree" "$token"; then
-                _bourbaki_debug "'$token' is a subcommand; positionals consumed"
-                return 0
-            fi
-        else
-            return 1
-        fi
-    else
-        _bourbaki_debug "check fixed positionals consumed: $cur_pos out of $npos"
-        [ "$cur_pos" -ge "$npos" ] && return 0 || return 1
-    fi
-}
-
-_min() {
-    [ $# -le 1 ] && echo "$1" && return
-    local small
-    [ "$1" -le "$2" ] && small="$1" || small="$2"
-    shift 2
-    _min "$small" "$@"
-}
-
-_n_non_flags() {
-    local token i=0
-    for token in "$@"; do
-        _is_optional "$token" && break || ((i+=1))
-    done
-    echo "$i"
-}
-
-_print_args() {
+_print_args_array() {
     local arg
     printf '%s' '( '
     for arg in "$@"; do
@@ -414,6 +537,19 @@ _lstrip_chars() {
         s="${s##$c}"
     done
     echo "$s"
+}
+
+_comma_sep_tokens() {
+    local token line="$1"
+    token="$(_rstrip "$line" ",*")"
+    token="$(_rstrip "$token" " *")"
+    while ! [ -z "$token" ]; do
+        echo "$token"
+        line="$(_lstrip "$line" "$token")"
+        line="$(_lstrip "$line" ",")"
+        token="$(_rstrip "$line" ",*")"
+        token="$(_rstrip "$token" " *")"
+    done
 }
 
 _lstrip() {
@@ -463,10 +599,10 @@ _eval_completer() {
     fi
     while [ "$pos" -gt 0 ]; do
         completer="${completer#*\;}"
-        $((pos-=1))
+        ((pos-=1))
     done
     completer="${completer%%\;*}"
-    _bourbaki_debug "eval '$completer'"
+    _bourbaki_debug "eval: $completer"
     eval "$completer"
 }
 
@@ -670,10 +806,13 @@ _bourbaki_debug_total_completions() {
     $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "TOTAL COMPLETIONS: ${#COMPREPLY[@]}"
 }
 
-_bourbaki_debug_completions() {
-    $BOURBAKI_COMPLETION_DEBUG && echo $'\033[31m'"${COMPREPLY[@]}"$'\033[0m' >&2
-}
-
 _bourbaki_debug() {
-    $BOURBAKI_COMPLETION_DEBUG && echo $'\033[33m'"$@"$'\033[0m' >&2
+    local color=''
+    case "$1" in
+        -r) color=31; shift ;;
+        -g) color=32; shift ;;
+        -b) color=34; shift ;;
+        *) color=33 ;;
+    esac
+    $BOURBAKI_COMPLETION_DEBUG && echo $'\033['"$color"'m'"$@"$'\033[0m' >&2
 }
