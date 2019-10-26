@@ -3,8 +3,6 @@ import os
 import multiprocessing
 from itertools import zip_longest
 from logging import Logger
-from bourbaki.ioutils.pickleutils import pickle_dump
-from bourbaki.hardware import report_hardware_status
 
 
 def get_nproc(n):
@@ -82,48 +80,3 @@ class apply_all:
             results.append(f(*args, **kwargs))
 
         return results
-
-
-class report_and_persist:
-    """
-    chunks = EqualSlices(things_to_run_inference_on, size=100000)
-
-    with mp.Pool(nproc) as pool:
-        inference_chunks = pool.starmap(report_and_persist(infer, len(chunks), savedir="results/"),
-                                        enumerate(chunks))
-                                        )
-    """
-
-    def __init__(self, f, total_tasks=None, *, hardware_report=False, warn_mem_threshold=2e9,
-                 savedir=None, persist_func=pickle_dump, ext='.pkl'):
-        self.f = f
-        self.total = total_tasks
-        self.hardware_report = hardware_report
-        self.warn_mem_threshold = warn_mem_threshold
-
-        if not os.path.exists(savedir):
-            os.mkdir(savedir)
-        self.savedir = savedir
-        self.persist = persist_func
-        self.ext = ext
-
-    def __call__(self, i, args):
-        if self.hardware_report:
-            report_hardware_status(warn_mem_threshold=self.warn_mem_threshold)
-
-        if not isinstance(args, tuple):
-            result = self.f(args)
-        else:
-            result = self.f(*args)
-
-        if self.savedir:
-            self.persist(result, os.path.join(self.savedir, "{}{}".format(str(i).rjust(6, "0"), self.ext)))
-
-        print("finished job {}{}"
-              .format(i,
-                      " of {}".format(self.total)
-                      if self.total is not None else ''
-                      )
-              )
-
-        return result
