@@ -181,7 +181,6 @@ def test_command_names():
 
 # TODO: more tests
 @pytest.mark.parametrize("args, result, config_format", [
-    (['--config', CONFIG_FILE], None, None),
     (['--config', CONFIG_FILE, 'print', 'ns'], {'a': 1, 'b': [1, 2, 3], 'c': datetime.date.today()}, None),
     (['--config', CONFIG_FILE, 'print', 'tuple', 'kwarg'], (12345678, Fraction(1234, 5678), 1234.5678), None),
     (['print', 'tuple', 'kwarg', '--tup', '123', '456', '7.89'], (123, 456, 7.89), None),
