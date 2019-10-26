@@ -1,6 +1,6 @@
 #coding:utf-8
 import re
-from bourbaki.reutils import (pathname_re, filename_re, any_name_re, upper_name_re, py_name_dynamic_re,
+from ..reutils import (pathname_re, filename_re, any_name_re, upper_name_re, py_name_dynamic_re,
                               py_dot_name_re, int_re, float_re)
 
 

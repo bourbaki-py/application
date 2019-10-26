@@ -2,7 +2,7 @@
 import json
 from warnings import warn
 from datetime import datetime
-from bourbaki.reutils import find_lambda, sub_lambda, extract_groups, datetime_regex, named_group, re_escaped
+from ..reutils import find_lambda, sub_lambda, extract_groups, datetime_regex, named_group, re_escaped
 from .defaults import DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT, METALOG, METALOG_LEVEL
 from .regexes import *
 
