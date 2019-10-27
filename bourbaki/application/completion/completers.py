@@ -12,6 +12,7 @@ import sys
 from warnings import warn
 
 from bourbaki.introspection.classes import parameterized_classpath
+from bourbaki.introspection.generic_dispatch import const
 
 from ..paths import is_newer
 from .compgen_python_classpaths import MODULE_FLAG, CALLABLE_FLAG, CLASS_FLAG, INSTANCE_FLAG, SUBCLASS_FLAG
@@ -154,7 +155,8 @@ class _BashCompletionCompleters:
         if func_name not in BASH_COMPLETION_FUNCTIONS:
             warn("'{}' is not registered as a know bash completion function".format(func_name))
 
-        bash_completion_cls = partial(RawShellFunctionComplete, func_name)
+        # always const, so that cli_completer.register(some_type)(BashCompletion.some_completer_name) just works
+        bash_completion_cls = const(RawShellFunctionComplete(func_name))
         return bash_completion_cls
 
 

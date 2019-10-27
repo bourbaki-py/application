@@ -1016,6 +1016,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         allow_positionals = not subcmd_func.require_keyword_args
         arg_to_group = subcmd_func.arg_to_group_name
         named_groups = {name: parser.add_argument_group(name) for name in subcmd_func.named_groups}
+        lookup_order = (CLI, *subcmd_func.lookup_order, DEFAULTS) if CLI not in subcmd_func.lookup_order \
+            else (*subcmd_func.lookup_order, DEFAULTS)
 
         positional_args = []
         for name, io_methods in subcmd_func.typed_io.items():
@@ -1024,12 +1026,19 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             param = params[name]
             group_name = arg_to_group.get(name)
             group = parser if group_name is None else named_groups[group_name]
+
+            has_fallback = False
+            if CONFIG in lookup_order and (name not in subcmd_func.ignore_in_config):
+                has_fallback = True
+            if ENV in lookup_order and (name in subcmd_func.parse_env):
+                has_fallback = True
+
             action = io_methods.add_argparse_arg(group, param,
                                                  allow_positionals=allow_positionals,
                                                  implicit_flags=subcmd_func.implicit_flags,
-                                                 has_fallback=(name not in subcmd_func.ignore_in_config
-                                                               or name in subcmd_func.parse_env),
-                                                 metavar=subcmd_func.metavars, docs=subcmd_func.docs)
+                                                 has_fallback=has_fallback,
+                                                 metavar=subcmd_func.metavars,
+                                                 docs=subcmd_func.docs)
             nargs = io_methods.cli_nargs
             if action.positional:
                 positional_args.append((name, param.annotation, nargs))
