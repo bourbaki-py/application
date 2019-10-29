@@ -29,10 +29,9 @@ from .exceptions import TypedInputError, TypedOutputError
 Empty = Parameter.empty
 Doc = Union[CallableDocs, ParamDocs, ParamDoc]
 
-
-FILE_MODES = {'r', 'w', 'a', 'rb', 'wb', 'ab', 'r+', 'a+', 'w+', 'rb+', 'wb+', 'ab+'}
 READ_MODES = {'r', 'rb', 'r+', 'rb+', 'a+', 'ab+', 'wb+'}
-WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+'}
+WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+', 'x', 'xb'}
+FILE_MODES = READ_MODES.union(WRITE_MODES)
 
 NARGS_OPTIONS = (ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL, None)
 CLI_PREFIX_CHAR = '-'
@@ -55,6 +54,25 @@ class _FileHandleConstructor(type):
         if cls.encoding:
             return "{}[{}, {}]".format(tname, repr(cls.mode), repr(cls.encoding))
         return"{}[{}]".format(tname, repr(cls.mode))
+
+    @property
+    def readable(cls):
+        return cls.mode in READ_MODES
+
+    @property
+    def writable(cls):
+        return cls.mode in WRITE_MODES
+
+    def __instancecheck__(cls, instance):
+        if isinstance(instance, cls.__bases__):
+            print("CHECK", instance)
+            if cls.readable and not instance.readable():
+                return False
+            if cls.writable and not instance.writable():
+                return False
+            return True
+        else:
+            return False
 
 
 class File(metaclass=_FileHandleConstructor):

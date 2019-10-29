@@ -482,3 +482,5 @@ def test_config_encoder(test_case: _TestCase):
 ])
 def test_file_issubclass(fileclass1, fileclass2):
     assert issubclass(fileclass1, fileclass2)
+    if fileclass1 != fileclass2:
+        assert not issubclass(fileclass2, fileclass1)
