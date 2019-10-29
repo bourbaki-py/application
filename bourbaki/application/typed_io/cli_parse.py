@@ -227,12 +227,12 @@ class LazyCLIParser(GenericCLIParserMixin, LazyWrapper):
     pass
 
 
-@cli_parser.register(enum.Enum)
+@cli_parser.register_all(enum.Enum, enum.IntEnum)
 def cli_enum_parser(enum_):
     return EnumParser(enum_).cli_parse
 
 
-@cli_parser.register(enum.Flag)
+@cli_parser.register_all(enum.Flag, enum.IntFlag)
 def cli_flag_parser(enum_):
     return FlagParser(enum_).cli_parse
 

@@ -24,7 +24,7 @@ from .parsers import (parse_regex_bytes, parse_regex, parse_range, parse_iso_dat
                       parse_path, EnumParser, FlagParser)
 from .exceptions import (ConfigTypedInputError, ConfigIOUndefined, ConfigUnionInputError,
                          ConfigCollectionKeysNotAllowed, ConfigCallableInputError)
-from .utils import identity, Empty, IODispatch, TypeCheckInput, PicklableWithType
+from .utils import identity, Empty, IODispatch, TypeCheckInput, PicklableWithType, File
 from .parsers import TypeCheckImportFunc, TypeCheckImportType
 from .config_repr_ import bytes_config_key_repr
 
@@ -160,6 +160,10 @@ config_key_decoder = GenericTypeLevelSingleDispatch("config_key_decoder", isolat
 
 # no typecheck for unannotated params
 config_decoder.register(Empty, as_const=True)(inflate_config)
+
+# File subclasses are their own parsers
+config_decoder.register(File)(identity)
+config_key_decoder.register(File)(identity)
 
 
 # don't allow inflation for simple JSON-encodable atomic types
@@ -331,14 +335,14 @@ class LazyConfigDecoder(LazyWrapper):
 
 
 # enums
-@config_decoder.register(enum.Enum)
-@config_key_decoder.register(enum.Enum)
+@config_decoder.register_all(enum.Enum, enum.IntEnum)
+@config_key_decoder.register_all(enum.Enum, enum.IntEnum)
 def enum_config_decoder(enum_type):
     return EnumParser(enum_type).config_decode
 
 
-@config_decoder.register(enum.Flag)
-@config_key_decoder.register(enum.Flag)
+@config_decoder.register_all(enum.Flag, enum.IntFlag)
+@config_key_decoder.register_all(enum.Flag, enum.IntFlag)
 def enum_config_decoder(enum_type):
     return FlagParser(enum_type).config_decode
 

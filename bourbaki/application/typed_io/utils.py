@@ -288,6 +288,7 @@ default_repr_values = {
     URL: url_repr,
     uuid.UUID: uuid_repr,
     Empty: any_repr,
+    typing.Callable: classpath_function_repr,
     types.FunctionType: classpath_function_repr,
     types.BuiltinFunctionType: classpath_function_repr,
     numbers.Number: "|".join((int_repr, float_repr, complex_repr.replace('[', '').replace(']', ''))),
@@ -295,11 +296,25 @@ default_repr_values = {
     numbers.Integral: int_repr,
 }
 
+default_value_repr_values = {
+    sys.stdout: "stdout",
+    sys.stderr: "stderr",
+    sys.stdin: "stdin",
+}
+
 
 def repr_type(type_, supertype=None):
     if supertype is None:
         return classpath_type_repr
     return "{}<:{}".format(classpath_type_repr, parameterized_classpath(supertype))
+
+
+def repr_value(value: object) -> str:
+    """Represent a default value on the command line"""
+    r = default_value_repr_values.get(value)
+    if r is None:
+        return str(value)
+    return r
 
 
 def maybe_map(f, it, exc=Exception):

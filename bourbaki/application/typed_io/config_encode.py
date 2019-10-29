@@ -2,6 +2,9 @@
 import decimal
 import enum
 import fractions
+import io
+import os
+import sys
 import typing
 import types
 import numbers
@@ -13,7 +16,6 @@ import uuid
 from functools import partial
 from operator import attrgetter
 from urllib.parse import ParseResult as URL, urlunparse
-from bourbaki.introspection.classes import classpath
 from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.types import LazyType, NamedTupleABC
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
@@ -21,7 +23,7 @@ from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, 
                                                              UnionWrapper, LazyWrapper)
 from .parsers import EnumParser, FlagParser
 from .exceptions import ConfigIOUndefined, ConfigTypedOutputError, ConfigTypedKeyOutputError, ConfigUnionOutputError
-from .utils import Empty, identity, IODispatch, TypeCheckOutput, TypeCheckOutputFunc, TypeCheckOutputType
+from .utils import Empty, identity, File, IODispatch, TypeCheckOutput, TypeCheckOutputFunc, TypeCheckOutputType
 
 
 class ConfigEncodeDispatch(IODispatch):
@@ -124,11 +126,23 @@ def encode_bytes_re(r):
 encode_str_re = attrgetter("pattern")
 
 
+def config_file_encode(file: io.IOBase):
+    if file in (sys.stdout, sys.stderr, sys.stdin):
+        return "-"
+    try:
+        name = file.name
+    except AttributeError as e:
+        raise ConfigTypedOutputError(type(file), file, e)
+    else:
+        return os.path.abspath(name)
+
+
 config_encoder_methods = {
     str: identity,
     range: repr_range,
     pathlib.Path: str,
     uuid.UUID: str,
+    File: config_file_encode,
     types.FunctionType: function_classpath,
     types.BuiltinFunctionType: function_classpath,
     datetime.date: datetime.date.isoformat,
@@ -249,14 +263,14 @@ class LazyConfigDecoder(LazyWrapper):
     getter = config_encoder
 
 
-@config_encoder.register(enum.Enum)
-@config_key_encoder.register(enum.Enum)
+@config_encoder.register_all(enum.Enum, enum.IntEnum)
+@config_key_encoder.register_all(enum.Enum, enum.IntEnum)
 def config_enum_encoder(enum_):
     return EnumParser(enum_).config_encode
 
 
-@config_encoder.register(enum.Flag)
-@config_key_encoder.register(enum.Flag)
+@config_encoder.register_all(enum.Flag, enum.IntFlag)
+@config_key_encoder.register_all(enum.Flag, enum.IntFlag)
 def config_flag_encoder(enum_):
     return FlagParser(enum_).config_encode
 

@@ -1,6 +1,6 @@
 # coding:utf-8
 import typing
-from enum import Enum
+import enum
 from itertools import repeat
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.introspection.types import (issubclass_generic, is_named_tuple_class, get_named_tuple_arg_types,
@@ -91,7 +91,7 @@ def cli_repr_seq(s, t=typing.Any):
     return cli_repr(t)
 
 
-@cli_repr.register(Enum)
+@cli_repr.register_all(enum.Enum, enum.IntEnum)
 def cli_repr_enum(enum_):
     return EnumParser(enum_).cli_repr()
 

@@ -524,7 +524,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.log_msg_fmt = log_msg_fmt
         self.app_logger_cls = logger_cls
 
-        self.use_config = bool(use_config_file) or bool(require_config)
+        self.use_config = bool(use_config_file) or bool(require_config) or bool(add_init_config_command)
         self.use_subconfig_for_commands = bool(use_subconfig_for_commands)
         self.require_config = bool(require_config)
         self.default_configfile = default_configfile
@@ -549,6 +549,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.reserved_command_names = set()
         self._builtin_commands_added = False
 
+        if self.use_config and CONFIG not in self.lookup_order:
+            setup_warn("use of configuration was specified with at least one of use_config,"
+                       "require_config, or add_init_config_command, but {} is not in lookup_order; "
+                       "no value can ever be parsed from configuration in that instance"
+                       .format(CONFIG))
+
         if self.use_init_config_command:
             if isinstance(add_init_config_command, str):
                 add_init_config_command = (add_init_config_command,)
@@ -556,7 +562,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if isinstance(add_init_config_command, tuple):
                 self.init_config_command = tuple(map(to_cmd_line_name, add_init_config_command))
             else:
-                self.init_config_command = (to_cmd_line_name(self.init_config.__name__),)
+                self.init_config_command = tuple(self.init_config.__name__.split('_'))
 
             self.reserved_command_names.add(self.init_config_command)
 
@@ -1594,6 +1600,7 @@ class SubCommandFunc(Logged):
             param = params[name]
             kind = param.kind
             parsed = parser(value)
+            self.logger.debug("parsed value %r for arg %r from %s", parsed, name, source.value)
 
             if name in self.typecheck and param.annotation is not Parameter.empty:
                 if not isinstance_generic(parsed, tio.type_):
@@ -1649,6 +1656,9 @@ class SubCommandFunc(Logged):
                     elif not isinstance(val, list):
                         val = list(val)
             elif literal_defaults and has_default:
+                print("\n\nENCODER")
+                print(tio.config_encoder)
+                print("\n\n")
                 val = tio.config_encoder(param.default)
             else:
                 val = tio.config_repr
