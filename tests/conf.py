@@ -6,17 +6,17 @@
         2,
         3
     ],
-    '[c]': 'YYYY-MM-DD'
+    'c??': 'YYYY-MM-DD'
 },
 'print': {
     'ns': {
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     },
     'tuple': {
         'kwarg': {
-            '[outfile]': '<text-file>',
+            'outfile??': '<text-file>',
             'tup': [
                 '<int>',
                 '<int> OR <int>[/<int>]',
@@ -31,7 +31,7 @@
                 '<int> OR <int>[/<int>]',
                 '<float>'
             ],
-            '[outfile]': '<text-file>',
+            'outfile??': '<text-file>',
             'pretty': False,
             'literal': False
         },
@@ -58,32 +58,32 @@
             bar='.',
             baz='2019-08-27'
         ),
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     },
     'enum': {
-        '[foo]': 'foo|bar|baz',
-        '[outfile]': '<text-file>',
+        'foo??': 'foo|bar|baz',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     },
     'uuid': {
-        '[uuid]': '[0-f]{32}',
-        '[outfile]': '<text-file>',
+        'uuid??': '[0-f]{32}',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     },
     'numbers': {
-        '[x]': '<decimal-str>',
-        '[y]': '<int>[/<int>]',
-        '[z]': '<float>[+<float>j]',
-        '[outfile]': '<text-file>',
+        'x??': '<decimal-str>',
+        'y??': '<int>[/<int>]',
+        'z??': '<float>[+<float>j]',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     },
     'bytes': {
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'b': [
             '<0-255>',
             '...'
@@ -92,13 +92,13 @@
         'literal': False
     },
     'url': {
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'url': 'scheme://netloc[/path][;params][?query][#fragment]',
         'pretty': False,
         'literal': False
     },
     'mapping': {
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'foo_to_date': {
             'foo|bar|baz': 'YYYY-MM-DD',
             '...': '...'
@@ -115,12 +115,12 @@
 },
 'cant': dict(
     parse={
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'can_parse_me': [
             '<str>',
             '...'
         ],
-        '[cant_parse_me]': [
+        'cant_parse_me??': [
             [
                 [
                     '<str>',
@@ -136,7 +136,7 @@
     }
 ),
 'args-and-kwargs': {
-    '[outfile]': '<text-file>',
+    'outfile??': '<text-file>',
     'ips': [
         '<ipv6addr>',
         '...'
@@ -151,7 +151,7 @@
 'leading': dict(
     list={
         'i_2': '<int>',
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'l_1': [
             '<float>',
             '...'
@@ -162,7 +162,7 @@
 ),
 'types': {
     'number': 'path.to.type[type,params]',
-    '[outfile]': '<text-file>',
+    'outfile??': '<text-file>',
     'pretty': False,
     'literal': False,
     'types': {
@@ -173,7 +173,7 @@
 'get': dict(
     attr={
         'attr': '<str>',
-        '[outfile]': '<text-file>',
+        'outfile??': '<text-file>',
         'pretty': False,
         'literal': False
     }
@@ -183,7 +183,7 @@
         'foo|bar|baz',
         '...'
     ],
-    '[outfile]': '<text-file>',
+    'outfile??': '<text-file>',
     'pretty': False,
     'literal': False
 },

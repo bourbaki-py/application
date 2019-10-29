@@ -29,10 +29,9 @@ from .exceptions import TypedInputError, TypedOutputError
 Empty = Parameter.empty
 Doc = Union[CallableDocs, ParamDocs, ParamDoc]
 
-
-FILE_MODES = {'r', 'w', 'a', 'rb', 'wb', 'ab', 'r+', 'a+', 'w+', 'rb+', 'wb+', 'ab+'}
 READ_MODES = {'r', 'rb', 'r+', 'rb+', 'a+', 'ab+', 'wb+'}
-WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+'}
+WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+', 'x', 'xb'}
+FILE_MODES = READ_MODES.union(WRITE_MODES)
 
 NARGS_OPTIONS = (ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL, None)
 CLI_PREFIX_CHAR = '-'
@@ -55,6 +54,25 @@ class _FileHandleConstructor(type):
         if cls.encoding:
             return "{}[{}, {}]".format(tname, repr(cls.mode), repr(cls.encoding))
         return"{}[{}]".format(tname, repr(cls.mode))
+
+    @property
+    def readable(cls):
+        return cls.mode in READ_MODES
+
+    @property
+    def writable(cls):
+        return cls.mode in WRITE_MODES
+
+    def __instancecheck__(cls, instance):
+        if isinstance(instance, cls.__bases__):
+            print("CHECK", instance)
+            if cls.readable and not instance.readable():
+                return False
+            if cls.writable and not instance.writable():
+                return False
+            return True
+        else:
+            return False
 
 
 class File(metaclass=_FileHandleConstructor):
@@ -288,6 +306,7 @@ default_repr_values = {
     URL: url_repr,
     uuid.UUID: uuid_repr,
     Empty: any_repr,
+    typing.Callable: classpath_function_repr,
     types.FunctionType: classpath_function_repr,
     types.BuiltinFunctionType: classpath_function_repr,
     numbers.Number: "|".join((int_repr, float_repr, complex_repr.replace('[', '').replace(']', ''))),
@@ -295,11 +314,25 @@ default_repr_values = {
     numbers.Integral: int_repr,
 }
 
+default_value_repr_values = {
+    sys.stdout: "stdout",
+    sys.stderr: "stderr",
+    sys.stdin: "stdin",
+}
+
 
 def repr_type(type_, supertype=None):
     if supertype is None:
         return classpath_type_repr
     return "{}<:{}".format(classpath_type_repr, parameterized_classpath(supertype))
+
+
+def repr_value(value: object) -> str:
+    """Represent a default value on the command line"""
+    r = default_value_repr_values.get(value)
+    if r is None:
+        return str(value)
+    return r
 
 
 def maybe_map(f, it, exc=Exception):

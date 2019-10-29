@@ -4,7 +4,7 @@ import enum
 from inspect import Parameter
 from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
-from bourbaki.introspection.types import deconstruct_generic
+from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class
 from .cli_parse import cli_parser
 from .cli_nargs_ import cli_nargs
 from .cli_repr_ import cli_repr
@@ -14,7 +14,7 @@ from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
 from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR
-from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity
+from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity, repr_value
 
 
 class ArgSource(enum.Enum):
@@ -301,13 +301,16 @@ class TypedIO(PicklableWithType):
                     metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
                 elif positional:
                     metavar = name.upper()
+                elif is_named_tuple_class(self.type_):
+                    metavar = tuple(map(str.upper, self.type_.__annotations__.keys()))
                 else:
                     metavar = type_str
                     type_str = None
 
             if not isinstance(type_str, (str, type(None))):
+                # tuple types
                 type_str = ' '.join(type_str)
-                
+
             if positional and not isinstance(metavar, (str, type(None))):
                 # hack to deal with the fact that argparse handles fixed-length positionals differently than
                 # fixed-length options when formatting help strings
@@ -330,7 +333,7 @@ class TypedIO(PicklableWithType):
                 kw['nargs'] = OPTIONAL
 
             if has_default and default is not None and not variadic:
-                defaultstr = "default {}".format(repr(default))
+                defaultstr = "default {}".format(repr_value(default))
             else:
                 defaultstr = None
 

@@ -36,7 +36,7 @@ cli_completer.register(typing.Callable, as_const=True)(CompletePythonCallables()
 
 cli_completer.register(NoneType, as_const=True)(NoComplete)
 
-cli_completer.register(enum.Enum)(CompleteEnum)
+cli_completer.register_all(enum.Enum, enum.Flag, enum.IntEnum, enum.IntFlag)(CompleteEnum)
 
 
 @cli_completer.register(typing.Collection)

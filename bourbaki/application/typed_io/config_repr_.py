@@ -7,7 +7,7 @@ from typing_inspect import is_optional_type
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature, const
 from bourbaki.introspection.generic_dispatch_helpers import UnionWrapper, LazyWrapper
 from bourbaki.introspection.classes import classpath, parameterized_classpath, most_specific_constructor
-from bourbaki.introspection.callables import has_varargs, get_globals, get_callable_params
+from bourbaki.introspection.callables import has_varargs, get_globals, get_callable_params, function_classpath
 from bourbaki.introspection.wrappers import lru_cache_sig_preserving
 from bourbaki.introspection.types import (issubclass_generic, is_top_type, fully_concretize_type,
                                           get_generic_params, get_named_tuple_arg_types,
@@ -185,14 +185,12 @@ def config_repr_callable_args(init, param_dict=None, skip_self=False, only_requi
 
 config_repr = GenericTypeLevelSingleDispatch("config_repr", isolated_bases=[typing.Union, NonStdLib])
 
-config_key_repr = GenericTypeLevelSingleDispatch("config_key_repr", isolated_bases=[typing.Union])
+config_key_repr = GenericTypeLevelSingleDispatch("config_key_repr", isolated_bases=[typing.Union, NonStdLib])
 
 config_repr.register(BuiltinAtomic)(type_spec)
 
 
-@config_repr.register(typing.Any)
-@config_repr.register(typing.Generic)
-@config_repr.register(NonStdLib)
+@config_repr.register_all(typing.Any, typing.Generic, NonStdLib)
 def config_repr_any(t, *types, **kw):
     if is_top_type(t):
         return any_repr
@@ -277,8 +275,8 @@ class LazyConfigRepr(LazyWrapper):
 config_repr.register_from_mapping(config_repr_values, as_const=True)
 
 
-@config_repr.register(enum.Enum)
-@config_key_repr.register(enum.Enum)
+@config_repr.register_all(enum.Enum, enum.IntEnum)
+@config_key_repr.register_all(enum.Enum, enum.IntEnum)
 def config_repr_enum(enum_):
     return EnumParser(enum_).config_repr()
 
