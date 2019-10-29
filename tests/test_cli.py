@@ -9,6 +9,7 @@ from cytoolz import assoc, groupby, valmap
 import pytest
 
 from bourbaki.application.config import load_config
+from bourbaki.application.cli.main import OPTIONAL_ARG_TEMPLATE
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.config_repr_ import null_config_repr
 from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr
@@ -24,7 +25,7 @@ def nullable(repr_):
 
 
 def maybe(key):
-    return '[{}]'.format(key)
+    return OPTIONAL_ARG_TEMPLATE.format(key)
 
 
 output_args = {
@@ -181,7 +182,6 @@ def test_command_names():
 
 # TODO: more tests
 @pytest.mark.parametrize("args, result, config_format", [
-    (['--config', CONFIG_FILE], None, None),
     (['--config', CONFIG_FILE, 'print', 'ns'], {'a': 1, 'b': [1, 2, 3], 'c': datetime.date.today()}, None),
     (['--config', CONFIG_FILE, 'print', 'tuple', 'kwarg'], (12345678, Fraction(1234, 5678), 1234.5678), None),
     (['print', 'tuple', 'kwarg', '--tup', '123', '456', '7.89'], (123, 456, 7.89), None),

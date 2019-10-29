@@ -53,6 +53,7 @@ QUIET_ATTR = 'quiet'
 RESERVED_NAMESPACE_ATTRS = (CONFIG_FILE_ATTR, LOGFILE_ATTR, VERBOSITY_ATTR, QUIET_ATTR,
                             SUBCOMMAND_ATTR, SUBCOMMAND_PATH_ATTR)
 OUTPUT_GROUP_NAME = 'output control'
+OPTIONAL_ARG_TEMPLATE = '{}??'
 MIN_VERBOSITY = 1
 NoneType = type(None)
 ALLOWED_SUBCOMMAND_TYPES = (FunctionType, LazyImportsCallable)
@@ -69,6 +70,9 @@ _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
 
 class _DEFAULTS:
+    """Stand-in for an ArgSource instance. This is kept out of that enum intentionally since it is always implied;
+    we don't want the user to be required to include it when overriding lookup_order since forgetting to do so
+    could yield confusing results"""
     value = "function defaults"
 
     def __str__(self):
@@ -524,7 +528,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.log_msg_fmt = log_msg_fmt
         self.app_logger_cls = logger_cls
 
-        self.use_config = bool(use_config_file) or bool(require_config)
+        self.use_config = bool(use_config_file) or bool(require_config) or bool(add_init_config_command)
         self.use_subconfig_for_commands = bool(use_subconfig_for_commands)
         self.require_config = bool(require_config)
         self.default_configfile = default_configfile
@@ -549,6 +553,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.reserved_command_names = set()
         self._builtin_commands_added = False
 
+        if self.use_config and CONFIG not in self.lookup_order:
+            setup_warn("use of configuration was specified with at least one of use_config,"
+                       "require_config, or add_init_config_command, but {} is not in lookup_order; "
+                       "no value can ever be parsed from configuration in that instance"
+                       .format(CONFIG))
+
         if self.use_init_config_command:
             if isinstance(add_init_config_command, str):
                 add_init_config_command = (add_init_config_command,)
@@ -556,7 +566,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if isinstance(add_init_config_command, tuple):
                 self.init_config_command = tuple(map(to_cmd_line_name, add_init_config_command))
             else:
-                self.init_config_command = (to_cmd_line_name(self.init_config.__name__),)
+                self.init_config_command = tuple(self.init_config.__name__.split('_'))
 
             self.reserved_command_names.add(self.init_config_command)
 
@@ -581,9 +591,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                 if arg.choices is None:
                     arg.choices = set()
                 arg.choices.update(map(' '.join, (t[0] for t in self.all_subcommands() if t[0])))
-                arg.metavar = "<cmd-name>"
+                arg.metavar = "CMD-NAME"
                 choices_str = "{{{}}}".format(",".join(map(shlex.quote, sorted(arg.choices)))) if arg.choices else None
-                arg.help = '; '.join(s for s in (choices_str, arg.help) if s)
+                help = arg.help[arg.help.index(':') + 1:] if arg.help and ':' in arg.help else arg.help
+                arg.help = ': '.join(s for s in (choices_str, help) if s)
 
         self._builtin_commands_added = True
         return self
@@ -1015,6 +1026,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         allow_positionals = not subcmd_func.require_keyword_args
         arg_to_group = subcmd_func.arg_to_group_name
         named_groups = {name: parser.add_argument_group(name) for name in subcmd_func.named_groups}
+        lookup_order = (CLI, *subcmd_func.lookup_order, DEFAULTS) if CLI not in subcmd_func.lookup_order \
+            else (*subcmd_func.lookup_order, DEFAULTS)
 
         positional_args = []
         for name, io_methods in subcmd_func.typed_io.items():
@@ -1023,12 +1036,19 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             param = params[name]
             group_name = arg_to_group.get(name)
             group = parser if group_name is None else named_groups[group_name]
+
+            has_fallback = False
+            if CONFIG in lookup_order and (name not in subcmd_func.ignore_in_config):
+                has_fallback = True
+            if ENV in lookup_order and (name in subcmd_func.parse_env):
+                has_fallback = True
+
             action = io_methods.add_argparse_arg(group, param,
                                                  allow_positionals=allow_positionals,
                                                  implicit_flags=subcmd_func.implicit_flags,
-                                                 has_fallback=(name not in subcmd_func.ignore_in_config
-                                                               or name in subcmd_func.parse_env),
-                                                 metavar=subcmd_func.metavars, docs=subcmd_func.docs)
+                                                 has_fallback=has_fallback,
+                                                 metavar=subcmd_func.metavars,
+                                                 docs=subcmd_func.docs)
             nargs = io_methods.cli_nargs
             if action.positional:
                 positional_args.append((name, param.annotation, nargs))
@@ -1584,6 +1604,7 @@ class SubCommandFunc(Logged):
             param = params[name]
             kind = param.kind
             parsed = parser(value)
+            self.logger.debug("parsed value %r for arg %r from %s", parsed, name, source.value)
 
             if name in self.typecheck and param.annotation is not Parameter.empty:
                 if not isinstance_generic(parsed, tio.type_):
@@ -1644,7 +1665,7 @@ class SubCommandFunc(Logged):
                 val = tio.config_repr
 
             if is_optional_type(tio.type_):
-                name = '[{}]'.format(name)
+                name = OPTIONAL_ARG_TEMPLATE.format(name)
 
             conf[name] = val
 

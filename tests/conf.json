@@ -76,13 +76,13 @@
       "literal":false
     },
     "url":{
-      "[outfile]":null,
+      "outfile??":null,
       "url":"scheme:\/\/netloc[\/path][;params][?query][#fragment]",
       "pretty":false,
       "literal":false
     },
     "mapping":{
-      "[outfile]":null,
+      "outfile??":null,
       "foo_to_date":{
         "foo|bar|baz":"YYYY-MM-DD",
         "...":"..."
@@ -99,18 +99,18 @@
   },
   "cant":{
     "parse":{
-      "[outfile]":null,
+      "outfile??":null,
       "can_parse_me":[
         "<str>",
         "..."
       ],
-      "[cant_parse_me]":null,
+      "cant_parse_me??":null,
       "pretty":false,
       "literal":false
     }
   },
   "args-and-kwargs":{
-    "[outfile]":null,
+    "outfile??":null,
     "ips":[
       "<ipv6addr>",
       "..."
@@ -125,7 +125,7 @@
   "leading":{
     "list":{
       "i_2":"<int>",
-      "[outfile]":null,
+      "outfile??":null,
       "l_1":[
         "<float>",
         "..."
@@ -136,7 +136,7 @@
   },
   "types":{
     "number":"path.to.type[type,params]",
-    "[outfile]":null,
+    "outfile??":null,
     "pretty":false,
     "literal":false,
     "types":{
@@ -147,7 +147,7 @@
   "get":{
     "attr":{
       "attr":"<str>",
-      "[outfile]":null,
+      "outfile??":null,
       "pretty":false,
       "literal":false
     }
@@ -157,7 +157,7 @@
       "foo|bar|baz",
       "..."
     ],
-    "[outfile]":null,
+    "outfile??":null,
     "pretty":false,
     "literal":false
   },

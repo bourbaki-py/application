@@ -1,6 +1,7 @@
 # coding:utf-8
 from typing import IO, List, Tuple, Sequence, Union, Optional as Opt
 from abc import ABC
+import argparse
 from argparse import ArgumentParser, Action, FileType, _SubParsersAction
 from functools import singledispatch, lru_cache, partial
 import os
@@ -11,10 +12,16 @@ import sys
 from warnings import warn
 
 from bourbaki.introspection.classes import parameterized_classpath
+from bourbaki.introspection.generic_dispatch import const
 
 from ..paths import is_newer
 from .compgen_python_classpaths import MODULE_FLAG, CALLABLE_FLAG, CLASS_FLAG, INSTANCE_FLAG, SUBCLASS_FLAG
 
+REPEATABLE_ACTIONS = tuple(
+    cls for cls in vars(argparse).values()
+    if isinstance(cls, type) and isinstance(cls, Action)
+    and ("Count" in cls.__name__ or "Append" in cls.__name__)
+)
 
 BASH_COMPLETION_HELPERS_FILENAME = "bourbaki_bash_completion_helpers.sh"
 BASH_COMPLETION_FUNC_NAME = "_bourbaki_complete"
@@ -27,6 +34,7 @@ COMPLETE_FLOATS_FUNC_NAME = "_bourbaki_complete_floats"
 COMPLETE_KEYVAL_FUNC_NAME = "_bourbaki_complete_keyval"
 NO_COMPLETE_FUNC_NAME = "_bourbaki_no_complete"
 KEYVAL_SEP = "="
+OPTION_SEP = ","
 BASH_COMPLETION_TREE_INDENT = "  "
 
 DEFAULT_BASH_COMPLETE_OPTIONS = ("bashdefault", "filenames")
@@ -147,7 +155,8 @@ class _BashCompletionCompleters:
         if func_name not in BASH_COMPLETION_FUNCTIONS:
             warn("'{}' is not registered as a know bash completion function".format(func_name))
 
-        bash_completion_cls = partial(RawShellFunctionComplete, func_name)
+        # always const, so that cli_completer.register(some_type)(BashCompletion.some_completer_name) just works
+        bash_completion_cls = const(RawShellFunctionComplete(func_name))
         return bash_completion_cls
 
 
@@ -332,11 +341,10 @@ def print_cli_def_tree(parser: Union[ArgumentParser, _SubParsersAction],
         print(*line, file=sys.stderr)
 
     for a in args:
-        print_('{}- {}'.format(indent, completion_spec(a)))
+        print_('{}- {}'.format(indent, completion_spec(a, positional=True)))
 
     for a in options:
-        for o in a.option_strings:
-            print_('{}{} {}'.format(indent, o, completion_spec(a)))
+        print_('{}{} {}'.format(indent, OPTION_SEP.join(a.option_strings), completion_spec(a, positional=False)))
 
     for name, c in commands:
         print_("{}{}".format(indent, name))
@@ -361,10 +369,18 @@ def gather_args_options_subparsers(parser: ArgumentParser) -> \
     return args, options, commands
 
 
-def completion_spec(action: Action) -> str:
+def completion_spec(action: Action, positional=False) -> str:
+    if isinstance(action, REPEATABLE_ACTIONS):
+        nreps = '+' if action.required else '*'
+    elif positional:
+        nreps = None
+    else:
+        nreps = '1' if action.required else '?'
+
     nargs = action.nargs if action.nargs is not None else 1
     completer = get_completer(action) if nargs != 0 else None
-    return "{} {}".format(nargs, bash_call_str(completer)) if completer is not None else str(nargs)
+    repstr = "{}{}".format(nargs, '' if nreps is None else "({})".format(nreps))
+    return "{} {}".format(repstr, bash_call_str(completer)) if completer is not None else repstr
 
 
 def get_completer(action: Action) -> Opt[Union[str, List[str], Complete]]:

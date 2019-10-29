@@ -36,22 +36,22 @@ SUBCLASS_FLAG = '--subclass'
 
 def complete_objpath(prefix: str= '', *legal_prefixes: str):
     _debug("Completing paths for all objects")
-    yield from _complete_objpath(prefix, legal_prefixes=legal_prefixes)[1]
+    yield from _complete_objpath(prefix, legal_prefixes=legal_prefixes)
 
 
 def complete_callable_path(prefix: str='', *legal_prefixes: str):
     _debug("Completing paths for callables")
-    yield from _complete_objpath(prefix, typecheck=callable_, legal_prefixes=legal_prefixes)[1]
+    yield from _complete_objpath(prefix, typecheck=callable_, legal_prefixes=legal_prefixes)
 
 
 def complete_classpath(prefix: str='', *legal_prefixes: str):
     _debug("Completing paths for classes")
-    yield from _complete_objpath(prefix, cls=type, typecheck=isinstance, legal_prefixes=legal_prefixes)[1]
+    yield from _complete_objpath(prefix, cls=type, typecheck=isinstance, legal_prefixes=legal_prefixes)
 
 
 def complete_module_path(prefix: str='', *legal_prefixes: str):
     _debug("Completing paths for modules")
-    yield from _complete_objpath(prefix, include_attrs=False, legal_prefixes=legal_prefixes)[1]
+    yield from _complete_objpath(prefix, include_attrs=False, legal_prefixes=legal_prefixes, include_builtins=False)
 
 
 def complete_instance_path(prefix: str='', *legal_classes: str):
@@ -62,7 +62,7 @@ def complete_instance_path(prefix: str='', *legal_classes: str):
     else:
         cls = typecheck = None
 
-    yield from _complete_objpath(prefix, cls=cls, typecheck=typecheck)[1]
+    yield from _complete_objpath(prefix, cls=cls, typecheck=typecheck)
 
 
 def complete_subclasspath(prefix: str= '', *legal_superclasses: str):
@@ -73,38 +73,44 @@ def complete_subclasspath(prefix: str= '', *legal_superclasses: str):
     else:
         cls, typecheck = type, isinstance
 
-    yield from _complete_objpath(prefix, cls=cls, typecheck=typecheck)[1]
+    yield from _complete_objpath(prefix, cls=cls, typecheck=typecheck)
 
 
 # The above dispatch to this main function
 
-def _complete_objpath(prefix: str, cls=None, typecheck=None, legal_prefixes=None, include_attrs=True):
+def _complete_objpath(prefix: str, cls=None, typecheck=None, legal_prefixes=None,
+                      include_attrs=True, include_builtins=True):
     from bourbaki.introspection.imports import import_object
+    import builtins
+
     if legal_prefixes:
         candidate_prefixes = [p for p in legal_prefixes if p.startswith(prefix)]
         if not candidate_prefixes:
-            if not any(prefix.startswith(p) for p in legal_prefixes):
-                return None, ()
-        else:
-            prefix = min(candidate_prefixes, key=len)
-
-    parts = prefix.split('.')
-    if len(parts) > 1:
-        modname, suffix = '.'.join(parts[:-1]), parts[-1]
-        names = get_all_module_names(prefix, suffix)
-        try:
-            mod = import_object(modname)
-        except ImportError:
-            mod = None
-        else:
-            names = chain(names, get_submodule_names(mod, suffix, modname=modname))
-            if include_attrs:
-                names = chain(names, get_attr_names(mod, suffix, cls, typecheck, modname=modname))
+            return None, ()
     else:
-        mod = None
-        names = get_all_module_names(prefix)
+        candidate_prefixes = [prefix]
 
-    return mod, names
+    def inner(prefix):
+        parts = prefix.split('.')
+        if len(parts) > 1:
+            modname, suffix = '.'.join(parts[:-1]), parts[-1]
+            names = get_all_module_names(prefix, suffix)
+            try:
+                mod = import_object(modname)
+            except ImportError:
+                mod = None
+            else:
+                names = chain(names, get_submodule_names(mod, suffix, modname=modname))
+                if include_attrs:
+                    names = chain(names, get_attr_names(mod, suffix, cls, typecheck, modname=modname))
+        else:
+            mod = None
+            names = get_all_module_names(prefix)
+            if include_builtins:
+                names = chain(names, get_attr_names(builtins, prefix, cls, typecheck))
+        return names
+
+    return chain.from_iterable(map(inner, candidate_prefixes))
 
 
 # Helpers
@@ -124,6 +130,7 @@ def callable_(o, cls=None):
 
 
 def issubclass_(o, cls):
+    # delayed import for speed if not needed; this only gets called at most once per interpreter launch
     from bourbaki.introspection.types import issubclass_generic, typetypes
     return isinstance(o, (type, *typetypes)) and issubclass_generic(o, cls)
 
@@ -146,14 +153,15 @@ def _materialize_classes(*legal_superclasses: str):
         clss = tuple(clss)
 
     _debug("Imported classes: {clss}", clss=clss)
-    return Union[cls]
+    if not clss:
+        return object
+    return Union[clss]
 
 
 def get_attr_names(mod, attr_prefix='', cls=None, typecheck=None, modname=None):
     _debug("Completing attributes on module/object {mod}", mod=mod)
 
-    if modname is None:
-        modname = mod.__name__
+    fmt_name = None if modname is None else (modname + ".{}").format
 
     attrs = dir(mod)
 
@@ -166,8 +174,7 @@ def get_attr_names(mod, attr_prefix='', cls=None, typecheck=None, modname=None):
                func=typecheck, cls=cls)
         attrs = (a for a in attrs if typecheck(getattr(mod, a, None), cls))
 
-    for attr in attrs:
-        yield '.'.join([modname, attr])
+    yield from (map(fmt_name, attrs) if fmt_name else attrs)
 
 
 def get_submodule_names(mod, suffix='', modname=None):
@@ -212,10 +219,8 @@ def get_all_module_names(prefix='', submod_prefix=None):
            prefix_note='' if not prefix else " with prefix '%s'" % prefix)
     dirs = [d for d in sys.path if os.path.isdir(d)]
 
-    if "builtins".startswith(prefix):
-        yield "builtins"
-
     names = (name for dir_ in dirs for name in get_module_names(dir_, submod_prefix))
+    names = chain(names, ('builtins',))
     if prefix:
         names = (name for name in names if name.startswith(prefix))
 

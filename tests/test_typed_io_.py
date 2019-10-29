@@ -465,3 +465,22 @@ def test_config_decoder(test_case: _TestCase):
 @pytest.mark.parametrize("test_case", test_cases)
 def test_config_encoder(test_case: _TestCase):
     test_case.test_config_encoder()
+
+
+@pytest.mark.parametrize("fileclass1,fileclass2", [
+    (File, File),
+    (File['w'], File),
+    (File['r'], File),
+    (File['wb'], File),
+    (File['rb'], File),
+    (BinaryFile, File),
+    (TextFile, File),
+    (File['w'], TextFile),
+    (File['r'], TextFile),
+    (File['wb'], BinaryFile),
+    (File['rb'], BinaryFile),
+])
+def test_file_issubclass(fileclass1, fileclass2):
+    assert issubclass(fileclass1, fileclass2)
+    if fileclass1 != fileclass2:
+        assert not issubclass(fileclass2, fileclass1)

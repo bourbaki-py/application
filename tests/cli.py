@@ -56,7 +56,7 @@ cli = CommandLineInterface(
     add_init_config_command=('init', 'config'),
     require_keyword_args=False,
     use_config_file=True,
-    require_subcommand=False,
+    require_subcommand=True,
     implicit_flags=True,
     allow_abbrev=True,
     default_metavars=dict(outfile='OUTFILE'),
@@ -103,6 +103,12 @@ class MyCommandLineApp(Generic[Num], Logged):
     @cli_spec.ignore_on_cmd_line("cant_parse_me")
     @cli_spec.command_prefix("cant")
     def cant_parse(self, can_parse_me: List[str], cant_parse_me: Optional[List[List[str]]] = None):
+        """
+        print a thing that can be parsed from the command line and another that can only be parsed from config
+        :param can_parse_me: a list of strings, parseable from the command line
+        :param cant_parse_me: a list of lists of strings, only parseable from config
+        :return:
+        """
         print("cant_parse_me:", cant_parse_me or [])
         return can_parse_me
 
