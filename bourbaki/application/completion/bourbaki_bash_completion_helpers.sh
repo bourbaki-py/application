@@ -588,6 +588,12 @@ _has_suffix() {
     [ "${s%$p}" != "$s" ] && return 0 || return 1
 }
 
+_array_insert() {
+    local name="$1" ix="$2" val="$3" insert_cmd
+    insert_cmd="$name"'=("${'"$name"'[@]:0:'"$ix"'}" "'"$val"'" "${'"$name"'[@]:'"$ix"'}")'
+    eval "$insert_cmd"
+}
+
 _bourbaki_no_complete() {
     return 0
 }
@@ -621,7 +627,7 @@ _get_keyval_cmd_idx() {
     local token ix=0 which='key'
     for token in "$@"; do
         ((ix+=1))
-        if [ "$(_lstrip_chars "$token" "$BOURBAKI_KEYVAL_SPLIT_CHAR")" == "" ] && [ ${token#} -gt 2 ]; then
+        if [ "$(_lstrip_chars "$token" "$BOURBAKI_KEYVAL_SPLIT_CHAR")" == "" ] && [ ${#token} -gt 2 ]; then
             break
         fi
     done
@@ -629,21 +635,25 @@ _get_keyval_cmd_idx() {
 }
 
 _bourbaki_complete_keyval() {
-    _bourbaki_debug "COMPLETING KEY-VALUE '$@'"
-    local keyval_cmd_ix=$(_get_keyval_cmd_idx "$@")
+    local keyval_cmd_ix="$(_get_keyval_cmd_idx "$@")"
     local cur="${COMP_WORDS[$COMP_CWORD]}" last="${COMP_WORDS[$((COMP_CWORD - 1))]}"
 
     if [ "$cur" == "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
-        _bourbaki_debug "COMPLETING VALUE: '$cur'"
-        COMP_WORDS=("${COMP_WORDS[@]}" '')
+        # just typed '=', nothing after yet
+        _bourbaki_debug "FOUND '$BOURBAKI_KEYVAL_SPLIT_CHAR'; COMPLETING VALUE: ''"
         ((COMP_CWORD += 1))
-        "${@:keyval_cmd_ix+1}"
+        _array_insert COMP_WORDS "$COMP_CWORD" ''
+        _bourbaki_debug "EVAL: ${@:$((keyval_cmd_ix+1))}"
+        ${@:keyval_cmd_ix+1}
     elif [ "$last" == "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
+        # begun typing value
         _bourbaki_debug "COMPLETING VALUE: '$cur'"
-        "${@:keyval_cmd_ix+1}"
+        _bourbaki_debug "EVAL: ${@:$((keyval_cmd_ix+1))}"
+        ${@:$((keyval_cmd_ix+1))}
     elif [ "$cur" != "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
         _bourbaki_debug "COMPLETING KEY: '$cur'"
-        _complete_with_suffix "$BOURBAKI_KEYVAL_SPLIT_CHAR" "${@:1:keyval_cmd_ix-1}"
+        _bourbaki_debug "EVAL: ${@:1:$((keyval_cmd_ix-1))}"
+        _complete_with_suffix "$BOURBAKI_KEYVAL_SPLIT_CHAR" "${@:1:$((keyval_cmd_ix-1))}"
     fi
 }
 
@@ -657,12 +667,13 @@ _complete_with_prefix() {
 }
 
 _complete_with_suffix() {
-    local suffix="$1" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
+    local suffix="$1" compreply_len="${#COMPREPLY[@]}" old_compreply=("${COMPREPLY[@]}")
     shift
-    _bourbaki_debug "COMPLETE WITH SUFFIX '$suffix'"
+    _bourbaki_debug "COMPLETE WITH SUFFIX '$suffix' USING COMMAND: $@"
     "$@"
-    local tail="${COMPREPLY[@]:$compreply_len:${#COMPREPLY[@]}}"
-    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_suffix "$suffix" "${tail[@]}"))
+    local tail="${COMPREPLY[@]:$compreply_len}"
+    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_suffix "$suffix" ${tail[@]}))
+    _bourbaki_debug "COMPREPLY HAS ${#COMPREPLY[@]} TOKENS"
 }
 
 _bourbaki_complete_choices() {
@@ -698,7 +709,7 @@ _bourbaki_complete_python_classpaths() {
     _bourbaki_debug_total_completions
 }
 
-_bourbaki_complete_simple_call() {
+_bourbaki_complete_simple_compgen_call() {
     local cur genfunc="$1" type="$2"
     $BASH_COMPLETION_CUR_WORD cur
     _bourbaki_debug "COMPLETING $type FOR '$cur'"
@@ -707,15 +718,15 @@ _bourbaki_complete_simple_call() {
 }
 
 _bourbaki_complete_floats() {
-    _bourbaki_complete_simple_call _compgen_floats "FLOATING POINT VALUES"
+    _bourbaki_complete_simple_compgen_call _compgen_floats "FLOATING POINT VALUES"
 }
 
 _bourbaki_complete_ints() {
-    _bourbaki_complete_simple_call _compgen_ints "INTEGER VALUES"
+    _bourbaki_complete_simple_compgen_call _compgen_ints "INTEGER VALUES"
 }
 
 _bourbaki_complete_bools() {
-    _bourbaki_complete_simple_call _compgen_bools "BOOLEAN VALUES"
+    _bourbaki_complete_simple_compgen_call _compgen_bools "BOOLEAN VALUES"
 }
 
 _isint() {
