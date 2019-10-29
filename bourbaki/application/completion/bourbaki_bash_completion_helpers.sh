@@ -517,8 +517,10 @@ _completer_from_spec() {
     local spec="$(_lstrip_chars "$1" " ")"
     local first="${spec:0:1}"
     case "$first" in
-        '?'|'+'|'*'|'(') _lstrip_chars "$(_lstrip "$spec" "* ")" " " ;;
-        *) _isint "$first" && _lstrip_chars "$(_lstrip "$spec" "* ")" " " || echo "$spec" ;;
+        # we include the trailing ' ' after spec here for the case of an empty completer,
+        # so as not to return the nargs char(s)
+        '?'|'+'|'*'|'(') _lstrip_chars "$(_lstrip "$spec " "* ")" " " ;;
+        *) _isint "$first" && _lstrip_chars "$(_lstrip "$spec " "* ")" " " || echo "$spec" ;;
     esac
 }
 
