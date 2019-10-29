@@ -65,7 +65,6 @@ class _FileHandleConstructor(type):
 
     def __instancecheck__(cls, instance):
         if isinstance(instance, cls.__bases__):
-            print("CHECK", instance)
             if cls.readable and not instance.readable():
                 return False
             if cls.writable and not instance.writable():
