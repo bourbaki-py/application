@@ -53,6 +53,7 @@ QUIET_ATTR = 'quiet'
 RESERVED_NAMESPACE_ATTRS = (CONFIG_FILE_ATTR, LOGFILE_ATTR, VERBOSITY_ATTR, QUIET_ATTR,
                             SUBCOMMAND_ATTR, SUBCOMMAND_PATH_ATTR)
 OUTPUT_GROUP_NAME = 'output control'
+OPTIONAL_ARG_TEMPLATE = '{}??'
 MIN_VERBOSITY = 1
 NoneType = type(None)
 ALLOWED_SUBCOMMAND_TYPES = (FunctionType, LazyImportsCallable)
@@ -69,6 +70,9 @@ _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
 
 class _DEFAULTS:
+    """Stand-in for an ArgSource instance. This is kept out of that enum intentionally since it is always implied;
+    we don't want the user to be required to include it when overriding lookup_order since forgetting to do so
+    could yield confusing results"""
     value = "function defaults"
 
     def __str__(self):
@@ -1656,15 +1660,12 @@ class SubCommandFunc(Logged):
                     elif not isinstance(val, list):
                         val = list(val)
             elif literal_defaults and has_default:
-                print("\n\nENCODER")
-                print(tio.config_encoder)
-                print("\n\n")
                 val = tio.config_encoder(param.default)
             else:
                 val = tio.config_repr
 
             if is_optional_type(tio.type_):
-                name = '[{}]'.format(name)
+                name = OPTIONAL_ARG_TEMPLATE.format(name)
 
             conf[name] = val
 

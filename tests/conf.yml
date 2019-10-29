@@ -1,19 +1,19 @@
 __main__:
-  '[c]': YYYY-MM-DD OR <null>
+  'c??': YYYY-MM-DD OR <null>
   a: 1
   b:
   - 1
   - 2
   - 3
 args:
-  '[outfile]': <text-file> OR <null>
+  'outfile??': <text-file> OR <null>
   args:
   - foo|bar|baz
   - '...'
   literal: false
   pretty: false
 args-and-kwargs:
-  '[outfile]': <text-file> OR <null>
+  'outfile??': <text-file> OR <null>
   ips:
   - <ipv6addr>
   - '...'
@@ -24,13 +24,13 @@ args-and-kwargs:
   pretty: false
 cant:
   parse:
-    '[cant_parse_me]':
+    'cant_parse_me??':
     - - - <str>
         - '...'
       - '...'
     - OR
     - <null>
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     can_parse_me:
     - <str>
     - '...'
@@ -38,7 +38,7 @@ cant:
     pretty: false
 get:
   attr:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     attr: <str>
     literal: false
     pretty: false
@@ -46,7 +46,7 @@ init:
   config: {}
 leading:
   list:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     i_2: <int>
     l_1:
     - <float>
@@ -55,15 +55,15 @@ leading:
     pretty: false
 print:
   bytes:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     b:
     - <0-255>
     - '...'
     literal: false
     pretty: false
   enum:
-    '[foo]': foo|bar|baz OR <null>
-    '[outfile]': <text-file> OR <null>
+    'foo??': foo|bar|baz OR <null>
+    'outfile??': <text-file> OR <null>
     literal: false
     pretty: false
   flags:
@@ -72,14 +72,14 @@ print:
     flag1: false
     flag2: true
   mapping:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     foo_to_date:
       '...': '...'
       foo|bar|baz: YYYY-MM-DD
     literal: false
     pretty: false
   named-tuple:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     literal: false
     pretty: false
     tup:
@@ -87,19 +87,19 @@ print:
       baz: '2019-08-27'
       foo: foo
   ns:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     literal: false
     pretty: false
   numbers:
-    '[outfile]': <text-file> OR <null>
-    '[x]': <decimal-str> OR <null>
-    '[y]': <int>[/<int>] OR <null>
-    '[z]': <float>[+<float>j] OR <null>
+    'outfile??': <text-file> OR <null>
+    'x??': <decimal-str> OR <null>
+    'y??': <int>[/<int>] OR <null>
+    'z??': <float>[+<float>j] OR <null>
     literal: false
     pretty: false
   tuple:
     kwarg:
-      '[outfile]': <text-file> OR <null>
+      'outfile??': <text-file> OR <null>
       literal: false
       pretty: false
       tup:
@@ -107,7 +107,7 @@ print:
       - 1234/5678
       - 1234.5678
     pos:
-      '[outfile]': <text-file> OR <null>
+      'outfile??': <text-file> OR <null>
       literal: false
       pretty: false
       tup:
@@ -115,7 +115,7 @@ print:
       - <int> OR <int>[/<int>]
       - <float>
     union-kwarg:
-      '[outfile]': <text-file> OR <null>
+      'outfile??': <text-file> OR <null>
       literal: false
       pretty: false
       tup:
@@ -125,17 +125,17 @@ print:
       - - <str>
         - <bool>
   url:
-    '[outfile]': <text-file> OR <null>
+    'outfile??': <text-file> OR <null>
     literal: false
     pretty: false
     url: scheme://netloc[/path][;params][?query][#fragment]
   uuid:
-    '[outfile]': <text-file> OR <null>
-    '[uuid]': '[0-f]{32} OR <null>'
+    'outfile??': <text-file> OR <null>
+    'uuid??': '[0-f]{32} OR <null>'
     literal: false
     pretty: false
 types:
-  '[outfile]': <text-file> OR <null>
+  'outfile??': <text-file> OR <null>
   literal: false
   number: path.to.type[type,params]
   pretty: false

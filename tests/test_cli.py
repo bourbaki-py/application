@@ -9,6 +9,7 @@ from cytoolz import assoc, groupby, valmap
 import pytest
 
 from bourbaki.application.config import load_config
+from bourbaki.application.cli.main import OPTIONAL_ARG_TEMPLATE
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.config_repr_ import null_config_repr
 from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr
@@ -24,7 +25,7 @@ def nullable(repr_):
 
 
 def maybe(key):
-    return '[{}]'.format(key)
+    return OPTIONAL_ARG_TEMPLATE.format(key)
 
 
 output_args = {
