@@ -5,7 +5,8 @@ import itertools
 import numbers
 import pathlib
 from bourbaki.introspection.types import (get_constraints, get_bound, get_generic_args, reconstruct_generic,
-                                          issubclass_generic, is_top_type, is_named_tuple_class, get_named_tuple_arg_types)
+                                          issubclass_generic, is_top_type, is_named_tuple_class,
+                                          get_named_tuple_arg_types, NonAnyStrCollection)
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.application.completion.completers import (
@@ -22,7 +23,7 @@ NoneType = type(None)
 
 cli_completer = GenericTypeLevelSingleDispatch("cli_completer", isolated_bases=[typing.Union])
 
-cli_completer.register_all(int, numbers.Integral, as_const=True)(CompleteInts())
+cli_completer.register_all(int, bytes, bytearray, numbers.Integral, as_const=True)(CompleteInts())
 
 cli_completer.register_all(float, numbers.Real, as_const=True)(CompleteFloats())
 
@@ -39,7 +40,7 @@ cli_completer.register(NoneType, as_const=True)(NoComplete)
 cli_completer.register_all(enum.Enum, enum.Flag, enum.IntEnum, enum.IntFlag)(CompleteEnum)
 
 
-@cli_completer.register(typing.Collection)
+@cli_completer.register(NonAnyStrCollection)
 def completer_for_collection(coll, v=None):
     if v is None:
         return
