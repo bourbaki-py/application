@@ -171,8 +171,9 @@ def _maybe_bool(names, fallback=_to_name_set):
     return fallback(names)
 
 
-def _to_output_sig(output_signature: Signature, function_signature: Optional[Signature] = None,
-                   require_keyword_args: bool=False):
+def _combined_cli_sig(output_signature: Signature,
+                      function_signature: Optional[Signature] = None,
+                      require_options: bool=False):
     if function_signature is None:
         return output_signature
 
@@ -188,7 +189,7 @@ def _to_output_sig(output_signature: Signature, function_signature: Optional[Sig
             return Dict[str, ann]
         return ann
 
-    if require_keyword_args:
+    if require_options:
         new_params = [p.replace(kind=Parameter.KEYWORD_ONLY, annotation=update_annotation(p.annotation, p.kind))
                       for p in output_signature.parameters.values()]
         output_signature = Signature(new_params)

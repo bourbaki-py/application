@@ -10,18 +10,18 @@ NO_OUTPUT_HANDLER = object()
 class cli_spec:
     @staticmethod
     def allow_positional_args(f):
-        """override the require_keyword_args setting of the wrapping CLI for the decorated function"""
+        """override the require_options setting of the wrapping CLI for the decorated function"""
         f.__allow_positional_args__ = True
         return f
 
     @staticmethod
-    def require_keyword_args(f):
+    def require_options(f):
         f.__allow_positional_args__ = False
         return f
 
     @staticmethod
-    def require_output_keyword_args(f):
-        f.__require_output_keyword_args__ = True
+    def require_output_options(f):
+        f.__require_output_options__ = True
         return f
 
     @staticmethod
@@ -182,14 +182,14 @@ class cli_attrs:
         return getattr(f, "__allow_positional_args__", default)
 
     @staticmethod
-    def require_keyword_args(f, default=False):
+    def require_options(f, default=False):
         if hasattr(f, "__allow_positional_args__"):
             return not cli_attrs.allow_positional_args(f)
         return default
 
     @staticmethod
-    def require_output_keyword_args(f, default=False):
-        return getattr(f, "__require_output_keyword_args__", default)
+    def require_output_options(f, default=False):
+        return getattr(f, "__require_output_options__", default)
 
     @staticmethod
     def noncommand(f):

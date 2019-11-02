@@ -34,7 +34,7 @@ from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENS
 from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
 from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
-from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _to_output_sig,
+from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _combined_cli_sig,
                       get_task, NamedChainMap, strip_command_prefix, update_in, _validate_lookup_order)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
 
@@ -208,7 +208,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
     def __init__(self, *,  # <- require keyword args
                  # CLI settings
-                 require_keyword_args: bool = True,
+                 require_options: bool = True,
                  require_subcommand=False,
                  implicit_flags: bool = False,
                  default_metavars: Opt[Mapping[str, str]] = None,
@@ -256,7 +256,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                  add_help: bool = True,
                  allow_abbrev: bool = True):
         """
-        :param require_keyword_args: bool. Should all args be required to be passed from the CLI with an --optional arg,
+        :param require_options: bool. Should all args be required to be passed from the CLI with an --optional arg,
             (True) or should positional args to functions be interpreted as positional args on the command line (False)?
             The default is True, as this tends to be less error prone and allows more flexibility. If you would like
             positional args however, in functions that do not accept *args, be sure to insert a bare '*' in the
@@ -268,7 +268,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             --flags? In this case, an arg with a False default will be True on passing the flag from the CLI, and an arg
             with a True default will be False on passing the flag. Note however that in this latter case, a '--no-' will
             be prepended to the command line flag to improve readability and semantics.
-            Note that when `require_keyword_args` is True, there are no positional args on the command line, so all
+            Note that when `require_options` is True, there are no positional args on the command line, so all
             bool-typed args are treated as flags when `implicit_flags` is True.
         :param default_metavars: optional mapping of str -> str. If this is passed, metavars for the command line help
             string are defined by first checking this mapping for the names of function args to be represented before
@@ -540,7 +540,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         self.use_execution_flag = bool(use_execution_flag)
         self.require_subcommand = bool(require_subcommand)
-        self.require_keyword_args = bool(require_keyword_args)
+        self.require_options = bool(require_options)
         self.implicit_flags = bool(implicit_flags)
         self.default_metavars = None if default_metavars is None else dict(default_metavars)
         self.long_desc_as_epilog = bool(long_desc_as_epilog)
@@ -578,7 +578,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             self.subcommand(name=self.init_config_command[-1],
                             command_prefix=self.init_config_command[:-1],
                             output_handler=self.dump_config,
-                            require_keyword_args=self.require_keyword_args,
+                            require_options=self.require_options,
                             implicit_flags=self.implicit_flags,
                             ignore_in_config=True,
                             from_method=False,
@@ -816,10 +816,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def subcommand(self, command_prefix=None, config_subsections=None, implicit_flags=None,
                    ignore_on_cmd_line=None, ignore_in_config=None, cmd_line_args=None,
                    parse_config_as_cli=None, parse_order=None, typecheck=None,
-                   output_handler=None, named_groups=None, require_keyword_args=None, require_output_keyword_args=None,
+                   output_handler=None, named_groups=None, require_options=None, require_output_options=None,
                    name=None, from_method=False, metavars=None, tvar_map=None, _main=False, _builtin=False):
-        if require_keyword_args is None:
-            require_keyword_args = self.require_keyword_args or _main
+        if require_options is None:
+            require_options = self.require_options or _main
 
         if typecheck is None:
             typecheck = self.typecheck
@@ -847,8 +847,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                   command_prefix=command_prefix,
                   config_subsections=config_subsections,
                   implicit_flags=implicit_flags,
-                  require_keyword_args=require_keyword_args,
-                  require_output_keyword_args=require_output_keyword_args,
+                  require_options=require_options,
+                  require_output_options=require_output_options,
                   ignore_on_cmd_line=ignore_on_cmd_line,
                   ignore_in_config=ignore_in_config,
                   parse_config_as_cli=parse_config_as_cli,
@@ -884,7 +884,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
              name=None, from_method=False, metavars=None, tvar_map=None):
         return self.subcommand(config_subsections=config_subsections,
                                implicit_flags=implicit_flags,
-                               require_keyword_args=True,
+                               require_options=True,
                                ignore_on_cmd_line=ignore_on_cmd_line,
                                ignore_in_config=ignore_in_config,
                                parse_config_as_cli=parse_config_as_cli,
@@ -951,7 +951,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if have_default_metavars and metavars is not self.default_metavars:
                 metavars = ChainMap(metavars, self.default_metavars)
 
-            require_output_kwargs = cli_attrs.require_output_keyword_args(f, self.require_keyword_args)
+            require_output_kwargs = cli_attrs.require_output_options(f, self.require_options)
 
             if not self.use_config:
                 default_subsections = False
@@ -976,9 +976,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                 # if we hit the init but didn't register one yet
                 self.main(**extra_kw)(f)
             elif name != "__init__":
-                require_keyword_args = cli_attrs.require_keyword_args(f, self.require_keyword_args)
-                self.subcommand(require_keyword_args=require_keyword_args,
-                                require_output_keyword_args=require_output_kwargs,
+                require_options = cli_attrs.require_options(f, self.require_options)
+                self.subcommand(require_options=require_options,
+                                require_output_options=require_output_kwargs,
                                 output_handler=cli_attrs.output_handler(f, self.output_handler),
                                 name=name,
                                 command_prefix=cli_attrs.command_prefix(f),
@@ -1023,7 +1023,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     @staticmethod
     def _add_arguments_from(parser, subcmd_func: 'SubCommandFunc'):
         params = subcmd_func.signature.parameters
-        allow_positionals = not subcmd_func.require_keyword_args
+        allow_positionals = not subcmd_func.require_options
         arg_to_group = subcmd_func.arg_to_group_name
         named_groups = {name: parser.add_argument_group(name) for name in subcmd_func.named_groups}
         lookup_order = (CLI, *subcmd_func.lookup_order, DEFAULTS) if CLI not in subcmd_func.lookup_order \
@@ -1260,8 +1260,8 @@ class SubCommandFunc(Logged):
                  parse_env=None,
                  ignore_in_config=None,
                  parse_config_as_cli=None,
-                 require_keyword_args=True,
-                 require_output_keyword_args=True,
+                 require_options=True,
+                 require_output_options=True,
                  parse_order=None,
                  typecheck=False,
                  output_handler=None,
@@ -1311,9 +1311,9 @@ class SubCommandFunc(Logged):
             output_sig = fully_concrete_signature(output_handler, from_method=True, tvar_map=tvar_map)
             output_param_names = set(output_sig.parameters)
             output_positional_names = leading_positionals(output_sig.parameters, names_only=True)
-            # passing require_keyword_args prevents potential superfluous signature errors
-            cli_sig = _to_output_sig(output_sig, cli_sig,
-                                     require_keyword_args=require_keyword_args or require_output_keyword_args)
+            # passing require_options prevents potential superfluous signature errors
+            cli_sig = _combined_cli_sig(output_sig, cli_sig,
+                                        require_options=require_options or require_output_options)
             try:
                 output_docs = parse_docstring(output_handler)
             except AttributeError:
@@ -1371,8 +1371,8 @@ class SubCommandFunc(Logged):
         self.defaults = defaults
         self.signature = cli_sig
         self.implicit_flags = bool(implicit_flags)
-        self.require_keyword_args = bool(require_keyword_args)
-        self.require_output_keyword_args = bool(require_output_keyword_args)
+        self.require_options = bool(require_options)
+        self.require_output_options = bool(require_output_options)
         self.lookup_order = lookup_order
 
         # these all require validation against the set of argument names

@@ -54,7 +54,7 @@ cli = CommandLineInterface(
     prog="cli.py",
     use_verbose_flag=True,
     add_init_config_command=('init', 'config'),
-    require_keyword_args=False,
+    require_options=False,
     use_config_file=True,
     require_subcommand=True,
     implicit_flags=True,
@@ -155,7 +155,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         return tup
 
     @cli_spec.named_groups(star_args='ips', kwargs=['named_ips'])
-    @cli_spec.require_output_keyword_args
+    @cli_spec.require_output_options
     def args_and_kwargs(self, *ips: ipaddress.IPv6Address, **named_ips: ipaddress.IPv4Address):
         """
         print some named ipv4 addresses
@@ -271,7 +271,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         """
         return getattr(self, attr)
 
-    @cli_spec.require_output_keyword_args
+    @cli_spec.require_output_options
     def args(self, *args: FooEnum):
         """
         Print positional *args from the command line
