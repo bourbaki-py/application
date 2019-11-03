@@ -51,7 +51,7 @@ class UnknownConfigExtension(ValueError):
 
     def __str__(self):
         return ("Unknown config extension: {}; legal choices are {}"
-                .format(self.ext, tuple(sorted(LEGAL_CONFIG_EXTENSIONS))))
+                .format(repr(self.ext), tuple(sorted(LEGAL_CONFIG_EXTENSIONS))))
 
 
 class UnknownConfigLoadExtension(UnknownConfigExtension):
@@ -238,6 +238,9 @@ def dump_config(conf: Union[Mapping, Sequence, argparse.Namespace],
             pass
         else:
             ext = os.path.splitext(fname)[-1]
+
+        if not ext:
+            raise ValueError("Could not infer config extension from file {}".format(config_file))
 
     # file is an open file handle if not a dir, else a Path
     file, close = get_file(config_file, "w", allow_dir=allow_dir)
