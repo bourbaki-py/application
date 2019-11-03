@@ -1714,14 +1714,14 @@ class SubCommandFunc(Logged):
 
     def __getstate__(self):
         state = super().__getstate__()
-        for key in ("signature", "main_signature", "output_signature"):
+        for key in ("cli_signature", "main_signature", "output_signature"):
             sig = state.pop(key)
             state[key] = Signature([p.replace(annotation=deconstruct_generic(p.annotation))
                                     for p in sig.parameters.values()])
         return state
 
     def __setstate__(self, state):
-        for key in ("signature", "main_signature", "output_signature"):
+        for key in ("cli_signature", "main_signature", "output_signature"):
             sig = state.pop(key)
             state[key] = Signature([p.replace(annotation=reconstruct_generic(p.annotation))
                                     for p in sig.parameters.values()])
