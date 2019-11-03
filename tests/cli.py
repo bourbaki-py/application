@@ -154,7 +154,6 @@ class MyCommandLineApp(Generic[Num], Logged):
         return tup
 
     @cli_spec.named_groups(star_args='ips', kwargs=['named_ips'])
-    @cli_spec.require_output_options
     def args_and_kwargs(self, *ips: ipaddress.IPv6Address, **named_ips: ipaddress.IPv4Address):
         """
         print some named ipv4 addresses
@@ -270,7 +269,6 @@ class MyCommandLineApp(Generic[Num], Logged):
         """
         return getattr(self, attr)
 
-    @cli_spec.require_output_options
     def args(self, *args: FooEnum):
         """
         Print positional *args from the command line
