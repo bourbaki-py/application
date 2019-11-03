@@ -384,11 +384,11 @@ def completion_spec(action: Action, positional=False) -> str:
 
 
 def get_completer(action: Action) -> Opt[Union[str, List[str], Complete]]:
-    completer = getattr(action, "completer", None)
-    if completer is None:
-        if action.choices:
-            completer = CompleteChoices(*action.choices)
-        elif action.nargs != 0:
+    if action.choices:
+        completer = CompleteChoices(*action.choices)
+    else:
+        completer = getattr(action, "completer", None)
+        if completer is None and action.nargs != 0:
             completer = completer_argparser_from_type(action.type)
 
     return completer
