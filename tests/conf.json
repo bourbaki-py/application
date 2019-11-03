@@ -160,10 +160,5 @@
     "outfile??":null,
     "pretty":false,
     "literal":false
-  },
-  "init":{
-    "config":{
-
-    }
   }
 }

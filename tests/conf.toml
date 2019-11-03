@@ -81,8 +81,6 @@ attr = "<str>"
 pretty = false
 literal = false
 
-[init.config]
-
 [print.tuple.kwarg]
 tup = [ "<int>", "<int> OR <int>[/<int>]", "<float>",]
 pretty = false

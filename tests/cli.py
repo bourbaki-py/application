@@ -32,7 +32,7 @@ class FooTuple(NamedTuple):
     baz: datetime.date
 
 
-def pprint_(value, outfile: Optional[File['w']] = None, *, pretty: bool = False, literal: bool = False):
+def pprint_(value, *, outfile: Optional[File['w']] = None, pretty: bool = False, literal: bool = False):
     """
     print value to a file, if specified, else stdout
 
@@ -59,7 +59,6 @@ cli = CommandLineInterface(
     require_subcommand=True,
     implicit_flags=True,
     allow_abbrev=True,
-    default_metavars=dict(outfile='OUTFILE'),
     source_file=__file__,
     package='bourbaki.application',
     output_handler=pprint_,

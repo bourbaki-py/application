@@ -187,9 +187,4 @@
     'pretty': False,
     'literal': False
 },
-'init': dict(
-    config=dict(
-
-    )
-)
 }
