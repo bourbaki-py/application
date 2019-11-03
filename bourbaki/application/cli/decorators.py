@@ -20,11 +20,6 @@ class cli_spec:
         return f
 
     @staticmethod
-    def require_output_options(f):
-        f.__require_output_options__ = True
-        return f
-
-    @staticmethod
     def noncommand(f):
         """mark a function as not to be processed as a command for a CLI (usually a method in a class def)"""
         f.__noncommand__ = True
@@ -186,10 +181,6 @@ class cli_attrs:
         if hasattr(f, "__allow_positional_args__"):
             return not cli_attrs.allow_positional_args(f)
         return default
-
-    @staticmethod
-    def require_output_options(f, default=False):
-        return getattr(f, "__require_output_options__", default)
 
     @staticmethod
     def noncommand(f):

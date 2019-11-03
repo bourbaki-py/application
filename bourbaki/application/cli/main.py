@@ -832,7 +832,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def subcommand(self, command_prefix=None, config_subsections=None, implicit_flags=None,
                    ignore_on_cmd_line=None, ignore_in_config=None, cmd_line_args=None,
                    parse_config_as_cli=None, parse_order=None, typecheck=None,
-                   output_handler=None, named_groups=None, require_options=None, require_output_options=None,
+                   output_handler=None, named_groups=None, require_options=None,
                    name=None, from_method=False, metavars=None, tvar_map=None, _main=False, _builtin=False):
         if require_options is None:
             require_options = self.require_options or _main
@@ -864,7 +864,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                   config_subsections=config_subsections,
                   implicit_flags=implicit_flags,
                   require_options=require_options,
-                  require_output_options=require_output_options,
                   ignore_on_cmd_line=ignore_on_cmd_line,
                   ignore_in_config=ignore_in_config,
                   parse_config_as_cli=parse_config_as_cli,
@@ -967,8 +966,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if have_default_metavars and metavars is not self.default_metavars:
                 metavars = ChainMap(metavars, self.default_metavars)
 
-            require_output_options = cli_attrs.require_output_options(f, self.require_options)
-
             if not self.use_config:
                 default_subsections = False
             else:
@@ -994,7 +991,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             elif name != "__init__":
                 require_options = cli_attrs.require_options(f, self.require_options)
                 self.subcommand(require_options=require_options,
-                                require_output_options=require_output_options,
                                 output_handler=cli_attrs.output_handler(f, self.output_handler),
                                 name=name,
                                 command_prefix=cli_attrs.command_prefix(f),
@@ -1241,7 +1237,6 @@ class SubCommandFunc(Logged):
                  ignore_in_config=None,
                  parse_config_as_cli=None,
                  require_options=True,
-                 require_output_options=True,
                  parse_order=None,
                  typecheck=False,
                  output_handler=None,
@@ -1336,7 +1331,6 @@ class SubCommandFunc(Logged):
         # options
         self.implicit_flags = bool(implicit_flags)
         self.require_options = bool(require_options)
-        self.require_output_options = bool(require_output_options)
         self.lookup_order = lookup_order
 
         # these all require validation against the set of argument names
