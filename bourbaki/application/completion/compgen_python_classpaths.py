@@ -10,10 +10,15 @@ Usage:
 
 import os
 import sys
+import typing
 from typing import Union
 from warnings import warn
 Module = type(sys)
 from itertools import chain
+issubclass_generic = None
+isinstance_generic = None
+typetypes = None
+nontypes = tuple(getattr(typing, t) for t in ["Optional", "ClassVar", "NoReturn"] if hasattr(typing, t))
 
 COMPLETION_DEBUG_ENV_VAR = "BOURBAKI_COMPLETION_DEBUG"
 
@@ -56,6 +61,11 @@ def complete_module_path(prefix: str='', *legal_prefixes: str):
 
 def complete_instance_path(prefix: str='', *legal_classes: str):
     _debug("Completing paths for instances of : {cls}", cls=legal_classes)
+    # delayed import for speed if not needed; this only gets called at most once per interpreter launch
+    global isinstance_generic
+    if isinstance_generic is None:
+        from bourbaki.introspection.typechecking import isinstance_generic
+
     if legal_classes:
         cls = _materialize_classes(*legal_classes)
         typecheck = isinstance
@@ -67,6 +77,12 @@ def complete_instance_path(prefix: str='', *legal_classes: str):
 
 def complete_subclasspath(prefix: str= '', *legal_superclasses: str):
     _debug("Completing paths for subclasses of : {cls}", cls=legal_superclasses)
+    # delayed import for speed if not needed; this only gets called at most once per interpreter launch
+    global issubclass_generic
+    if issubclass_generic is None:
+        global typetypes
+        from bourbaki.introspection.types import issubclass_generic, typetypes
+
     if legal_superclasses:
         cls = _materialize_classes(*legal_superclasses)
         typecheck = issubclass_
@@ -86,7 +102,7 @@ def _complete_objpath(prefix: str, cls=None, typecheck=None, legal_prefixes=None
     if legal_prefixes:
         candidate_prefixes = [p for p in legal_prefixes if p.startswith(prefix)]
         if not candidate_prefixes:
-            return None, ()
+            return ()
     else:
         candidate_prefixes = [prefix]
 
@@ -131,8 +147,13 @@ def callable_(o, cls=None):
 
 def issubclass_(o, cls):
     # delayed import for speed if not needed; this only gets called at most once per interpreter launch
-    from bourbaki.introspection.types import issubclass_generic, typetypes
-    return isinstance(o, (type, *typetypes)) and issubclass_generic(o, cls)
+    if isinstance(o, (type, *typetypes)) and o not in nontypes:
+        try:
+            return issubclass_generic(o, cls)
+        except Exception:
+            return False
+    else:
+        return False
 
 
 def _materialize_classes(*legal_superclasses: str):
@@ -166,7 +187,7 @@ def get_attr_names(mod, attr_prefix='', cls=None, typecheck=None, modname=None):
     attrs = dir(mod)
 
     if attr_prefix:
-        _debug("Filtering to attributes with prefix {prefix}", prefix=prefix)
+        _debug("Filtering to attributes with prefix {prefix}", prefix=attr_prefix)
         attrs = (a for a in attrs if a.startswith(attr_prefix))
 
     if typecheck is not None:
@@ -236,13 +257,13 @@ def uniq(iter_):
         yield _
 
 
-if __name__ == "__main__":
+def main():
     argv = sys.argv[1:]
     if not argv or argv[0] in ('-h', '--help'):
         print(__doc__)
         exit(0)
 
-    if os.getenv("APPUTILS_COMPLETION_DEBUG", "false") == "true":
+    if os.getenv("APPUTILS_COMPLETION_DEBUG", "false").lower() == "true":
         DEBUG = True
 
     dispatch = {
@@ -264,5 +285,16 @@ if __name__ == "__main__":
     else:
         complete = complete_objpath
 
+    total_completions = 0
+    name = None
     for name in complete(prefix, *args):
         print(name, file=sys.stdout)
+        total_completions += 1
+    if total_completions == 1:
+        # prevent early-stopping in the case of only 1 completion that doesn't actually meet the criteria
+        for name in complete(name + ".", *args):
+            print(name, file=sys.stdout)
+
+
+if __name__ == "__main__":
+    main()

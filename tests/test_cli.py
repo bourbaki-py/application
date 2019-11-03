@@ -138,9 +138,6 @@ CONFIG = {
             **output_args,
         },
     },
-    'init': {
-        'config': {}
-    }
 }
 
 

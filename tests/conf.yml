@@ -42,8 +42,6 @@ get:
     attr: <str>
     literal: false
     pretty: false
-init:
-  config: {}
 leading:
   list:
     'outfile??': <text-file> OR <null>

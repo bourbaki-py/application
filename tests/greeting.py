@@ -60,7 +60,7 @@ def oxford_comma(tokens):
 cli = CommandLineInterface(
     prog="greeting.py",
     source_file=__file__,
-    require_keyword_args=False,
+    require_options=False,
     require_subcommand=True,
     use_verbose_flag=True,
     add_init_config_command=True,
