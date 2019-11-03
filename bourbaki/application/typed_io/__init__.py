@@ -1,5 +1,5 @@
 # coding:utf-8
-from .main import TypedIO, ArgSource, CLI, CONFIG, ENV
+from .main import TypedIO, ArgSource, CLI, CONFIG, ENV, DEFAULTS
 from .cli_nargs_ import cli_nargs
 from .cli_complete import cli_completer
 from .cli_repr_ import cli_repr

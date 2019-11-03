@@ -26,6 +26,19 @@ class ArgSource(enum.Enum):
 CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
 
 
+class _DEFAULTS:
+    """Stand-in for an ArgSource instance. This is kept out of that enum intentionally since it is always implied;
+    we don't want the user to be required to include it when overriding lookup_order since forgetting to do so
+    could yield confusing results"""
+    value = "function defaults"
+
+    def __str__(self):
+        return "{}.{}".format(ArgSource.__name__, "DEFAULTS")
+
+
+DEFAULTS = _DEFAULTS()
+
+
 class TypedIO(PicklableWithType):
     """Bag of dispatched methods/values for CLI and config I/O. Methods/attributes are only computed if needed,
     so that if some are unavailable for a given type, but aren't needed, no exceptions are thrown"""
@@ -267,7 +280,7 @@ class TypedIO(PicklableWithType):
         else:
             # Parameter.POSITIONAL_OR_KEYWORD and Parameter.POSITIONAL_ONLY
             variadic = self.is_variadic
-            positional = allow_positionals and not variadic
+            positional = allow_positionals
 
         required = not has_default and not has_fallback and not variadic
         doc = to_param_doc(docs, name)
@@ -299,10 +312,10 @@ class TypedIO(PicklableWithType):
             if metavar is None:
                 if kind == Parameter.VAR_KEYWORD:
                     metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
-                elif positional:
-                    metavar = name.upper()
                 elif is_named_tuple_class(self.type_):
                     metavar = tuple(map(str.upper, self.type_.__annotations__.keys()))
+                elif positional:
+                    metavar = name.upper()
                 else:
                     metavar = type_str
                     type_str = None
@@ -323,7 +336,7 @@ class TypedIO(PicklableWithType):
             elif not required:
                 kw['default'] = missing
 
-            if not positional:  # no required/dest kwargs allowed for positionals
+            if not positional:  # no required/dest kwargs allowed for positionals; they are implicit
                 kw['required'] = required
                 kw['dest'] = name
 
