@@ -1,16 +1,17 @@
 # coding:utf-8
 from argparse import ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE
-from collections import ChainMap
+from collections import ChainMap, Counter
 from inspect import Parameter, Signature
-from itertools import chain
+from itertools import chain, filterfalse
 from pathlib import Path
+import sys
 from string import punctuation
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Set, Tuple, Union, Optional
 
 from bourbaki.introspection.docstrings import CallableDocs
 from ..logging import ProgressLogger, TimedTaskContext
 from ..logging.defaults import PROGRESS, ERROR
-from ..typed_io.main import ArgSource
+from ..typed_io.main import ArgSource, DEFAULTS
 from ..typed_io.cli_nargs_ import cli_nargs
 
 VARIADIC_NARGS = (ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE)
@@ -46,7 +47,7 @@ class NamedChainMap(ChainMap):
         return None, default
 
 
-class ReturnHandlerSignatureError(TypeError):
+class OutputHandlerSignatureError(TypeError):
     pass
 
 
@@ -90,6 +91,16 @@ def update_in(conf, subsection, subconf):
     subconf_.update(subconf)
 
 
+def try_or_exit(func, exit, error_status, *args, **kwargs):
+    try:
+        result = func(*args, **kwargs)
+    except Exception as e:
+        print("Execution failed: {}".format(e), file=sys.stderr)
+        exit(error_status)
+    else:
+        return result
+
+
 def _help_kwargs_from_docs(docs: CallableDocs, long_desc_as_epilog: bool=False, help_: bool=True):
     if help_:
         kw = {"help": docs.short_desc}
@@ -123,7 +134,9 @@ def _validate_lookup_order(*lookup_order: ArgSource):
         else:
             source = s
 
-        if not isinstance(source, ArgSource):
+        if s is DEFAULTS:
+            order.append(s)
+        elif not isinstance(source, ArgSource):
             missing.append(s)
         else:
             order.append(source)
@@ -133,6 +146,10 @@ def _validate_lookup_order(*lookup_order: ArgSource):
     if len(set(lookup_order)) != len(lookup_order):
         raise LookupOrderRepeated(lookup_order)
 
+    if ArgSource.CLI not in order:
+        order = (ArgSource.CLI, *order)
+    if DEFAULTS not in order:
+        order = (*order, DEFAULTS)
     return order
 
 
@@ -171,65 +188,86 @@ def _maybe_bool(names, fallback=_to_name_set):
     return fallback(names)
 
 
-def _combined_cli_sig(output_signature: Signature,
-                      function_signature: Optional[Signature] = None,
-                      require_options: bool=False):
-    if function_signature is None:
-        return output_signature
+def _combined_cli_sig(signature: Signature, *other_signatures: Signature,
+                      ignore: Optional[Set[str]] = None, have_fallback: Optional[Set[str]] = None):
+    all_signatures = (signature, *other_signatures)
 
-    common_names = set(output_signature.parameters).intersection(function_signature.parameters)
+    all_names = chain.from_iterable(s.parameters for s in all_signatures)
+    if ignore:
+        all_names = filterfalse(ignore.__contains__, all_names)
+    name_counts = Counter(all_names)
+    common_names = tuple(n for n, c in name_counts.items() if c > 1)
     if common_names:
-        raise ReturnHandlerSignatureError("output handler signature and function signature share arg names: {}"
-                                          .format(tuple(common_names)))
+        raise OutputHandlerSignatureError("signatures share overlapping arg names: {}"
+                                          .format(common_names))
 
-    def update_annotation(ann, kind):
-        if kind is Parameter.VAR_POSITIONAL:
-            return Tuple[ann, ...]
-        elif kind is Parameter.VAR_KEYWORD:
-            return Dict[str, ann]
-        return ann
-
-    if require_options:
-        new_params = [p.replace(kind=Parameter.KEYWORD_ONLY, annotation=update_annotation(p.annotation, p.kind))
-                      for p in output_signature.parameters.values()]
-        output_signature = Signature(new_params)
-
-    kinds = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL,
-             Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)
-    params_ = [[], [], [], [], []]
-    pos_only, pos, args, kw, kwargs = params_
-
-    params = dict(zip(kinds, params_))
-    for sig in (function_signature, output_signature):
+    params = {k: [] for k in
+              (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL,
+               Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)}
+    for sig in all_signatures:
         for param in sig.parameters.values():
-            params[param.kind].append(param)
+            if not ignore or (param.name not in ignore):
+                params[param.kind].append(param)
 
-    if len(args) > 1:
-        extra_args = args.pop()
-        extra_args = extra_args.replace(kind=Parameter.KEYWORD_ONLY, annotation=Tuple[extra_args.annotation, ...])
-        kw.append(extra_args)
+    # algorithm:
+    # sort variadics to the end of the positionals
+    # if there are any positional variadics, move all but the first to kw_only, and move any *args to kw_only
+    # if there are no positional variadics, move the first *args to the end of positionals, the rest to kw_only
+    # if there are more than one **kwargs, move the tail to kw_only
 
-    if len(kwargs) > 1:
-        extra_kwargs = kwargs.pop()
-        extra_kwargs = extra_kwargs.replace(kind=Parameter.KEYWORD_ONLY, annotation=Dict[str, extra_kwargs.annotation])
-        kw.append(extra_kwargs)
+    all_pos = params[Parameter.POSITIONAL_ONLY] + params[Parameter.POSITIONAL_OR_KEYWORD]
+    non_variadic_pos, variadic_pos = _separate_variadic_params(all_pos)
+    maybe_variadic_pos = []
+    if variadic_pos:
+        first_variadic = variadic_pos[0]
+        last_pos_kind = max(non_variadic_pos[-1].kind, first_variadic.kind) if non_variadic_pos else first_variadic.kind
+        maybe_variadic_pos.append(first_variadic.replace(kind=last_pos_kind))
+        params[Parameter.KEYWORD_ONLY].extend(
+            p.replace(kind=Parameter.KEYWORD_ONLY) for p in variadic_pos[1:]
+        )
+    elif params[Parameter.VAR_POSITIONAL]:
+        varargs = params[Parameter.VAR_POSITIONAL]
+        first_varargs = varargs[0]
+        maybe_variadic_pos.append(
+            first_varargs.replace(kind=Parameter.POSITIONAL_OR_KEYWORD, annotation=Tuple[first_varargs.annotation, ...])
+        )
+        params[Parameter.VAR_POSITIONAL] = varargs[1:]
 
-    for i in (0, 1):
-        params_[i] = _sort_variadic_positionals_last(params_[i])
-    all_params = list(chain.from_iterable(params_))
+    for kind in Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD:
+        ps = params[kind]
+        params[Parameter.KEYWORD_ONLY].extend(
+            p.replace(
+                kind=Parameter.KEYWORD_ONLY,
+                annotation=Tuple[p.annotation, ...]
+                if kind is Parameter.VAR_POSITIONAL else Dict[str, p.annotation],
+            )
+            for p in ps
+        )
 
-    return Signature(all_params, return_annotation=function_signature.return_annotation, __validate_parameters__=False)
+    nondefault_pos, default_pos = _separate_default_params(non_variadic_pos, have_fallback=have_fallback)
+    all_params = nondefault_pos + default_pos + maybe_variadic_pos + params[Parameter.KEYWORD_ONLY]
+
+    # Don't validate because we may have defaults preceding non-defaults at this point
+    return Signature(all_params, return_annotation=signature.return_annotation, __validate_parameters__=False)
 
 
-def _sort_variadic_positionals_last(params: List[Parameter]) -> List[Parameter]:
-    head, tail = [], []
-
+def _separate_default_params(params: List[Parameter], have_fallback: Optional[Set[str]] = None) -> Tuple[List[Parameter], List[Parameter]]:
+    nondefaults, defaults = [], []
     for param in params:
-        if param.annotation is Parameter.empty and param.default is Parameter.empty:
-            head.append(param)
-        elif cli_nargs(param.annotation) in VARIADIC_NARGS:
-            tail.append(param)
+        if param.default is Parameter.empty and (not have_fallback or param.name not in have_fallback):
+            nondefaults.append(param)
         else:
-            head.append(param)
+            defaults.append(param)
+    return nondefaults, defaults
 
-    return head + tail
+
+def _separate_variadic_params(params: List[Parameter]) -> Tuple[List[Parameter], List[Parameter]]:
+    args, variadics = [], []
+    for param in params:
+        if param.annotation is Parameter.empty:
+            args.append(param)
+        elif cli_nargs(param.annotation) in VARIADIC_NARGS:
+            variadics.append(param)
+        else:
+            args.append(param)
+    return args, variadics
