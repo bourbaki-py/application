@@ -6,6 +6,7 @@ import os
 import sys
 import shlex
 import shutil
+import operator
 from pathlib import Path
 from itertools import chain, repeat
 from warnings import warn, filterwarnings
@@ -32,10 +33,11 @@ from ..logging.helpers import validate_log_level_int
 from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
 from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
-from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV
+from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV, DEFAULTS
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
 from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _combined_cli_sig,
-                      get_task, NamedChainMap, strip_command_prefix, update_in, _validate_lookup_order)
+                      _validate_lookup_order, get_task, NamedChainMap, strip_command_prefix, update_in,
+                      VARIADIC_NARGS)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
 
 # only need to parse docs once for any function
@@ -43,7 +45,6 @@ parse_docstring = lru_cache(None)(parse_docstring)
 
 LOG_LEVELS = sorted(_levelToName, reverse=True)[1:]
 LOG_LEVEL_NAMES = [_levelToName[l] for l in LOG_LEVELS]
-VARIABLE_LENGTH_NARGS = (ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE)
 SUBCOMMAND_ATTR = 'subcommand'
 SUBCOMMAND_PATH_ATTR = 'subcommand_path'
 CONFIG_FILE_ATTR = 'config_file'
@@ -68,18 +69,6 @@ EXECUTE = False
 
 _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
-
-class _DEFAULTS:
-    """Stand-in for an ArgSource instance. This is kept out of that enum intentionally since it is always implied;
-    we don't want the user to be required to include it when overriding lookup_order since forgetting to do so
-    could yield confusing results"""
-    value = "function defaults"
-
-    def __str__(self):
-        return "{}.{}".format(ArgSource.__name__, "DEFAULTS")
-
-
-DEFAULTS = _DEFAULTS()
 
 # we call this a lot but not on very many different functions
 signature = lru_cache(None)(signature)
@@ -581,6 +570,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                             require_options=self.require_options,
                             implicit_flags=self.implicit_flags,
                             ignore_in_config=True,
+                            config_subsections=False,
                             from_method=False,
                             _builtin=True)(self.init_config)
 
@@ -590,7 +580,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             for arg in commands_args:
                 if arg.choices is None:
                     arg.choices = set()
-                arg.choices.update(map(' '.join, (t[0] for t in self.all_subcommands() if t[0])))
+                arg.choices.update(
+                    map(' '.join,
+                        filter(bool,
+                               self.all_subcommand_names(include_prefixes=True,
+                                                         filter_=lambda cmd: bool(cmd.config_subsections)))
+                        )
+                )
                 arg.metavar = "CMD-NAME"
                 choices_str = "{{{}}}".format(",".join(map(shlex.quote, sorted(arg.choices)))) if arg.choices else None
                 help = arg.help[arg.help.index(':') + 1:] if arg.help and ':' in arg.help else arg.help
@@ -637,13 +633,21 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def cmd_name(self):
         return self.prog or os.path.split(sys.argv[0])[-1]
 
-    def all_subcommands(self, *prefix: str) -> Iterator[Tuple[Tuple[str, ...], 'SubCommandFunc']]:
-        def inner(prefix: Tuple[str, ...], commands: Mapping):
+    def all_subcommands(
+        self,
+        *prefix: str,
+        include_prefixes: bool = False,
+        filter_: Opt[Callable[['SubCommandFunc'], bool]] = None,
+    ) -> Iterator[Tuple[Tuple[str, ...], 'SubCommandFunc']]:
+        def inner(prefix: Tuple[str, ...], commands: Mapping, include_prefixes: bool, filter_=None):
             for name, (cmd, subcmds) in commands.items():
                 pre = (*prefix, name)
                 if cmd is not None:
+                    if filter_ is None or filter_(cmd):
+                        yield pre, cmd
+                elif include_prefixes and subcmds and len(subcmds) > 1:
                     yield pre, cmd
-                yield from inner(pre, subcmds)
+                yield from inner(pre, subcmds, include_prefixes)
 
         rootcmd = self._main
         subcommands = self.subcommands
@@ -651,8 +655,20 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             rootcmd, subcommands = subcommands[pre]
 
         if rootcmd is not None:
+            if filter_ is None or filter_(rootcmd):
+                yield prefix, rootcmd
+        elif include_prefixes and subcommands and len(subcommands) > 1:
             yield prefix, rootcmd
-        yield from inner(prefix, subcommands)
+        yield from inner(prefix, subcommands, include_prefixes, filter_)
+
+    def all_subcommand_names(
+        self,
+        *prefix: str,
+        include_prefixes: bool = False,
+        filter_: Opt[Callable[['SubCommandFunc'], bool]] = None,
+    ) -> Iterator[Tuple[str, ...]]:
+        return map(operator.itemgetter(0),
+                   self.all_subcommands(*prefix, include_prefixes=include_prefixes, filter_=filter_))
 
     ##########################
     # main execution methods #
@@ -951,7 +967,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             if have_default_metavars and metavars is not self.default_metavars:
                 metavars = ChainMap(metavars, self.default_metavars)
 
-            require_output_kwargs = cli_attrs.require_output_options(f, self.require_options)
+            require_output_options = cli_attrs.require_output_options(f, self.require_options)
 
             if not self.use_config:
                 default_subsections = False
@@ -978,7 +994,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             elif name != "__init__":
                 require_options = cli_attrs.require_options(f, self.require_options)
                 self.subcommand(require_options=require_options,
-                                require_output_options=require_output_kwargs,
+                                require_output_options=require_output_options,
                                 output_handler=cli_attrs.output_handler(f, self.output_handler),
                                 name=name,
                                 command_prefix=cli_attrs.command_prefix(f),
@@ -1017,53 +1033,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
             self._main = subcmd_func
 
-        self._add_arguments_from(parser, subcmd_func)
+        subcmd_func.add_arguments_to(parser)
         return parser
-
-    @staticmethod
-    def _add_arguments_from(parser, subcmd_func: 'SubCommandFunc'):
-        params = subcmd_func.signature.parameters
-        allow_positionals = not subcmd_func.require_options
-        arg_to_group = subcmd_func.arg_to_group_name
-        named_groups = {name: parser.add_argument_group(name) for name in subcmd_func.named_groups}
-        lookup_order = (CLI, *subcmd_func.lookup_order, DEFAULTS) if CLI not in subcmd_func.lookup_order \
-            else (*subcmd_func.lookup_order, DEFAULTS)
-
-        positional_args = []
-        for name, io_methods in subcmd_func.typed_io.items():
-            if name in subcmd_func.ignore_on_cmd_line:
-                continue
-            param = params[name]
-            group_name = arg_to_group.get(name)
-            group = parser if group_name is None else named_groups[group_name]
-
-            has_fallback = False
-            if CONFIG in lookup_order and (name not in subcmd_func.ignore_in_config):
-                has_fallback = True
-            if ENV in lookup_order and (name in subcmd_func.parse_env):
-                has_fallback = True
-
-            action = io_methods.add_argparse_arg(group, param,
-                                                 allow_positionals=allow_positionals,
-                                                 implicit_flags=subcmd_func.implicit_flags,
-                                                 has_fallback=has_fallback,
-                                                 metavar=subcmd_func.metavars,
-                                                 docs=subcmd_func.docs)
-            nargs = io_methods.cli_nargs
-            if action.positional:
-                positional_args.append((name, param.annotation, nargs))
-
-        if positional_args:
-            # one trailing variable-length positional is OK
-            bad_positional_args = [tup for tup in positional_args[:-1] if tup[-1] in VARIABLE_LENGTH_NARGS]
-            if bad_positional_args:
-                if positional_args[-1][-1] in VARIABLE_LENGTH_NARGS:
-                    bad_positional_args.append(positional_args[-1])
-                raise ValueError("The parameters {} of function {} are all positional, but have variable-length "
-                                 "command line args {}; parsing cannot be performed unambiguously."
-                                 .format(", ".join("{}:{}".format(n, t) for n, t, _ in bad_positional_args),
-                                         subcmd_func.func_name, tuple(n for _, _, n in bad_positional_args)))
-
 
     #######################
     # Source file helpers #
@@ -1144,7 +1115,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     # special CLI commands #
     ########################
 
-    def empty_config(self, only_required_args=False, literal_defaults=True, only_commands=None, omit_commands=None):
+    def empty_config(
+            self,
+            only_required_args=False,
+            literal_defaults=True,
+            only_commands: Set[Tuple[str, ...]] = None,
+            omit_commands: Set[Tuple[str, ...]] = None
+    ):
         config = {}
         MAIN = ()
         for name, subcommand in chain([(MAIN, self._main)], self.all_subcommands()):
@@ -1191,8 +1168,11 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         elif omit_commands:
             self.logger.info("omitting commands {}".format(omit_commands))
 
-        only_commands = [tuple(s.split()) for s in only_commands] if only_commands else None
-        omit_commands = [tuple(s.split()) for s in omit_commands] if omit_commands else None
+        # expand subcommand prefixes
+        if only_commands is not None:
+            only_commands = set(chain.from_iterable(self.all_subcommand_names(*c.split()) for c in only_commands))
+        if omit_commands is not None:
+            omit_commands = set(chain.from_iterable(self.all_subcommand_names(*c.split()) for c in omit_commands))
 
         config = self.empty_config(only_required_args=only_required_args, literal_defaults=literal_defaults,
                                    only_commands=only_commands, omit_commands=omit_commands)
@@ -1226,7 +1206,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                     path = self.default_configfile
                 else:
                     exc = FileExistsError(msg)
-                    self.logger.error(msg, exc_info=exc)
+                    self.logger.error(str(exc))
                     raise exc
             else:
                 path = self.default_configfile
@@ -1239,7 +1219,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         try:
             dump_config(config, file, ext=format, as_dir=as_dir)
         except Exception as e:
-            self.logger.exception("could not dump config to {}".format(file))
+            self.logger.error("could not dump config to {}: {}".format(file, e))
             raise e
 
 
@@ -1299,9 +1279,9 @@ class SubCommandFunc(Logged):
         except AttributeError:
             docs = None
 
-        cli_sig = fully_concrete_signature(func, from_method=from_method, tvar_map=tvar_map)
+        main_sig = fully_concrete_signature(func, from_method=from_method, tvar_map=tvar_map)
         # non-output_handler positionals
-        positional_names = leading_positionals(cli_sig.parameters, names_only=True)
+        positional_names = leading_positionals(main_sig.parameters, names_only=True)
 
         if output_handler is NO_OUTPUT_HANDLER:
             output_handler = None
@@ -1310,10 +1290,9 @@ class SubCommandFunc(Logged):
             # from_method = True because we skip the first arg
             output_sig = fully_concrete_signature(output_handler, from_method=True, tvar_map=tvar_map)
             output_param_names = set(output_sig.parameters)
+            param_names = output_param_names.union(main_sig.parameters.keys())
             output_positional_names = leading_positionals(output_sig.parameters, names_only=True)
             # passing require_options prevents potential superfluous signature errors
-            cli_sig = _combined_cli_sig(output_sig, cli_sig,
-                                        require_options=require_options or require_output_options)
             try:
                 output_docs = parse_docstring(output_handler)
             except AttributeError:
@@ -1331,26 +1310,11 @@ class SubCommandFunc(Logged):
             else:
                 named_groups[OUTPUT_GROUP_NAME] = output_param_names
         else:
+            param_names = set(main_sig.parameters.keys())
+            output_sig = None
             output_docs = None
             output_param_names = set()
             output_positional_names = ()
-
-        # all parameter names, including output_handler if present
-        param_names = set(cli_sig.parameters.keys())
-
-        defaults = {}
-        for name, p in cli_sig.parameters.items():
-            if p.default is not Parameter.empty:
-                defaults[name] = p.default
-            elif p.kind == Parameter.VAR_POSITIONAL:
-                defaults[name] = ()
-            elif p.kind == Parameter.VAR_KEYWORD:
-                defaults[name] = {}
-
-        if isinstance(cmd_line_args, str):
-            cmd_line_args = {cmd_line_args}
-        elif not cmd_line_args:
-            cmd_line_args = set()
 
         self._main = bool(_main)
         self.func_name = func_name
@@ -1368,8 +1332,8 @@ class SubCommandFunc(Logged):
         self.positional_names = positional_names
         self.output_param_names = output_param_names
         self.output_positional_names = output_positional_names
-        self.defaults = defaults
-        self.signature = cli_sig
+
+        # options
         self.implicit_flags = bool(implicit_flags)
         self.require_options = bool(require_options)
         self.require_output_options = bool(require_output_options)
@@ -1378,9 +1342,14 @@ class SubCommandFunc(Logged):
         # these all require validation against the set of argument names
         # NOTE: order is important here! some things use properties, so that the self.<name> reference later
         # may be a validated version
+        self.cmd_line_args = _to_name_set(
+            cmd_line_args,
+            default_set=param_names,
+            metavar='cmd_line_args',
+        )
         self.ignore_on_cmd_line = _to_name_set(
             ignore_on_cmd_line,
-            default_set=param_names.difference(cmd_line_args),
+            default_set=param_names.difference(self.cmd_line_args),
             metavar='ignore_on_cmd_line',
         )
         self.ignore_in_config = _to_name_set(
@@ -1405,6 +1374,7 @@ class SubCommandFunc(Logged):
             or name not in self.ignore_on_cmd_line
             or name in self.parse_env
         }
+        self.have_fallback = self.parsed_param_names.difference(self.cmd_line_args)
         self.parse_order = self.compute_parse_order(parse_order, self.parsed_param_names)
         self.metavars = metavars
         self.named_groups = named_groups
@@ -1413,9 +1383,31 @@ class SubCommandFunc(Logged):
                                 for groupname, argnames in self.named_groups.items())
         )
 
-        self.typed_io = OrderedDict([(name, TypedIO.from_parameter(param))
-                                     for name, param in cli_sig.parameters.items()
-                                     if name in self.parsed_param_names])
+        all_sigs = (main_sig,) if output_sig is None else (main_sig, output_sig)
+        cli_sig = _combined_cli_sig(*all_sigs, ignore=self.ignore_on_cmd_line, have_fallback=self.have_fallback)
+        def all_params():
+            return chain.from_iterable(sig.parameters.items() for sig in all_sigs)
+
+        # signature info
+        self.cli_signature = cli_sig
+        self.main_signature = main_sig
+        self.output_signature = output_sig
+
+        defaults = {}
+        for name, p in all_params():
+            if p.default is not Parameter.empty:
+                defaults[name] = p.default
+            elif p.kind == Parameter.VAR_POSITIONAL:
+                defaults[name] = ()
+            elif p.kind == Parameter.VAR_KEYWORD:
+                defaults[name] = {}
+
+        self.defaults = defaults
+        self.typed_io = OrderedDict([
+            (name, TypedIO.from_parameter(param))
+            for name, param in all_params()
+            if name in self.parsed_param_names
+        ])
 
         if config_subsections in (False, None):
             self.config_subsections = None
@@ -1430,6 +1422,13 @@ class SubCommandFunc(Logged):
         else:
             # a list of sections
             self.config_subsections = [(t,) if isinstance(t, (str, int)) else t for t in config_subsections]
+
+    @property
+    def all_parameters(self):
+        if self.output_signature is None:
+            return self.main_signature.parameters
+        else:
+            return chain(self.main_signature.parameters, self.output_signature.parameters)
 
     @property
     def named_groups(self):
@@ -1487,6 +1486,37 @@ class SubCommandFunc(Logged):
             middle = param_names.difference(head).difference(tail)
 
         return [*(h for h in head if h in param_names), *middle, *(t for t in tail if t in param_names)]
+
+    def add_arguments_to(self, parser: ArgumentParser):
+        allow_positionals = not self.require_options
+        named_groups = {name: parser.add_argument_group(name) for name in self.named_groups}
+
+        positional_args = []
+        for name, param in self.cli_signature.parameters.items():
+            group_name = self.arg_to_group_name.get(name)
+            group = parser if group_name is None else named_groups[group_name]
+
+            io_methods = self.typed_io[name]
+            action = io_methods.add_argparse_arg(group, param,
+                                                 allow_positionals=allow_positionals,
+                                                 implicit_flags=self.implicit_flags,
+                                                 has_fallback=name in self.have_fallback,
+                                                 metavar=self.metavars,
+                                                 docs=self.docs)
+            nargs = io_methods.cli_nargs
+            if action.positional:
+                positional_args.append((name, param.annotation, nargs))
+
+        if positional_args:
+            # one trailing variable-length positional is OK
+            bad_positional_args = [tup for tup in positional_args[:-1] if tup[-1] in VARIADIC_NARGS]
+            if bad_positional_args:
+                if positional_args[-1][-1] in VARIADIC_NARGS:
+                    bad_positional_args.append(positional_args[-1])
+                raise ValueError("The parameters {} of function {} are all positional, but have variable-length "
+                                 "command line args {}; parsing cannot be performed unambiguously."
+                                 .format(", ".join("{}:{}".format(n, t) for n, t, _ in bad_positional_args),
+                                         self.func_name, tuple(n for _, _, n in bad_positional_args)))
 
     def get_conf(self, config):
         if config is None:
@@ -1553,7 +1583,7 @@ class SubCommandFunc(Logged):
         cli = {name: value for name, value in cli.items() if value is not missing}
 
         lookup = {CLI: cli, ENV: env, CONFIG: conf, DEFAULTS: self.defaults}
-        lookup_order = (CLI, *self.lookup_order, DEFAULTS) if CLI not in self.lookup_order else (*self.lookup_order, DEFAULTS)
+        lookup_order = self.lookup_order
         sources = []
         for source in lookup_order:
             ns = lookup[source]
@@ -1579,13 +1609,17 @@ class SubCommandFunc(Logged):
                              .format(missing_, self.cmd_name, tuple(source.value for source in lookup_order)))
 
         typed_io = self.typed_io
-        params = self.signature.parameters
+        params = (self.main_signature.parameters if self.output_signature is None else
+                  ChainMap(self.main_signature.parameters, self.output_signature.parameters))
         handle_output = self.output_handler is not None
 
         final_args = ()
         final_kwargs = {}
+        main_sig = self.main_signature
         final_output_args = () if handle_output else None
         final_output_kwargs = {} if handle_output else None
+        output_sig = self.output_signature
+
         for name, source, value in values:
             self.logger.debug("parsing arg %r from %s with value %r", name, source.value, value)
             tio = typed_io[name]
@@ -1593,8 +1627,10 @@ class SubCommandFunc(Logged):
 
             if handle_output and is_output_arg:
                 args, kwargs = final_output_args, final_output_kwargs
+                orig_param = output_sig.parameters[name]
             else:
                 args, kwargs = final_args, final_kwargs
+                orig_param = main_sig.parameters[name]
 
             if source == CONFIG and name in self.parse_config_as_cli:
                 parser = tio.cli_parser
@@ -1602,7 +1638,6 @@ class SubCommandFunc(Logged):
                 parser = tio.parser_for_source(source)
 
             param = params[name]
-            kind = param.kind
             parsed = parser(value)
             self.logger.debug("parsed value %r for arg %r from %s", parsed, name, source.value)
 
@@ -1612,16 +1647,17 @@ class SubCommandFunc(Logged):
                         raise TypeError("parsed value {} for arg {} is not an instance of {}"
                                         .format(repr(parsed), repr(name), param.annotation))
                     except Exception as e:
-                        self.logger.exception()
+                        self.logger.error(str(e))
                         raise e
 
-            if kind == Parameter.VAR_POSITIONAL:
+            orig_kind = orig_param.kind
+            if orig_kind == Parameter.VAR_POSITIONAL:
                 # only use *args for the args to start, then extend named positionals with these below
                 if is_output_arg:
                     final_output_args = parsed
                 else:
                     final_args = parsed
-            elif kind == Parameter.VAR_KEYWORD:
+            elif orig_kind == Parameter.VAR_KEYWORD:
                 kwargs.update(parsed)
             else:
                 kwargs[name] = parsed
@@ -1639,8 +1675,13 @@ class SubCommandFunc(Logged):
     def empty_config(self, only_required_args=False, literal_defaults=False):
         conf = {}
         typed_io = self.typed_io
-        for name, param in self.signature.parameters.items():
+        all_params = (
+            self.main_signature.parameters.items() if self.output_signature is None else
+            chain(self.main_signature.parameters.items(), self.output_signature.parameters.items())
+        )
+        for name, param in all_params:
             if name in self.ignore_in_config:
+                print("IGNORE", name, self.func_name)
                 continue
 
             has_default = param.default is not Parameter.empty
@@ -1648,7 +1689,7 @@ class SubCommandFunc(Logged):
                 continue
 
             # for the purposes of a representative config value, None doesn't count as a default
-            has_default = has_default and param.default is not None
+            has_nonnull_default = has_default and param.default is not None
 
             tio = typed_io[name]
             if name in self.parse_config_as_cli:
@@ -1657,14 +1698,14 @@ class SubCommandFunc(Logged):
                 if tio.cli_nargs in (ZERO_OR_MORE, ONE_OR_MORE):
                     if isinstance(val, str):
                         val = [val, ellipsis_]
-                    elif not isinstance(val, list):
+                    elif not isinstance(val, list):  # tuples
                         val = list(val)
-            elif literal_defaults and has_default:
+            elif literal_defaults and has_nonnull_default:
                 val = tio.config_encoder(param.default)
             else:
                 val = tio.config_repr
 
-            if is_optional_type(tio.type_):
+            if is_optional_type(tio.type_) and has_default:
                 name = OPTIONAL_ARG_TEMPLATE.format(name)
 
             conf[name] = val
@@ -1673,12 +1714,15 @@ class SubCommandFunc(Logged):
 
     def __getstate__(self):
         state = super().__getstate__()
-        state["signature"] = Signature([p.replace(annotation=deconstruct_generic(p.annotation))
-                                        for p in self.signature.parameters.values()])
+        for key in ("signature", "main_signature", "output_signature"):
+            sig = state.pop(key)
+            state[key] = Signature([p.replace(annotation=deconstruct_generic(p.annotation))
+                                    for p in sig.parameters.values()])
         return state
 
     def __setstate__(self, state):
-        sig = state.pop("signature")
-        state["signature"] = Signature([p.replace(annotation=reconstruct_generic(p.annotation))
-                                        for p in sig.parameters.values()])
+        for key in ("signature", "main_signature", "output_signature"):
+            sig = state.pop(key)
+            state[key] = Signature([p.replace(annotation=reconstruct_generic(p.annotation))
+                                    for p in sig.parameters.values()])
         self.__dict__.update(state)
