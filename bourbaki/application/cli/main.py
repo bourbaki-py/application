@@ -69,7 +69,6 @@ EXECUTE = False
 
 _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
-
 # we call this a lot but not on very many different functions
 signature = lru_cache(None)(signature)
 
