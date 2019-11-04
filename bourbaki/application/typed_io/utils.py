@@ -17,7 +17,7 @@ from urllib.parse import ParseResult as URL
 from functools import lru_cache, singledispatch
 from inspect import Parameter
 from multipledispatch import Dispatcher
-from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class, get_constructor_for
+from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class, get_constructor_for, PseudoGenericMeta
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import CallableDocs, ParamDocs, ParamDoc
 from bourbaki.introspection.imports import import_object
@@ -38,22 +38,32 @@ CLI_PREFIX_CHAR = '-'
 KEY_VAL_JOIN_CHAR = '='
 
 
-class _FileHandleConstructor(type):
-    encoding = None
-    mode = None
-
+class _FileHandleConstructor(PseudoGenericMeta):
     @lru_cache(None)
-    def __getitem__(cls, mode, encoding=None) -> type:
+    def __getitem__(cls, mode_enc) -> type:
+        if isinstance(mode_enc, tuple):
+            mode, encoding = mode_enc
+        else:
+            mode, encoding = mode_enc, None
+
+        if cls.mode is not None or cls.encoding is not None:
+            raise TypeError("Can't subscript File more than once; tried to subscript {} with {}"
+                            .format(repr(cls), mode_enc))
         mode, encoding, is_binary, base = _file_args(mode, encoding)
-        cls = BinaryFile if is_binary else TextFile
+        new_cls = BinaryFile if is_binary else TextFile
         mcs = type(cls)
-        return mcs.__new__(mcs, cls.__name__, (cls, base), {"mode": mode, "encoding": encoding})
+        return type.__new__(
+            mcs, new_cls.__name__, (new_cls, base), dict(__args__=(mode, encoding), __origin__=File)
+        )
 
     def __repr__(cls):
         tname = cls.__name__
         if cls.encoding:
             return "{}[{}, {}]".format(tname, repr(cls.mode), repr(cls.encoding))
-        return"{}[{}]".format(tname, repr(cls.mode))
+        if cls.mode:
+            return"{}[{}]".format(tname, repr(cls.mode))
+        else:
+            return tname
 
     @property
     def readable(cls):
@@ -63,15 +73,24 @@ class _FileHandleConstructor(type):
     def writable(cls):
         return cls.mode in WRITE_MODES
 
+    @property
+    def binary(cls):
+        return 'b' in cls.mode
+
+    @property
+    def mode(cls):
+        if not cls.__args__:
+            return None
+        return cls.__args__[0]
+
+    @property
+    def encoding(cls):
+        if not cls.__args__:
+            return None
+        return cls.__args__[1]
+
     def __instancecheck__(cls, instance):
-        if isinstance(instance, cls.__bases__):
-            if cls.readable and not instance.readable():
-                return False
-            if cls.writable and not instance.writable():
-                return False
-            return True
-        else:
-            return False
+        return isinstance(instance, cls.__bases__)
 
 
 class File(metaclass=_FileHandleConstructor):
@@ -210,7 +229,7 @@ def _file_args(mode, encoding):
     if is_binary_mode(mode):
         is_binary = True
 
-        if encoding:
+        if encoding is not None:
             raise ValueError("binary mode {} can't be specified with an encoding; got encoding={}"
                              .format(repr(mode), repr(encoding)))
 
