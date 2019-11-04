@@ -2,8 +2,9 @@ from io import StringIO
 from fractions import Fraction
 from itertools import cycle
 from operator import itemgetter
-from random import choices
 from pathlib import Path
+import pickle
+from random import choices
 
 from cytoolz import assoc, groupby, valmap
 import pytest
@@ -166,6 +167,15 @@ COMMANDS = keys_recursive(CONFIG)
 RANDOM_COMMANDS = [set(choices(COMMANDS, k=3)) for _ in range(10)]
 
 fmts = ['py', 'yaml', 'json']
+
+
+# currently can't run this because lookup of classes defined in cli.py fails
+# @pytest.fixture(scope='module')
+# def cli_pickle_reloaded():
+#     f = io.BytesIO()
+#     pickle.dump(cli, f)
+#     f.seek(0)
+#     return pickle.load(f)
 
 
 def test_command_names():
