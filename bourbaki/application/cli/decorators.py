@@ -196,8 +196,8 @@ class cli_attrs:
         return getattr(f, "__noncommand__", False)
 
     @staticmethod
-    def command_prefix(f):
-        return getattr(f, "__command_prefix__", ())
+    def command_prefix(f, default=()):
+        return getattr(f, "__command_prefix__", default)
 
     @staticmethod
     def helpname(f):
