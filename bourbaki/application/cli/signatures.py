@@ -6,9 +6,9 @@ from itertools import chain
 from inspect import Parameter, Signature
 import re
 
-from bourbaki.introspection.callables import leading_positionals
+from bourbaki.introspection.callables import leading_positionals, most_specific_constructor
 from .decorators import cli_attrs
-from .helpers import _validate_parse_order
+from .helpers import _validate_parse_order, _type
 
 
 class ArgKind(Enum):
@@ -43,7 +43,12 @@ class CLISignatureSpec(NamedTuple):
 
     @classmethod
     def from_callable(cls, func: Callable) -> 'CLISignatureSpec':
-        return CLISignatureSpec(
+        if isinstance(func, _type):
+            constructor = most_specific_constructor(func)
+        else:
+            constructor = None
+
+        spec = CLISignatureSpec(
             ignore_on_cmd_line=cli_attrs.ignore_on_cmd_line(func),
             ignore_in_config=cli_attrs.ignore_in_config(func),
             parse_config_as_cli=cli_attrs.parse_config_as_cli(func),
@@ -54,6 +59,8 @@ class CLISignatureSpec(NamedTuple):
             parse_order=cli_attrs.parse_order(func),
             require_options=cli_attrs.require_options(func),
         )
+
+        return spec if constructor is None else spec.overriding(CLISignatureSpec.from_callable(constructor))
 
     @property
     def nonnull_attrs(self):
