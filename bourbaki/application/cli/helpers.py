@@ -127,7 +127,7 @@ def _help_kwargs_from_docs(docs: CallableDocs, long_desc_as_epilog: bool=False, 
 
 
 @lru_cache(None)
-def _validate_lookup_order(*lookup_order: ArgSource):
+def _validate_lookup_order(*lookup_order: ArgSource, include_defaults=True):
     order = []
     missing = []
     for s in lookup_order:
@@ -146,8 +146,8 @@ def _validate_lookup_order(*lookup_order: ArgSource):
     if len(set(lookup_order)) != len(lookup_order):
         raise LookupOrderRepeated(lookup_order)
 
-    if ArgSource.CLI not in order:
-        order = (ArgSource.CLI, *order)
+    if include_defaults and ArgSource.DEFAULTS not in order:
+        order.append(ArgSource.DEFAULTS)
 
     return order
 
