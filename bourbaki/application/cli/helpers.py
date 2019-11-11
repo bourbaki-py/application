@@ -1,8 +1,9 @@
 # coding:utf-8
 from argparse import ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE
 from collections import ChainMap, Counter
+from functools import lru_cache
 from inspect import Parameter, Signature
-from itertools import chain, filterfalse
+from itertools import chain
 from pathlib import Path
 import sys
 from string import punctuation
@@ -11,7 +12,7 @@ from typing import Dict, List, Set, Tuple, Union, Optional
 from bourbaki.introspection.docstrings import CallableDocs
 from ..logging import ProgressLogger, TimedTaskContext
 from ..logging.defaults import PROGRESS, ERROR
-from ..typed_io.main import ArgSource, DEFAULTS
+from ..typed_io.main import ArgSource
 from ..typed_io.cli_nargs_ import cli_nargs
 
 VARIADIC_NARGS = (ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE)
@@ -125,6 +126,7 @@ def _help_kwargs_from_docs(docs: CallableDocs, long_desc_as_epilog: bool=False, 
     return kw
 
 
+@lru_cache(None)
 def _validate_lookup_order(*lookup_order: ArgSource):
     order = []
     missing = []
@@ -134,9 +136,7 @@ def _validate_lookup_order(*lookup_order: ArgSource):
         else:
             source = s
 
-        if s is DEFAULTS:
-            order.append(s)
-        elif not isinstance(source, ArgSource):
+        if not isinstance(source, ArgSource):
             missing.append(s)
         else:
             order.append(source)
@@ -148,8 +148,7 @@ def _validate_lookup_order(*lookup_order: ArgSource):
 
     if ArgSource.CLI not in order:
         order = (ArgSource.CLI, *order)
-    if DEFAULTS not in order:
-        order = (*order, DEFAULTS)
+
     return order
 
 
@@ -188,13 +187,15 @@ def _maybe_bool(names, fallback=_to_name_set):
     return fallback(names)
 
 
-def _combined_cli_sig(signature: Signature, *other_signatures: Signature,
-                      ignore: Optional[Set[str]] = None, have_fallback: Optional[Set[str]] = None):
+def _combined_cli_sig(signature: Signature,
+                      *other_signatures: Signature,
+                      parse: Optional[Set[str]] = None,
+                      have_fallback: Optional[Set[str]] = None):
     all_signatures = (signature, *other_signatures)
 
     all_names = chain.from_iterable(s.parameters for s in all_signatures)
-    if ignore:
-        all_names = filterfalse(ignore.__contains__, all_names)
+    if parse is not None:
+        all_names = filter(parse.__contains__, all_names)
     name_counts = Counter(all_names)
     common_names = tuple(n for n, c in name_counts.items() if c > 1)
     if common_names:
@@ -206,7 +207,7 @@ def _combined_cli_sig(signature: Signature, *other_signatures: Signature,
                Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)}
     for sig in all_signatures:
         for param in sig.parameters.values():
-            if not ignore or (param.name not in ignore):
+            if parse is None or param.name in parse:
                 params[param.kind].append(param)
 
     # algorithm:
