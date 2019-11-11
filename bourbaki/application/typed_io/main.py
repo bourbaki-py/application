@@ -21,6 +21,7 @@ class ArgSource(enum.Enum):
     CLI = "command line"
     CONFIG = "configuration file"
     ENV = "environment variables"
+    DEFAULTS = "function defaults"
 
 
 CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
@@ -235,7 +236,7 @@ class TypedIO(PicklableWithType):
         if source == CLI:
             return self.cli_parser
         elif source == CONFIG:
-            return self.config_decodesr
+            return self.config_decoder
         elif source == ENV:
             return self.env_parser
         # function defaults
