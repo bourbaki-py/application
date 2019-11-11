@@ -1,7 +1,6 @@
 # coding:utf-8
 from typing import Generic, Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
 from types import FunctionType
-from collections import Counter
 import os
 import sys
 import shlex
@@ -18,27 +17,27 @@ from argparse import (ArgumentParser, Namespace, RawDescriptionHelpFormatter,
                       ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE, SUPPRESS, _SubParsersAction)
 from cytoolz import identity, get_in
 
-from bourbaki.introspection.classes import classpath, most_specific_constructor
+from bourbaki.introspection.classes import classpath
 from bourbaki.introspection.types import (deconstruct_generic, reconstruct_generic, get_param_dict, get_generic_origin,
                                           is_optional_type)
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.imports import LazyImportsCallable
 from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 # callables.signature is an lru_cache'ed inspect.signature
-from bourbaki.introspection.callables import (signature, fully_concrete_signature, funcname, is_method,
-                                              leading_positionals)
+from bourbaki.introspection.callables import (signature, fully_concrete_signature, funcname, is_method)
 from ..completion.completers import CompleteFiles, install_shell_completion
 from ..logging import configure_default_logging, Logged, LoggedMeta, ProgressLogger
 from ..logging.helpers import validate_log_level_int
 from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
 from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
-from ..typed_io import TypedIO, ArgSource, CLI, CONFIG, ENV, DEFAULTS
+from ..typed_io import TypedIO, ArgSource
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
-from .helpers import (_to_name_set, _validate_parse_order, _help_kwargs_from_docs, _combined_cli_sig,
+from .helpers import (_help_kwargs_from_docs, _combined_cli_sig,
                       _validate_lookup_order, get_task, NamedChainMap, strip_command_prefix, update_in,
                       VARIADIC_NARGS)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
+from .signatures import CLISignatureSpec, FinalCLISignatureSpec
 
 # only need to parse docs once for any function
 parse_docstring = lru_cache(None)(parse_docstring)
@@ -66,6 +65,7 @@ CONFIG_OPTION = "--config"
 VERBOSE_FLAGS = ("-v", "--verbose")
 QUIET_FLAGS = ("--quiet", "-q")
 EXECUTE = False
+DEFAULT_LOOKUP_ORDER = (ArgSource.CLI, ArgSource.ENV, ArgSource.CONFIG)
 
 _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
@@ -116,7 +116,7 @@ class WideHelpFormatter(RawDescriptionHelpFormatter):
 class _SubparserPathAction(_SubParsersAction):
     cmd_prefix = ()
 
-    def add_parser(self, name: str, **kwargs) -> 'PicklableArgumentParser':
+    def add_parser(self, name: str, **kwargs) -> ArgumentParser:
         parser = super().add_parser(name, **kwargs)
         parser.cmd_prefix = (*self.cmd_prefix, name)
         return parser
@@ -214,7 +214,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                  # logging and config path locations
                  default_paths_relative_to_source=False,
                  # I/O
-                 arg_lookup_order: Tuple[ArgSource, ...] = (CLI, ENV, CONFIG),
+                 arg_lookup_order: Tuple[ArgSource, ...] = DEFAULT_LOOKUP_ORDER,
                  typecheck: bool = False,
                  output_handler: Opt[Callable] = None,
                  # special features and flags
@@ -520,32 +520,50 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         self.use_subconfig_for_commands = bool(use_subconfig_for_commands)
         self.require_config = bool(require_config)
         self.default_configfile = default_configfile
-        self.parse_config_as_cli = _to_name_set(parse_config_as_cli, default_set=True, metavar='parse_config_as_cli')
-        self.typecheck = bool(typecheck)
+
+        self.parse_config_as_cli = parse_config_as_cli
+        self.typecheck = typecheck
         self.output_handler = output_handler
+        self.require_options = bool(require_options)
 
         self.use_multiprocessing = bool(use_multiprocessing)
-
         self.use_execution_flag = bool(use_execution_flag)
         self.require_subcommand = bool(require_subcommand)
-        self.require_options = bool(require_options)
         self.implicit_flags = bool(implicit_flags)
         self.default_metavars = None if default_metavars is None else dict(default_metavars)
         self.long_desc_as_epilog = bool(long_desc_as_epilog)
 
         self.source_file = source_file
+        if source_file is not None:
+            self.source_dir = os.path.dirname(source_file)
+        else:
+            self.source_dir = None
         self.helper_files = helper_files
         self._bash_completion = bool(install_bash_completion)
         self.use_init_config_command = bool(add_init_config_command)
         self.subcommands = {}
         self.reserved_command_names = set()
         self._builtin_commands_added = False
+        self.suppress_setup_warnings = bool(suppress_setup_warnings)
 
-        if self.use_config and CONFIG not in self.lookup_order:
+        self.default_signature_spec = CLISignatureSpec(
+            parse_config_as_cli=self.parse_config_as_cli,
+            typecheck=self.typecheck,
+            metavars=self.default_metavars,
+            require_options=self.require_options,
+        )
+        if output_handler is None:
+            self.default_output_signature_spec = None
+        else:
+            self.default_output_signature_spec = CLISignatureSpec.from_callable(
+                output_handler
+            ).overriding(self.default_signature_spec)  # defaults available for fallback
+
+        if self.use_config and ArgSource.CONFIG not in self.lookup_order:
             setup_warn("use of configuration was specified with at least one of use_config,"
                        "require_config, or add_init_config_command, but {} is not in lookup_order; "
                        "no value can ever be parsed from configuration in that instance"
-                       .format(CONFIG))
+                       .format(ArgSource.CONFIG))
 
         if self.use_init_config_command:
             if isinstance(add_init_config_command, str):
@@ -566,7 +584,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             self.subcommand(name=self.init_config_command[-1],
                             command_prefix=self.init_config_command[:-1],
                             output_handler=self.dump_config,
-                            require_options=self.require_options,
                             implicit_flags=self.implicit_flags,
                             ignore_in_config=True,
                             config_subsections=False,
@@ -676,39 +693,36 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     def run(self, args=None, namespace=None, report_progress=True, time_units='s',
             log_level=PROGRESS, error_level=ERROR):
         ns = self.parse_args(args, namespace)
-        cmd, func = self.get_subcommand_func(ns)
-        self.logger.debug("command is %r", cmd)
-        main = False
-        if cmd is None and not self.require_subcommand:
-            func = self._main
-            if func is None:
+        cmdname, cmdfunc = self.get_subcommand_func(ns)
+
+        if cmdname is None and not self.require_subcommand:
+            # run main but _not_ as an initializer
+            if self._main is None:
+                # unless there is None!
                 self.error("No subcommand was passed, but no main function has been registered with the "
                            "{}.main() decorator".format(type(self).__name__))
+            cmdfunc = self._main
             main = True
-            cmd = "MAIN"
+            cmdname = "MAIN"
+        else:
+            main = False
 
         app_logger = self.get_app_logger(ns)
-        config = self.parse_config(ns) if self.use_config else None
+        app_logger.debug("command is %r", cmdname)
+        config = self.parse_config(ns, app_logger) if self.use_config else None
 
-        app_cls = self.app_cls
-
-        if app_cls is not None and cmd not in self.reserved_command_names:
-            # if app_cls.__new__ is not object.__new__ (or lacks the same signature), this should raise
-            # an informative error
-            app_obj = app_cls.__new__(app_cls)
-            if isinstance(app_obj, Logged):
-                app_obj.logger = app_logger
-            if (not main) and self._main is not None:
-                # __init__: perform any initialization logic; if main == True, this will be done below at func.execute()
-                self._main.execute(ns, config, app_obj, handle_output=False)
+        # if self is defined from a class and the command is not a reserved/builtin command,
+        if (not main) and (self.app_cls is not None) and (cmdname not in self.reserved_command_names):
+            # perform any initialization logic; if main == True, this will be done below at func.execute()
+            app_obj = self._main.execute(ns, config, handle_output=False)
         else:
             app_obj = None
 
         if not report_progress:
-            result = func.execute(ns, config, app_obj)
+            result = cmdfunc.execute(ns, config, app_obj)
         else:
-            with get_task(app_logger, cmd, log_level=log_level, error_level=error_level, time_units=time_units):
-                result = func.execute(ns, config, app_obj)
+            with get_task(app_logger, cmdname, log_level=log_level, error_level=error_level, time_units=time_units):
+                result = cmdfunc.execute(ns, config, app_obj)
 
         return result
 
@@ -727,14 +741,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         if os.path.isabs(path):
             return path
         elif self.default_paths_relative_to_source:
-            return os.path.abspath(os.path.join(self.source_file, path))
+            return os.path.abspath(os.path.join(self.source_dir, path))
         else:
             return os.path.abspath(path)
 
     def validate_namespace(self, ns):
         if self.require_subcommand and self.get_subcommand(ns) is None:
             self.error("A subcommand is required: one of {}".format(tuple(self.subcommands or ())))
-
         return ns
 
     @staticmethod
@@ -796,7 +809,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         self.logger.setLevel(log_level_int)
 
-    def parse_config(self, ns):
+    def parse_config(self, ns, logger=None):
+        if logger is None:
+            logger = self.logger
+
         config_file = getattr(ns, CONFIG_FILE_ATTR, None)
 
         if config_file is None and self.use_config:
@@ -814,13 +830,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         if config_file is not None:
             # file must exist; this will raise if not
-            self.logger.debug("parsing config from {}".format(config_file))
+            logger.debug("parsing config from {}".format(config_file))
             config = load_config(config_file, namespace=False, disambiguate=no_ext)
         else:
             config = None
 
         if config is not None:
-            self.logger.debug("parsed config:\n%r", config)
+            logger.debug("parsed config:\n%r", config)
 
         return config
 
@@ -828,28 +844,36 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     # command definition methods #
     ##############################
 
-    def subcommand(self, command_prefix=None, config_subsections=None, implicit_flags=None,
-                   ignore_on_cmd_line=None, ignore_in_config=None, cmd_line_args=None,
-                   parse_config_as_cli=None, parse_order=None, typecheck=None,
-                   output_handler=None, named_groups=None, require_options=None,
-                   name=None, from_method=False, metavars=None, tvar_map=None, _main=False, _builtin=False):
-        if require_options is None:
-            require_options = self.require_options or _main
-
-        if typecheck is None:
-            typecheck = self.typecheck
+    def subcommand(self,
+                   command_prefix=None,
+                   config_subsections=None,
+                   implicit_flags=None,
+                   ignore_on_cmd_line=None,
+                   ignore_in_config=None,
+                   parse_config_as_cli=None,
+                   parse_env=None,
+                   parse_order=None,
+                   typecheck=None,
+                   output_handler=None,
+                   named_groups=None,
+                   require_options=None,
+                   name=None,
+                   from_method=False,
+                   metavars=None,
+                   tvar_map=None,
+                   _main=False,
+                   _builtin=False):
+        if _main and require_options is None:
+            require_options = True
 
         if implicit_flags is None:
             implicit_flags = self.implicit_flags
 
-        if parse_config_as_cli is None:
-            parse_config_as_cli = self.parse_config_as_cli
-
-        if metavars is None:
-            metavars = self.default_metavars
-
-        if output_handler is None and not _main:
+        if output_handler is None:
             output_handler = self.output_handler
+            output_sig_spec = self.default_output_signature_spec
+        else:
+            output_sig_spec = CLISignatureSpec.from_callable(output_handler).overriding(self.default_signature_spec)
 
         if config_subsections is None:
             if self.use_subconfig_for_commands:
@@ -858,43 +882,58 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             else:
                 config_subsections = [()]
 
-        kw = dict(argparser_cmd_name=self.cmd_name,
-                  command_prefix=command_prefix,
-                  config_subsections=config_subsections,
-                  implicit_flags=implicit_flags,
-                  require_options=require_options,
-                  ignore_on_cmd_line=ignore_on_cmd_line,
-                  ignore_in_config=ignore_in_config,
-                  parse_config_as_cli=parse_config_as_cli,
-                  cmd_line_args=cmd_line_args,
-                  named_groups=named_groups,
-                  typecheck=typecheck,
-                  output_handler=output_handler,
-                  name=name,
-                  from_method=from_method,
-                  lookup_order=self.lookup_order,
-                  parse_order=parse_order,
-                  metavars=metavars,
-                  tvar_map=tvar_map,
-                  _main=_main)
-
         def dec(f):
-            subcmd = SubCommandFunc(f, **kw)
+            sig_spec = CLISignatureSpec(
+                ignore_on_cmd_line=ignore_on_cmd_line,
+                ignore_in_config=ignore_in_config,
+                parse_config_as_cli=parse_config_as_cli,
+                typecheck=typecheck,
+                metavars=metavars,
+                named_groups=named_groups,
+                parse_env=parse_env,
+                parse_order=parse_order,
+                require_options=require_options,
+            ).overriding(
+                CLISignatureSpec.from_callable(f),
+                self.default_signature_spec,
+            )
+
+            subcmd = SubCommandFunc(
+                f,
+                name=name,
+                signature_spec=sig_spec,
+                output_signature_spec=output_sig_spec,
+                command_prefix=command_prefix,
+                config_subsections=config_subsections,
+                output_handler=output_handler,
+                implicit_flags=implicit_flags,
+                lookup_order=self.lookup_order,
+                argparser_cmd_name=self.cmd_name,
+                from_method=from_method,
+                tvar_map=tvar_map,
+                suppress_setup_warnings=self.suppress_setup_warnings,
+                _main=_main,
+            )
 
             if self.reserved_command_names and not _builtin and subcmd.cmd_prefix in self.reserved_command_names:
-                raise NameError("cannot use name '{}' for a subcommand{}; it is reserved for builtin functionality"
-                                .format(name,
-                                        " under prefix {}".format(command_prefix) if command_prefix else ''))
+                raise NameError("cannot use command prefix {} for subcommand '{}'; it is reserved for builtin functionality"
+                                .format(subcmd.cmd_prefix, name))
 
             subcmd.parser = self.add_arguments_from(subcmd)
             return subcmd
 
         return dec
 
-    def main(self, config_subsections=None, implicit_flags=None,
-             ignore_on_cmd_line=None, ignore_in_config=None,
-             cmd_line_args=None, parse_config_as_cli=None, parse_order=None, typecheck=None,
-             output_handler=None, named_groups=None,
+    def main(self,
+             config_subsections=None,
+             implicit_flags=None,
+             ignore_on_cmd_line=None,
+             ignore_in_config=None,
+             parse_config_as_cli=None,
+             parse_order=None,
+             typecheck=None,
+             output_handler=None,
+             named_groups=None,
              name=None, from_method=False, metavars=None, tvar_map=None):
         return self.subcommand(config_subsections=config_subsections,
                                implicit_flags=implicit_flags,
@@ -902,7 +941,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                                ignore_on_cmd_line=ignore_on_cmd_line,
                                ignore_in_config=ignore_in_config,
                                parse_config_as_cli=parse_config_as_cli,
-                               cmd_line_args=cmd_line_args,
                                typecheck=typecheck,
                                output_handler=output_handler,
                                named_groups=named_groups,
@@ -910,7 +948,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                                metavars=metavars,
                                name=name,
                                from_method=from_method,
-                               tvar_map=tvar_map, _main=True)
+                               tvar_map=tvar_map,
+                               _main=True)
 
     def definition(self, app_cls: type):
         """class decorator for generating subcommands via a class.
@@ -933,67 +972,33 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                         setattr(self, name, value)
 
         tvar_map = get_param_dict(app_cls)
-        have_default_config_as_cli_args = not isinstance(self.parse_config_as_cli, bool)
-        have_default_metavars = isinstance(self.default_metavars, dict)
 
-        # do the init last if it wasn't in the class namespace
-        for name, f in chain([("__init__", most_specific_constructor(app_cls))], app_cls_.__dict__.items()):
+        # the class constructor is main
+        self.main(
+            name='__init___',
+            from_method=False,
+            tvar_map=tvar_map,
+            output_handler=NO_OUTPUT_HANDLER if self.require_subcommand else self.output_handler,
+        )(app_cls)
+
+        # methods are subcommands
+        for name, f in app_cls_.__dict__.items():
             if not callable(f):
                 continue
             if cli_attrs.noncommand(f):
                 continue
-            if name.startswith("_") and name != "__init__":
+            if name.startswith("_"):
                 # don't register implicitly private methods
                 continue
             if not is_method(app_cls, name):
                 # don't configure CLI commands for classmethods and staticmethods
-                setup_warn("currently only basic methods are supported as subcommands in a class def context "
-                           "but callable '{}' = {} defined in {}'s namespace is of type {}"
-                           .format(name, f, app_cls, type(f)))
-                continue
-            if f is object.__init__:
-                # don't configure CLI for base object constructor
+                if not self.suppress_setup_warnings:
+                    setup_warn("currently only basic methods are supported as subcommands in a class def context "
+                               "but callable '{}' = {} defined in {}'s namespace is of type {}"
+                               .format(name, f, app_cls, type(f)))
                 continue
 
-            # function decorators override CLI configuration
-            parse_config_as_cli_ = cli_attrs.parse_config_as_cli(f, self.parse_config_as_cli)
-            if have_default_config_as_cli_args and not isinstance(parse_config_as_cli_, bool):
-                if parse_config_as_cli_ is not self.parse_config_as_cli:
-                    parse_config_as_cli_ = self.parse_config_as_cli.union(parse_config_as_cli_)
-
-            metavars = cli_attrs.metavars(f, self.default_metavars)
-            if have_default_metavars and metavars is not self.default_metavars:
-                metavars = ChainMap(metavars, self.default_metavars)
-
-            if not self.use_config:
-                default_subsections = False
-            else:
-                default_subsections = True if self.use_subconfig_for_commands else [()]
-
-            extra_kw = dict(
-                implicit_flags=self.implicit_flags,
-                from_method=True,
-                typecheck=cli_attrs.typecheck(f),
-                ignore_on_cmd_line=cli_attrs.ignore_on_cmd_line(f, False),
-                ignore_in_config=cli_attrs.ignore_in_config(f),
-                config_subsections=cli_attrs.config_subsections(f, default_subsections),
-                parse_config_as_cli=parse_config_as_cli_,
-                parse_order=cli_attrs.parse_order(f),
-                named_groups=cli_attrs.named_groups(f),
-                metavars=metavars,
-                tvar_map=tvar_map,
-            )
-
-            if name == "__init__" and self._main is None:
-                # if we hit the init but didn't register one yet
-                self.main(**extra_kw)(f)
-            elif name != "__init__":
-                require_options = cli_attrs.require_options(f, self.require_options)
-                self.subcommand(require_options=require_options,
-                                output_handler=cli_attrs.output_handler(f, self.output_handler),
-                                name=name,
-                                command_prefix=cli_attrs.command_prefix(f),
-                                **extra_kw)(f)
+            self.subcommand(name=name, from_method=True, tvar_map=tvar_map)(f)
 
         if self.description is None:
             self.description = app_cls.__doc__
@@ -1005,7 +1010,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         return app_cls
 
-    def add_arguments_from(self, subcmd_func: 'SubCommandFunc') -> PicklableArgumentParser:
+    def add_arguments_from(self, subcmd_func: 'SubCommandFunc') -> ArgumentParser:
         cmd_path = (*subcmd_func.cmd_prefix, subcmd_func.cmd_name)
 
         if not subcmd_func._main:
@@ -1224,25 +1229,18 @@ class SubCommandFunc(Logged):
 
     def __init__(self,
                  func: Callable, *,
-                 argparser_cmd_name=None,
+                 name=None,
+                 signature_spec: Opt[CLISignatureSpec] = None,
+                 output_signature_spec: Opt[CLISignatureSpec] = None,
                  lookup_order=None,
-                 named_groups=None,
-                 implicit_flags=False,
                  command_prefix=None,
                  config_subsections=None,
-                 ignore_on_cmd_line=None,
-                 cmd_line_args=None,
-                 parse_env=None,
-                 ignore_in_config=None,
-                 parse_config_as_cli=None,
-                 require_options=True,
-                 parse_order=None,
-                 typecheck=False,
                  output_handler=None,
-                 name=None,
-                 from_method=False,
-                 metavars=None,
+                 implicit_flags=False,
+                 argparser_cmd_name=None,
+                 suppress_setup_warnings=False,
                  tvar_map=None,
+                 from_method=False,
                  _main=False):
         if name is None:
             func_name = funcname(func)
@@ -1258,57 +1256,83 @@ class SubCommandFunc(Logged):
         elif command_prefix is None:
             command_prefix = ()
 
-        if not named_groups:
-            named_groups = {}
-
         lookup_order = _validate_lookup_order(*lookup_order)
         cmd_name = to_cmd_line_name(strip_command_prefix(command_prefix, func_name))
         command_prefix = tuple(map(to_cmd_line_name, command_prefix))
-
-        if ignore_on_cmd_line is not None and cmd_line_args is not None:
-            raise ValueError("At most one of `ignore_on_cmd_line`, `cmd_line_args` should be passed")
 
         try:
             docs = parse_docstring(func)
         except AttributeError:
             docs = None
 
-        main_sig = fully_concrete_signature(func, from_method=from_method, tvar_map=tvar_map)
-        # non-output_handler positionals
-        positional_names = leading_positionals(main_sig.parameters, names_only=True)
+        if signature_spec is None:
+            signature_spec = CLISignatureSpec()
 
         if output_handler is NO_OUTPUT_HANDLER:
             output_handler = None
 
+        main_sig = fully_concrete_signature(func, from_method=from_method, tvar_map=tvar_map)
+
+        warn_missing = None if suppress_setup_warnings else setup_warn
+        final_spec = signature_spec.configure(main_sig, warn_missing=warn_missing)
+
         if output_handler is not None:
             # from_method = True because we skip the first arg
             output_sig = fully_concrete_signature(output_handler, from_method=True, tvar_map=tvar_map)
-            output_param_names = set(output_sig.parameters)
-            param_names = output_param_names.union(main_sig.parameters.keys())
-            output_positional_names = leading_positionals(output_sig.parameters, names_only=True)
-            # passing require_options prevents potential superfluous signature errors
+            if output_signature_spec is None:
+                def maybe_bool(x, *values):
+                    return x if x in values else None
+
+                if output_signature_spec is None:
+                    output_signature_spec = CLISignatureSpec.from_callable(output_handler)
+                # allow all-inclusive (boolean) values to supercede those specified locally on the output handler
+                output_signature_spec = CLISignatureSpec(
+                    ignore_in_config=maybe_bool(signature_spec.ignore_in_config, True),
+                    ignore_on_cmd_line=maybe_bool(signature_spec.ignore_on_cmd_line, True),
+                    require_options=maybe_bool(signature_spec.require_options, True),
+                ).overriding(output_signature_spec)
+
+            final_output_spec = output_signature_spec.configure(output_handler)
+
+            overlap = final_output_spec.parsed.intersection(final_spec.parsed)
+            if overlap:
+                raise NameError("Names {} are specified to be parsed from the signatures of both the function {}"
+                                "and its output handler {}".format(tuple(overlap), func, output_handler))
+
             try:
                 output_docs = parse_docstring(output_handler)
             except AttributeError:
                 output_docs = None
             else:
                 docs = CallableDocs(short_desc=docs.short_desc,
-                                    long_desc='\n'.join(d for d in (docs.long_desc, output_docs.desc) if d),
+                                    long_desc='\n'.join(
+                                        d for d in (docs.long_desc, output_docs.desc, output_docs.long_desc) if d
+                                    ),
                                     params=chain(docs.params.values(), output_docs.params.values()),
                                     returns=docs.returns,
                                     raises=docs.raises + output_docs.raises)
 
-            if OUTPUT_GROUP_NAME in named_groups:
-                raise NameError("'{}' is a group name reserved for output handler args, when an output handler "
-                                "is specified".format(OUTPUT_GROUP_NAME))
-            else:
-                named_groups[OUTPUT_GROUP_NAME] = output_param_names
+            all_parsed = final_spec.parsed.union(final_output_spec.parsed)
+            all_cli_parsed = final_spec.parse_cmd_line.union(final_output_spec.parse_cmd_line)
+            have_fallback = final_spec.have_fallback.union(final_output_spec.have_fallback)
+            cli_sig = _combined_cli_sig(main_sig, output_sig, parse=all_cli_parsed, have_fallback=have_fallback)
+            all_sigs = (main_sig, output_sig)
+            named_groups = {k: set(v) for k, v in final_spec.named_groups.items()}
+            for name, group in final_output_spec.named_groups.items():
+                if name in named_groups:
+                    named_groups[name].update(group)
+                else:
+                    named_groups[name] = group
         else:
-            param_names = set(main_sig.parameters.keys())
             output_sig = None
             output_docs = None
-            output_param_names = set()
-            output_positional_names = ()
+            final_output_spec = None
+            all_parsed = final_spec.parsed
+            all_cli_parsed = final_spec.parse_cmd_line
+            have_fallback = final_spec.have_fallback
+            cli_sig = _combined_cli_sig(main_sig, parse=all_cli_parsed, have_fallback=have_fallback)
+            all_sigs = (main_sig,)
+            named_groups = final_spec.named_groups
 
         self._main = bool(_main)
         self.func_name = func_name
@@ -1321,73 +1345,32 @@ class SubCommandFunc(Logged):
         self.output_handler = output_handler
         self.from_method = bool(from_method)
 
-        # parameter names
-        self.param_names = param_names
-        self.positional_names = positional_names
-        self.output_param_names = output_param_names
-        self.output_positional_names = output_positional_names
-
         # options
         self.implicit_flags = bool(implicit_flags)
-        self.require_options = bool(require_options)
         self.lookup_order = lookup_order
 
-        # these all require validation against the set of argument names
-        # NOTE: order is important here! some things use properties, so that the self.<name> reference later
-        # may be a validated version
-        self.cmd_line_args = _to_name_set(
-            cmd_line_args,
-            default_set=param_names,
-            metavar='cmd_line_args',
-        )
-        self.ignore_on_cmd_line = _to_name_set(
-            ignore_on_cmd_line,
-            default_set=param_names.difference(self.cmd_line_args),
-            metavar='ignore_on_cmd_line',
-        )
-        self.ignore_in_config = _to_name_set(
-            ignore_in_config,
-            default_set=param_names,
-            metavar='ignore_in_config',
-        )
-        self.parse_config_as_cli = _to_name_set(
-            parse_config_as_cli,
-            default_set=param_names,
-            metavar='parse_config_as_cli',
-        )
-        self.typecheck = _to_name_set(
-            typecheck,
-            default_set=param_names,
-            metavar='typecheck',
-        )
-        self.parse_env = parse_env
-        self.parsed_param_names = {
-            name for name in self.param_names
-            if name not in self.ignore_in_config
-            or name not in self.ignore_on_cmd_line
-            or name in self.parse_env
-        }
-        self.have_fallback = self.parsed_param_names.difference(self.cmd_line_args)
-        self.parse_order = self.compute_parse_order(parse_order, self.parsed_param_names)
-        self.metavars = metavars
         self.named_groups = named_groups
         self.arg_to_group_name = dict(
             chain.from_iterable(zip(argnames, repeat(groupname))
-                                for groupname, argnames in self.named_groups.items())
+                                for groupname, argnames in named_groups.items())
         )
 
-        all_sigs = (main_sig,) if output_sig is None else (main_sig, output_sig)
-        cli_sig = _combined_cli_sig(*all_sigs, ignore=self.ignore_on_cmd_line, have_fallback=self.have_fallback)
-        def all_params():
-            return chain.from_iterable(sig.parameters.items() for sig in all_sigs)
+        def all_parsed_params():
+            params = chain.from_iterable(sig.parameters.items() for sig in all_sigs)
+            return ((name, param) for name, param in params if name in all_parsed)
 
         # signature info
         self.cli_signature = cli_sig
         self.main_signature = main_sig
+        self.main_signature_spec = final_spec
         self.output_signature = output_sig
+        self.output_signature_spec = final_output_spec
+        self.have_fallback = have_fallback
+        self.parsed = all_parsed
 
+        # defaults for params that can be parsed from the command line
         defaults = {}
-        for name, p in all_params():
+        for name, p in all_parsed_params():
             if p.default is not Parameter.empty:
                 defaults[name] = p.default
             elif p.kind == Parameter.VAR_POSITIONAL:
@@ -1398,8 +1381,7 @@ class SubCommandFunc(Logged):
         self.defaults = defaults
         self.typed_io = OrderedDict([
             (name, TypedIO.from_parameter(param))
-            for name, param in all_params()
-            if name in self.parsed_param_names
+            for name, param in all_parsed_params()
         ])
 
         if config_subsections in (False, None):
@@ -1414,87 +1396,57 @@ class SubCommandFunc(Logged):
             self.config_subsections = [config_subsections]
         else:
             # a list of sections
-            self.config_subsections = [(t,) if isinstance(t, (str, int)) else t for t in config_subsections]
-
-    @property
-    def all_parameters(self):
-        if self.output_signature is None:
-            return self.main_signature.parameters
-        else:
-            return chain(self.main_signature.parameters, self.output_signature.parameters)
-
-    @property
-    def named_groups(self):
-        return self._named_groups
-
-    @named_groups.setter
-    def named_groups(self, named_groups: Opt[Mapping[str, Set[str]]]):
-        if not named_groups:
-            named_groups = {}
-        else:
-            named_groups = {name: _to_name_set(argnames, self.param_names, metavar="args in named group '{}'".format(name))
-                            for name, argnames in named_groups.items()}
-            counts = Counter(chain.from_iterable(named_groups.values()))
-            repeated = [argname for argname, count in counts.items() if count > 1]
-            if repeated:
-                raise ValueError(
-                    "arguments {} were repeated across {} named groups respectively for command with function name '{}'"
-                    .format(list(repeated), [counts[n] for n in repeated], self.func_name)
-                )
-        self._named_groups = named_groups
-
-    @property
-    def parse_env(self):
-        return self._parse_env
-
-    @parse_env.setter
-    def parse_env(self, parse_env: Opt[Mapping[str, str]]):
-        self._parse_env = self._validate_arg_keys(parse_env, 'parse_env')
-
-    def _validate_arg_keys(self, dict_, group_name):
-        # simply throw an error if there are unknown keys
-        _ = _to_name_set(dict_, self.param_names, metavar=group_name)
-        return dict_ or {}
+            self.config_subsections = [(t,) if isinstance(t, (str, int)) else tuple(t) for t in config_subsections]
 
     @property
     def cmd_path(self):
         return (*self.cmd_prefix, self.cmd_name)
 
-    @staticmethod
-    def compute_parse_order(parse_order, param_names):
-        if parse_order is None:
-            return list(param_names)
-        parse_order = _validate_parse_order(*parse_order)
+    @property
+    def parse_config(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_config
+        return self.main_signature_spec.parse_config.union(self.output_signature_spec.parse_config)
 
-        if any((n not in param_names) or (n is not Ellipsis) for n in parse_order):
-            raise NameError("parse_order entries must all be in {}; got {}".format(param_names, parse_order))
+    @property
+    def parse_cmd_line(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_cmd_line
+        return self.main_signature_spec.parse_cmd_line.union(self.output_signature_spec.parse_cmd_line)
 
-        try:
-            ellipsis_ix = parse_order.index(Ellipsis)
-        except ValueError:
-            head, tail = parse_order, ()
-            middle = ()
-        else:
-            head, tail = parse_order[:ellipsis_ix], parse_order[ellipsis_ix + 1:]
-            middle = param_names.difference(head).difference(tail)
+    @property
+    def parse_env(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_env
+        return ChainMap(self.main_signature_spec.parse_env, self.output_signature_spec.parse_env)
 
-        return [*(h for h in head if h in param_names), *middle, *(t for t in tail if t in param_names)]
+    @property
+    def parse_order(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_order
+        return self.output_signature_spec.parse_order + self.main_signature_spec.parse_order
+
+    @property
+    def parse_config_as_cli(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_config_as_cli
+        return self.main_signature_spec.parse_config_as_cli.union(self.output_signature_spec.parse_config_as_cli)
 
     def add_arguments_to(self, parser: ArgumentParser):
-        allow_positionals = not self.require_options
         named_groups = {name: parser.add_argument_group(name) for name in self.named_groups}
 
         positional_args = []
         for name, param in self.cli_signature.parameters.items():
             group_name = self.arg_to_group_name.get(name)
             group = parser if group_name is None else named_groups[group_name]
+            spec = self.main_signature_spec if name in self.main_signature_spec.parse_cmd_line else self.output_signature_spec
 
             io_methods = self.typed_io[name]
             action = io_methods.add_argparse_arg(group, param,
-                                                 allow_positionals=allow_positionals,
+                                                 allow_positionals=not spec.require_options,
                                                  implicit_flags=self.implicit_flags,
-                                                 has_fallback=name in self.have_fallback,
-                                                 metavar=self.metavars,
+                                                 has_fallback=name in spec.have_fallback,
+                                                 metavar=spec.metavars,
                                                  docs=self.docs)
             nargs = io_methods.cli_nargs
             if action.positional:
@@ -1516,7 +1468,7 @@ class SubCommandFunc(Logged):
             return None
 
         conf = None
-        ignore = self.ignore_in_config or ()
+        parse_config = self.parse_config
 
         if self.config_subsections:
             confs = []
@@ -1537,23 +1489,21 @@ class SubCommandFunc(Logged):
             else:
                 conf = confs[0]
 
-            if conf and ignore:
-                conf = {k: v for k, v in conf.items() if k not in ignore}
+            if conf and parse_config:
+                conf = {k: v for k, v in conf.items() if k in parse_config}
 
         return conf
 
     def get_env(self):
-        if not self.parse_env:
+        parse_env = self.parse_env
+        if not parse_env:
             return None
-
-        env = {}
-        for arg_name, env_name in self.parse_env.items():
-            if env_name in os.environ:
-                env[arg_name] = os.environ[arg_name]
-        return env
+        return {arg_name: os.environ[env_name] for arg_name, env_name in parse_env.items() if env_name in os.environ}
 
     def execute(self, namespace, config, instance=None, handle_output=True):
-        args, kwargs, output_args, output_kwargs = self.prepare_args_kwargs(namespace, config)
+        args, kwargs, output_args, output_kwargs = self.prepare_args_kwargs(namespace,
+                                                                            config,
+                                                                            handle_output=handle_output)
 
         if self.from_method:
             # method
@@ -1563,69 +1513,74 @@ class SubCommandFunc(Logged):
             value = self.func(*args, **kwargs)
 
         if handle_output and self.output_handler is not None:
-            output_args = output_args or ()
-            output_kwargs = output_kwargs or {}
-            self.output_handler(value, *output_args, **output_kwargs)
+            _ = self.output_handler(value, *output_args, **output_kwargs)
 
         return value
 
-    def prepare_args_kwargs(self, argparse_namespace, config=None):
+    def prepare_args_kwargs(self, argparse_namespace, config=None, handle_output=True):
         conf = self.get_conf(config)
         env = self.get_env()
         cli = argparse_namespace.__dict__ if isinstance(argparse_namespace, Namespace) else argparse_namespace
         cli = {name: value for name, value in cli.items() if value is not missing}
 
-        lookup = {CLI: cli, ENV: env, CONFIG: conf, DEFAULTS: self.defaults}
-        lookup_order = self.lookup_order
+        lookup = {ArgSource.CLI: cli, ArgSource.ENV: env, ArgSource.CONFIG: conf}
         sources = []
-        for source in lookup_order:
+        for source in self.lookup_order:
             ns = lookup[source]
             if ns:
                 sources.append((source, ns))
+
+        DEFAULTS = object()
+        sources.append((DEFAULTS, self.defaults))
 
         namespace = NamedChainMap(*sources)
         self.logger.debug("parsing args for command %r from sources %r in order %r",
                           self.func_name, namespace.names, self.parse_order)
 
-        values = []
-        missing_ = []
-        sentinel = object()
-        for name in self.parse_order:
-            source, value = namespace.get_with_name(name, sentinel)
-            if value is sentinel:
-                missing_.append(name)
-            else:
-                values.append((name, source, value))
+        handle_output = handle_output and self.output_handler is not None
 
-        if missing_:
+        # prepare the raw values to be parsed
+        if handle_output:
+            output_values, output_missing = self._prepare_raw_values(namespace, self.output_signature_spec)
+        else:
+            output_values, output_missing = (), ()
+        main_values, main_missing = self._prepare_raw_values(namespace, self.main_signature_spec)
+
+        if output_missing or main_missing:
+            missing_ = output_missing + main_missing
             raise ValueError("could not find value for args {} of command `{}` in any of {}"
-                             .format(missing_, self.cmd_name, tuple(source.value for source in lookup_order)))
+                             .format(missing_, self.cmd_name, tuple(source.value for source in self.lookup_order)))
 
-        typed_io = self.typed_io
-        params = (self.main_signature.parameters if self.output_signature is None else
-                  ChainMap(self.main_signature.parameters, self.output_signature.parameters))
-        handle_output = self.output_handler is not None
+        # We make the assumption that output handling args will generally be lighter to process than input args;
+        # e.g. mainly file handles, credentials, flags. Thus we parse them first.
+        if handle_output:
+            output_args, output_kwargs = self._parse_raw_values(output_values,
+                                                                self.output_signature_spec,
+                                                                self.output_signature)
+        else:
+            output_args, output_kwargs = None, None
+        main_args, main_kwargs = self._parse_raw_values(main_values,
+                                                        self.main_signature_spec,
+                                                        self.main_signature)
 
+        return main_args, main_kwargs, output_args, output_kwargs
+
+    def _parse_raw_values(self,
+                          values: List[Tuple[str, ArgSource, object]],
+                          spec: FinalCLISignatureSpec,
+                          sig: Signature):
         final_args = ()
         final_kwargs = {}
-        main_sig = self.main_signature
-        final_output_args = () if handle_output else None
-        final_output_kwargs = {} if handle_output else None
-        output_sig = self.output_signature
+        typed_io = self.typed_io
+        parse_config_as_cli = spec.parse_config_as_cli
+        typecheck = spec.typecheck
+        params = sig.parameters
 
         for name, source, value in values:
             self.logger.debug("parsing arg %r from %s with value %r", name, source.value, value)
             tio = typed_io[name]
-            is_output_arg = name in self.output_param_names
 
-            if handle_output and is_output_arg:
-                args, kwargs = final_output_args, final_output_kwargs
-                orig_param = output_sig.parameters[name]
-            else:
-                args, kwargs = final_args, final_kwargs
-                orig_param = main_sig.parameters[name]
-
-            if source == CONFIG and name in self.parse_config_as_cli:
+            if source == ArgSource.CONFIG and name in parse_config_as_cli:
                 parser = tio.cli_parser
             else:
                 parser = tio.parser_for_source(source)
@@ -1634,7 +1589,7 @@ class SubCommandFunc(Logged):
             parsed = parser(value)
             self.logger.debug("parsed value %r for arg %r from %s", parsed, name, source.value)
 
-            if name in self.typecheck and param.annotation is not Parameter.empty:
+            if name in typecheck and param.annotation is not Parameter.empty:
                 if not isinstance_generic(parsed, tio.type_):
                     try:
                         raise TypeError("parsed value {} for arg {} is not an instance of {}"
@@ -1643,27 +1598,33 @@ class SubCommandFunc(Logged):
                         self.logger.error(str(e))
                         raise e
 
-            orig_kind = orig_param.kind
-            if orig_kind == Parameter.VAR_POSITIONAL:
+            kind = param.kind
+            if kind == Parameter.VAR_POSITIONAL:
                 # only use *args for the args to start, then extend named positionals with these below
-                if is_output_arg:
-                    final_output_args = parsed
-                else:
-                    final_args = parsed
-            elif orig_kind == Parameter.VAR_KEYWORD:
-                kwargs.update(parsed)
+                final_args = parsed
+            elif kind == Parameter.VAR_KEYWORD:
+                final_kwargs.update(parsed)
             else:
-                kwargs[name] = parsed
+                final_kwargs[name] = parsed
 
-        if self.positional_names:
-            final_args = (*(final_kwargs.pop(n) for n in self.positional_names), *final_args)
-        if self.output_positional_names:
-            final_output_args = (
-                *(final_output_kwargs.pop(n) for n in self.output_positional_names),
-                *final_output_args
-            )
+        if spec.positional_names:
+            final_args = (*(final_kwargs.pop(n, params[n].default) for n in spec.positional_names), *final_args)
 
-        return final_args, final_kwargs, final_output_args, final_output_kwargs
+        self.logger.debug("Parsed all values successfully for signature %s", sig)
+        return final_args, final_kwargs
+
+    @staticmethod
+    def _prepare_raw_values(namespace: NamedChainMap, spec: FinalCLISignatureSpec) -> Tuple[List[Tuple[str, ArgSource, object]], List[str]]:
+        sentinel = object()
+        values, missing_ = [], []
+        for name in filter(spec.parsed.__contains__, spec.parse_order):
+            source, value = namespace.get_with_name(name, sentinel)
+            if value is sentinel:
+                missing_.append(name)
+            else:
+                values.append((name, source, value))
+
+        return values, missing_
 
     def empty_config(self, only_required_args=False, literal_defaults=False):
         conf = {}
@@ -1673,8 +1634,7 @@ class SubCommandFunc(Logged):
             chain(self.main_signature.parameters.items(), self.output_signature.parameters.items())
         )
         for name, param in all_params:
-            if name in self.ignore_in_config:
-                print("IGNORE", name, self.func_name)
+            if name not in self.parse_config:
                 continue
 
             has_default = param.default is not Parameter.empty
