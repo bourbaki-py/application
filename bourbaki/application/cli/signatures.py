@@ -1,4 +1,4 @@
-from typing import Callable, Collection, Dict, Set, List, Mapping, NamedTuple, Pattern, Iterable, Optional, Union
+from typing import Callable, Collection, Dict, Set, List, Mapping, NamedTuple, Pattern, Iterable, Optional, Union, Any
 from collections import ChainMap
 from functools import singledispatch
 from enum import Enum
@@ -6,6 +6,7 @@ from itertools import chain
 from inspect import Parameter, Signature
 import re
 
+from bourbaki.introspection.callables import leading_positionals
 from .decorators import cli_attrs
 from .helpers import _validate_parse_order
 
@@ -33,8 +34,12 @@ class CLISignatureSpec(NamedTuple):
     ignore_on_cmd_line: Optional[AnyArgNameSpec] = None
     ignore_in_config: Optional[AnyArgNameSpec] = None
     parse_config_as_cli: Optional[AnyArgNameSpec] = None
+    typecheck: Optional[AnyArgNameSpec] = None
     parse_env: Optional[Dict[str, str]] = None
+    metavars: Optional[Dict[str, str]] = None
+    named_groups: Optional[Dict[str, Collection[str]]] = None
     parse_order: Optional[List[Union[str, type(Ellipsis)]]] = None
+    require_options: Optional[bool] = None
 
     @classmethod
     def from_callable(cls, func: Callable) -> 'CLISignatureSpec':
@@ -42,7 +47,12 @@ class CLISignatureSpec(NamedTuple):
             ignore_on_cmd_line=cli_attrs.ignore_on_cmd_line(func),
             ignore_in_config=cli_attrs.ignore_in_config(func),
             parse_config_as_cli=cli_attrs.parse_config_as_cli(func),
+            typecheck=cli_attrs.typecheck(func),
             parse_env=cli_attrs.parse_env(func),
+            metavars=cli_attrs.metavars(func),
+            named_groups=cli_attrs.named_groups(func),
+            parse_order=cli_attrs.parse_order(func),
+            require_options=cli_attrs.require_options(func),
         )
 
     @property
@@ -51,47 +61,109 @@ class CLISignatureSpec(NamedTuple):
         return dict((k, v) for k, v in attrs if v is not None)
 
     def overriding(self, *others: 'CLISignatureSpec') -> 'CLISignatureSpec':
-        namespaces = (n.nonnull_attrs for n in chain((self,), others))
-        return CLISignatureSpec(**ChainMap(*namespaces))
+        namespaces = [n.nonnull_attrs for n in chain((self,), others)]
+        metavars = ChainMap(*filter(None, (n.get('metavars') for n in namespaces)))
+        return CLISignatureSpec(**ChainMap({'metavars': metavars}, *namespaces))
 
-    def configure(self, sig: Signature, warn_missing: Optional[Callable[[str], None]] = None) -> 'FinalCLISignatureSpec':
+    def configure(self,
+                  sig: Signature,
+                  warn_missing: Optional[Callable[[str], None]] = None) -> 'FinalCLISignatureSpec':
         params = sig.parameters
         all_names = set(params)
 
-        def param_names(attr, invert=False):
-            names = filter_params(getattr(self, attr), params, attr)
-            return all_names.difference(names) if invert else set(names)
-
-        parse_env = {name: envname for name, envname in self.parse_env.items() if name in all_names}
-        parse_order = compute_parse_order(self.parse_order, all_names)
-
-        if warn_missing is not None:
+        if self.parse_env is None:
+            parse_env = {}
+        else:
+            parse_env = {name: envname for name, envname in self.parse_env.items() if name in all_names}
             if len(parse_env) < len(self.parse_env):
-                warn_missing("None of names {} in parse_env occurred in signature {}".format(
+                raise NameError("None of the names {} in parse_env occurred in signature {}".format(
                     tuple(name for name in parse_env if name not in all_names),
                     sig,
                 ))
-            missing = tuple(n for n in parse_order if n is not Ellipsis and n not in all_names)
-            if missing:
-                warn_missing("None of names {} in parse_order occurred in signature {}".format(
-                    missing, sig,
+
+        if self.metavars is None:
+            metavars = {}
+        else:
+            metavars = {name: metavar for name, metavar in self.metavars.items() if name in all_names}
+            if warn_missing is not None and len(metavars) < len(self.metavars):
+                warn_missing("None of names {} in metavars occurred in signature {}".format(
+                    tuple(name for name in metavars if name not in all_names),
+                    sig,
                 ))
+
+        if self.named_groups is None:
+            named_groups = {}
+        else:
+            named_groups = {}
+            memo = set()
+            prior = []
+            for name, group in self.named_groups.items():
+                prior.append(name)
+                group = set(group)
+
+                if warn_missing is not None:
+                    repeated = group.intersection(memo)
+                    if repeated:
+                        warn_missing(
+                            "Names {} in named group '{}' occurred in at least one of prior named groups {}".format(
+                                tuple(repeated), name, prior,
+                            )
+                        )
+                    missing = group.difference(all_names)
+                    if missing:
+                        warn_missing(
+                            "Names {} in named group '{}' are not present in signature {}".format(
+                                tuple(missing), name, sig,
+                            )
+                        )
+
+                memo.update(group)
+                named_groups[name] = group.difference(memo).intersection(all_names)
+
+        if self.parse_order is None:
+            parse_order = list(params)
+        else:
+            parse_order = compute_parse_order(self.parse_order, all_names)
+
+        def param_names(attr, invert=False):
+            names = filter_params(getattr(self, attr), params, argname=attr, warn_missing=warn_missing)
+            return all_names.difference(names) if invert else set(names)
 
         return FinalCLISignatureSpec(
             parse_cmd_line=param_names('ignore_on_cmd_line', invert=True),
             parse_config=param_names('ignore_in_config', invert=True),
             parse_config_as_cli=param_names('parse_config_as_cli', invert=False),
+            typecheck=param_names('typecheck', invert=False),
             parse_env=parse_env,
             parse_order=parse_order,
+            metavars=metavars,
+            named_groups=named_groups,
+            all_names=all_names,
+            positional_names=list(leading_positionals(sig.parameters, names_only=True)),
+            require_options=self.require_options,
         )
 
 
 class FinalCLISignatureSpec(NamedTuple):
     parse_cmd_line: Set[str]
     parse_config: Set[str]
-    parse_env: Dict[str, str]
     parse_config_as_cli: Set[str]
+    parse_env: Mapping[str, str]
     parse_order: List[str]
+    typecheck: Set[str]
+    metavars: Mapping[str, str]
+    named_groups: Mapping[str, Set[str]]
+    all_names: Set[str]
+    positional_names: List[str]
+    require_options: bool
+
+    @property
+    def parsed(self) -> Set[str]:
+        return self.parse_cmd_line.union(self.parse_config).union(self.parse_env)
+
+    @property
+    def have_fallback(self) -> Set[str]:
+        return self.parse_config.union(self.parse_env)
 
 
 class UnknownArgSpecifier(TypeError):
