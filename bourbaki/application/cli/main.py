@@ -16,15 +16,16 @@ from inspect import Signature, Parameter
 from argparse import (ArgumentParser, Namespace, RawDescriptionHelpFormatter,
                       ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE, SUPPRESS, _SubParsersAction)
 from cytoolz import identity, get_in
+from typing_inspect import is_generic_type
 
-from bourbaki.introspection.classes import classpath
+from bourbaki.introspection.classes import classpath, most_specific_constructor
 from bourbaki.introspection.types import (deconstruct_generic, reconstruct_generic, get_param_dict, get_generic_origin,
                                           is_optional_type)
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.imports import LazyImportsCallable
 from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 # callables.signature is an lru_cache'ed inspect.signature
-from bourbaki.introspection.callables import (signature, fully_concrete_signature, funcname, is_method)
+from bourbaki.introspection.callables import signature, fully_concrete_signature, funcname, is_method
 from ..completion.completers import CompleteFiles, install_shell_completion
 from ..logging import configure_default_logging, Logged, LoggedMeta, ProgressLogger
 from ..logging.helpers import validate_log_level_int
@@ -65,7 +66,7 @@ CONFIG_OPTION = "--config"
 VERBOSE_FLAGS = ("-v", "--verbose")
 QUIET_FLAGS = ("--quiet", "-q")
 EXECUTE = False
-DEFAULT_LOOKUP_ORDER = (ArgSource.CLI, ArgSource.ENV, ArgSource.CONFIG)
+DEFAULT_LOOKUP_ORDER = (ArgSource.CLI, ArgSource.ENV, ArgSource.CONFIG, ArgSource.DEFAULTS)
 
 _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
@@ -215,6 +216,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                  default_paths_relative_to_source=False,
                  # I/O
                  arg_lookup_order: Tuple[ArgSource, ...] = DEFAULT_LOOKUP_ORDER,
+                 ignore_function_defaults: bool = False,
                  typecheck: bool = False,
                  output_handler: Opt[Callable] = None,
                  # special features and flags
@@ -308,6 +310,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             should be looked up, with earlier entries having higher precedence. Allows the namespace of a configuration
             file or os.environ to populate the args. Default is (CLI, ENV, CONFIG). If CLI is not in the tuple it will
             be inserted as the first entry.
+        :param ignore_function_defaults: should function defaults be used as a fallback when values aren't found in any
+            input sources (CLI, environment, config)? Default is False, in which case arg_lookup_order will have
+            ArgSource.DEFAULTS appended before being set to the .lookup_order attribute in case it isn't present already.
 
         :param typecheck: bool. Should all parsed args be type-checked before the registered command function is called
             with them? Default is False. Specific args can be typchecked selectively by using the
@@ -466,7 +471,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             self.reserved_attrs.remove(CONFIG_FILE_ATTR)
 
         if arg_lookup_order:
-            self.lookup_order = _validate_lookup_order(*arg_lookup_order)
+            self.lookup_order = _validate_lookup_order(*arg_lookup_order, include_defaults=not ignore_function_defaults)
 
         if use_execution_flag:
             if isinstance(use_execution_flag, str):
@@ -548,6 +553,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         self.default_signature_spec = CLISignatureSpec(
             parse_config_as_cli=self.parse_config_as_cli,
+            ignore_on_cmd_line=False if ArgSource.CLI in self.lookup_order else True,
+            ignore_in_config=False if ArgSource.CONFIG in self.lookup_order else True,
             typecheck=self.typecheck,
             metavars=self.default_metavars,
             require_options=self.require_options,
@@ -566,13 +573,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                        .format(ArgSource.CONFIG))
 
         if self.use_init_config_command:
-            if isinstance(add_init_config_command, str):
-                add_init_config_command = (add_init_config_command,)
-
-            if isinstance(add_init_config_command, tuple):
-                self.init_config_command = tuple(map(to_cmd_line_name, add_init_config_command))
-            else:
+            if isinstance(add_init_config_command, bool):
                 self.init_config_command = tuple(self.init_config.__name__.split('_'))
+            else:
+                if isinstance(add_init_config_command, str):
+                    add_init_config_command = (add_init_config_command,)
+
+                self.init_config_command = tuple(map(to_cmd_line_name, add_init_config_command))
 
             self.reserved_command_names.add(self.init_config_command)
 
@@ -585,6 +592,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
                             command_prefix=self.init_config_command[:-1],
                             output_handler=self.dump_config,
                             implicit_flags=self.implicit_flags,
+                            ignore_on_cmd_line=False,
                             ignore_in_config=True,
                             config_subsections=False,
                             from_method=False,
@@ -869,20 +877,37 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         if implicit_flags is None:
             implicit_flags = self.implicit_flags
 
-        if output_handler is None:
-            output_handler = self.output_handler
-            output_sig_spec = self.default_output_signature_spec
-        else:
-            output_sig_spec = CLISignatureSpec.from_callable(output_handler).overriding(self.default_signature_spec)
+        def dec(f,
+                command_prefix=command_prefix,
+                output_handler=output_handler,
+                config_subsections=config_subsections):
+            # args provided here override those specified with decorators on the function, which override this
+            # command line interface's global defaults
+            if output_handler is None:
+                output_handler = cli_attrs.output_handler(f, None)
 
-        if config_subsections is None:
-            if self.use_subconfig_for_commands:
-                # bool
-                config_subsections = self.use_config
+            if output_handler is None:
+                if _main and self.require_subcommand:
+                    output_handler = NO_OUTPUT_HANDLER
+                    output_sig_spec = None
+                else:
+                    output_handler = self.output_handler
+                    output_sig_spec = self.default_output_signature_spec
             else:
-                config_subsections = [()]
+                output_sig_spec = CLISignatureSpec.from_callable(output_handler).overriding(self.default_signature_spec)
 
-        def dec(f):
+            if config_subsections is None:
+                config_subsections = cli_attrs.config_subsections(f, None)
+                if config_subsections is None:
+                    if self.use_subconfig_for_commands:
+                        # bool
+                        config_subsections = self.use_config
+                    else:
+                        config_subsections = [()]
+
+            if command_prefix is None:
+                command_prefix = cli_attrs.command_prefix(f)
+
             sig_spec = CLISignatureSpec(
                 ignore_on_cmd_line=ignore_on_cmd_line,
                 ignore_in_config=ignore_in_config,
@@ -975,10 +1000,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
 
         # the class constructor is main
         self.main(
-            name='__init___',
+            name='__init__',
             from_method=False,
             tvar_map=tvar_map,
-            output_handler=NO_OUTPUT_HANDLER if self.require_subcommand else self.output_handler,
         )(app_cls)
 
         # methods are subcommands
@@ -1256,12 +1280,13 @@ class SubCommandFunc(Logged):
         elif command_prefix is None:
             command_prefix = ()
 
-        lookup_order = _validate_lookup_order(*lookup_order)
+        lookup_order = _validate_lookup_order(*lookup_order, include_defaults=False)
         cmd_name = to_cmd_line_name(strip_command_prefix(command_prefix, func_name))
         command_prefix = tuple(map(to_cmd_line_name, command_prefix))
 
+        func_for_docs = most_specific_constructor(func) if (isinstance(func, type) or is_generic_type(func)) else func
         try:
-            docs = parse_docstring(func)
+            docs = parse_docstring(func_for_docs)
         except AttributeError:
             docs = None
 
@@ -1292,7 +1317,7 @@ class SubCommandFunc(Logged):
                     require_options=maybe_bool(signature_spec.require_options, True),
                 ).overriding(output_signature_spec)
 
-            final_output_spec = output_signature_spec.configure(output_handler)
+            final_output_spec = output_signature_spec.configure(output_sig)
 
             overlap = final_output_spec.parsed.intersection(final_spec.parsed)
             if overlap:
@@ -1523,15 +1548,12 @@ class SubCommandFunc(Logged):
         cli = argparse_namespace.__dict__ if isinstance(argparse_namespace, Namespace) else argparse_namespace
         cli = {name: value for name, value in cli.items() if value is not missing}
 
-        lookup = {ArgSource.CLI: cli, ArgSource.ENV: env, ArgSource.CONFIG: conf}
+        lookup = {ArgSource.CLI: cli, ArgSource.ENV: env, ArgSource.CONFIG: conf, ArgSource.DEFAULTS: self.defaults}
         sources = []
         for source in self.lookup_order:
             ns = lookup[source]
             if ns:
                 sources.append((source, ns))
-
-        DEFAULTS = object()
-        sources.append((DEFAULTS, self.defaults))
 
         namespace = NamedChainMap(*sources)
         self.logger.debug("parsing args for command %r from sources %r in order %r",
@@ -1633,8 +1655,10 @@ class SubCommandFunc(Logged):
             self.main_signature.parameters.items() if self.output_signature is None else
             chain(self.main_signature.parameters.items(), self.output_signature.parameters.items())
         )
+        parse_config_as_cli = self.parse_config_as_cli
+        parse_config = self.parse_config
         for name, param in all_params:
-            if name not in self.parse_config:
+            if name not in parse_config:
                 continue
 
             has_default = param.default is not Parameter.empty
@@ -1645,7 +1669,7 @@ class SubCommandFunc(Logged):
             has_nonnull_default = has_default and param.default is not None
 
             tio = typed_io[name]
-            if name in self.parse_config_as_cli:
+            if name in parse_config_as_cli:
                 # can't cli-encode a value, so even if literal_defaults is True, we leave this as a type repr
                 val = tio.cli_repr
                 if tio.cli_nargs in (ZERO_OR_MORE, ONE_OR_MORE):
