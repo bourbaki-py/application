@@ -42,7 +42,7 @@ today = datetime.date.today().isoformat()
 CONFIG_FILE = str(DIR / "conf.yml")
 
 CONFIG = {
-    '__main__': {
+    '__init__': {
           'a': 1,
           'b': [1, 2, 3],
           maybe('c'): nullable(date_repr),
@@ -194,7 +194,7 @@ def test_command_names():
     (['print', 'tuple', 'kwarg', '--tup', '123', '456', '7.89'], (123, 456, 7.89), None),
     *[(['init', 'config', '--format', fmt], CONFIG, '.' + fmt) for fmt in fmts],
     *[(['init', 'config', '--format', fmt, '--only-commands', *map(' '.join, cmds)],
-       assoc(getrecursive(CONFIG, cmds), '__main__', CONFIG['__main__']),
+       assoc(getrecursive(CONFIG, cmds), '__init__', CONFIG['__init__']),
        '.' + fmt)
       for cmds, fmt in zip(RANDOM_COMMANDS, cycle(fmts))],
 ])

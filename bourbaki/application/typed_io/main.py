@@ -21,22 +21,10 @@ class ArgSource(enum.Enum):
     CLI = "command line"
     CONFIG = "configuration file"
     ENV = "environment variables"
+    DEFAULTS = "function defaults"
 
 
 CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
-
-
-class _DEFAULTS:
-    """Stand-in for an ArgSource instance. This is kept out of that enum intentionally since it is always implied;
-    we don't want the user to be required to include it when overriding lookup_order since forgetting to do so
-    could yield confusing results"""
-    value = "function defaults"
-
-    def __str__(self):
-        return "{}.{}".format(ArgSource.__name__, "DEFAULTS")
-
-
-DEFAULTS = _DEFAULTS()
 
 
 class TypedIO(PicklableWithType):
@@ -251,6 +239,7 @@ class TypedIO(PicklableWithType):
             return self.config_decoder
         elif source == ENV:
             return self.env_parser
+        # function defaults
         return identity
 
     def argparse_spec(self, param: Parameter,
