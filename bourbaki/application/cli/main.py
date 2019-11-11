@@ -34,7 +34,7 @@ from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENS
 from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
 from ..typed_io import TypedIO, ArgSource
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
-from .helpers import (_help_kwargs_from_docs, _combined_cli_sig,
+from .helpers import (_help_kwargs_from_docs, _combined_cli_sig, _type,
                       _validate_lookup_order, get_task, NamedChainMap, strip_command_prefix, update_in,
                       VARIADIC_NARGS)
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
@@ -68,7 +68,6 @@ QUIET_FLAGS = ("--quiet", "-q")
 EXECUTE = False
 DEFAULT_LOOKUP_ORDER = (ArgSource.CLI, ArgSource.ENV, ArgSource.CONFIG, ArgSource.DEFAULTS)
 
-_type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
 # we call this a lot but not on very many different functions
 signature = lru_cache(None)(signature)

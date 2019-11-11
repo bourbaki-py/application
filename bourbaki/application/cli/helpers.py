@@ -7,7 +7,7 @@ from itertools import chain
 from pathlib import Path
 import sys
 from string import punctuation
-from typing import Dict, List, Set, Tuple, Union, Optional
+from typing import Dict, List, Set, Tuple, Union, Optional, Mapping, Generic
 
 from bourbaki.introspection.docstrings import CallableDocs
 from ..logging import ProgressLogger, TimedTaskContext
@@ -16,6 +16,8 @@ from ..typed_io.main import ArgSource
 from ..typed_io.cli_nargs_ import cli_nargs
 
 VARIADIC_NARGS = (ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE)
+
+_type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
 
 class LookupOrderConfigError(ValueError):
