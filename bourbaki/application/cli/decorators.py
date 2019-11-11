@@ -2,6 +2,7 @@
 # decorators for functions defined in a class def context to override default behaviors for how they are configured
 # as subcommands
 from typing import Collection
+from bourbaki.introspection.callables import funcname
 from .helpers import _maybe_bool, _validate_parse_order
 
 NO_OUTPUT_HANDLER = object()
@@ -112,6 +113,14 @@ class cli_spec:
         return dec
 
     @staticmethod
+    def parse_env(**argname_to_envname: str):
+        """mark argument names to be parsed from corresponding environment variable names"""
+        def dec(f):
+            f.__parse_env__ = argname_to_envname
+            return f
+        return dec
+
+    @staticmethod
     def parse_order(*names):
         """specify the order in which arguments are parsed, for example to allow failing early when some arguments are
         much more costly to parse than others"""
@@ -192,7 +201,7 @@ class cli_attrs:
 
     @staticmethod
     def helpname(f):
-        return getattr(f, "__helpname__", getattr(f, "__name__"))
+        return getattr(f, "__helpname__", funcname(f))
 
     @staticmethod
     def config_subsections(f, default=None):
@@ -203,8 +212,8 @@ class cli_attrs:
         return cli_attrs.config_subsections(f) == [()]
 
     @staticmethod
-    def ignore_in_config(f):
-        return cli_attrs.config_subsections(f) is False
+    def ignore_in_config(f, default=None):
+        return getattr(f, "__ignore_in_config__", default)
 
     @staticmethod
     def parse_config_as_cli(f, default=None):
@@ -213,6 +222,10 @@ class cli_attrs:
     @staticmethod
     def ignore_on_cmd_line(f, default=None):
         return getattr(f, "__ignore_on_cmd_line__", default)
+
+    @staticmethod
+    def parse_env(f, default=None):
+        return getattr(f, "__parse_env__", default)
 
     @staticmethod
     def parse_order(f):
