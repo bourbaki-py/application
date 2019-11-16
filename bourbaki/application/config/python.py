@@ -9,6 +9,18 @@ DEFAULT_PY_INDENT = '    '
 MAX_PY_WIDTH = 80
 
 
+class ErroneousPythonSourceConfig:
+    pass
+
+
+class PythonSourceConfigSyntaxError(ErroneousPythonSourceConfig, SyntaxError):
+    pass
+
+
+class PythonSourceConfigRuntimeError(ErroneousPythonSourceConfig, RuntimeError):
+    pass
+
+
 class UnsafePythonSourceConfig(SyntaxError):
     pass
 
@@ -18,6 +30,10 @@ class IllegalFunctionInSourceConfig(UnsafePythonSourceConfig):
 
 
 class IllegalExpressionInSourceConfig(UnsafePythonSourceConfig):
+    pass
+
+
+class IllegalNameInSourceConfig(UnsafePythonSourceConfig):
     pass
 
 
@@ -49,6 +65,10 @@ legal_builtin_functions = {'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'bytearr
                            'vars', 'zip'}
 
 
+illegal_builtin_names = {'__builtin__', '__builtins__', '__doc__', '__loader__', '__import__',
+                         '__name__', '__package__', '__spec__', '__file__', '__module__'}
+
+
 def validate_python_config_source(ast_or_source):
     if isinstance(ast_or_source, str):
         tree = ast.parse(ast_or_source)
@@ -60,11 +80,11 @@ def validate_python_config_source(ast_or_source):
     mode = 'exec'
     if len(tree.body) > 1:
         if not all(isinstance(node, ast.Assign) for node in tree.body):
-            raise SyntaxError(msg.format(list(map(type, tree.body))))
+            raise PythonSourceConfigSyntaxError(msg.format(list(map(type, tree.body))))
     elif len(tree.body) == 1:
         if not isinstance(tree.body[0], (ast.Expr, ast.Assign)):
-            raise SyntaxError(msg.format(type(tree.body[0])))
-        if isinstance(tree.body[0], ast.Expr):
+            raise PythonSourceConfigSyntaxError(msg.format(type(tree.body[0])))
+        if not isinstance(tree.body[0], ast.Assign):
             mode = 'eval'
 
     def inner(node):
@@ -80,6 +100,12 @@ def validate_python_config_source(ast_or_source):
                 raise IllegalFunctionInSourceConfig(msg.format(repr(node.func.id), node.lineno, node.col_offset))
             elif not isinstance(f, ast.Name):
                 raise IllegalFunctionInSourceConfig(msg.format(repr(node.func), node.lineno, node.col_offset))
+
+        if isinstance(node, ast.Name):
+            if node.id in illegal_builtin_names:
+                raise IllegalNameInSourceConfig("reference to builtin name {} is not allowed in python configuration "
+                                                "source; occurred at line {}, column {}"
+                                                .format(repr(node.id), node.lineno, node.col_offset))
 
         if isinstance(node, ast.Expr):
             return inner(node.value)
@@ -103,14 +129,33 @@ def validate_python_config_source(ast_or_source):
 def load_python(file):
     source = file.read()
     path = getattr(file, 'name', '<string>')
-    tree, mode = validate_python_config_source(source)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise PythonSourceConfigSyntaxError("{}: {}; occurred on line {}, column {}"
+                                            .format(e.msg, repr(e.text), e.lineno, e.offset))
+
+    tree, mode = validate_python_config_source(tree)
+
     code = compile(tree, filename=path, mode=mode)
-    if mode == 'eval':
-        conf = eval(source, {})
-    else:
-        conf = {}
-        exec(code, conf)
-        conf.pop('__builtins__', None)
+
+    def exec_(code, mode, locals):
+        execmode = mode == 'exec'
+        eval_ = exec if execmode else eval
+        try:
+            conf = eval_(code, locals)
+        except Exception as e:
+            tb = e.__traceback__
+            frame = tb.tb_frame
+            while frame is not None and frame.f_code.co_filename != path:
+                frame = frame.f_back
+            raise PythonSourceConfigRuntimeError("Couldn't evaluate python configuation source in {} mode: {}{}"
+                                                 .format(repr(mode), e, '' if frame is None else
+                                                         "; occurred at line {}".format(frame.f_lineno)), tb)
+        return locals if execmode else conf
+
+    conf = exec_(code, mode, {})
+    conf.pop('__builtins__', None)
     return conf
 
 
