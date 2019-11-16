@@ -1606,7 +1606,7 @@ class SubCommandFunc(Logged):
             tio = typed_io[name]
 
             if source == ArgSource.CONFIG and name in parse_config_as_cli:
-                parser = tio.cli_parser
+                parser = tio.parser_for_source(ArgSource.CLI)
             else:
                 parser = tio.parser_for_source(source)
 
@@ -1629,7 +1629,6 @@ class SubCommandFunc(Logged):
                 final_args = parsed
             elif kind == Parameter.VAR_KEYWORD:
                 final_kwargs = parsed
-                kwargs_name = name
             else:
                 final_kw[name] = parsed
 
