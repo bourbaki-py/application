@@ -92,7 +92,7 @@ def nested_collections_cli_error(t, *args):
 def tuple_nargs(t, *types):
     if not types and is_named_tuple_class(t):
         types = get_named_tuple_arg_types(t)
-    elif types[-1] is Ellipsis:
+    elif types and types[-1] is Ellipsis:
         return cli_nargs(typing.List[types[0]])
     else:
         _, nargs = check_tuple_nargs(t, *types)
