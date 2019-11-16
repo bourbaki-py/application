@@ -35,7 +35,7 @@ def default_cli_repr(type_, *args):
 def cli_repr_union(u, *types):
     def inner(types_):
         for t in types_:
-            if t is NoneType:
+            if t is NoneType or t is None:
                 continue
             try:
                 repr_ = cli_repr(t)
@@ -85,6 +85,12 @@ def cli_repr_mapping(m, k, v):
 def cli_repr_seq(s, t=typing.Any):
     if issubclass_generic(t, NonStrCollection):
         raise CLINestedCollectionsNotAllowed((s, t))
+    return cli_repr(t)
+
+
+@cli_repr.register(typing.Collection[NonStrCollection])
+def cli_repr_nested_seq(s, t=typing.Any):
+    # this allows going down one level of nesting in the case of options where an append mode can parse
     return cli_repr(t)
 
 

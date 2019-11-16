@@ -40,10 +40,13 @@ def check_union_nargs(*types):
 
 
 def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
+    if Ellipsis in types:
+        types = [typing.List[types[0]]]
     all_nargs = tuple(cli_nargs(t) for t in types)
     head_nargs = all_nargs[:-1] if allow_tail_collection else all_nargs
-    if any((a is not None and not isinstance(a, int)) for a in head_nargs):
+    if any(((a is not None) and (not isinstance(a, int))) for a in head_nargs):
         raise NestedCollectionsCLIArgError((tup_type, *types))
+
     if not all_nargs:
         total_nargs = 0
     elif allow_tail_collection:
@@ -56,6 +59,7 @@ def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
             total_nargs = sum(1 if n is None else n for n in all_nargs)
     else:
         total_nargs = sum(1 if n is None else n for n in all_nargs)
+
     return all_nargs, total_nargs
 
 
@@ -119,11 +123,13 @@ def nested_option_nargs(t, *types):
 cli_action = GenericTypeLevelSingleDispatch("cli_action", isolated_bases=[typing.Union, typing.Tuple])
 
 
-cli_action.register_from_mapping(
-    {
-        typing.Any: None,
-        typing.Tuple: None,
-        typing.Collection[NonStrCollection]: 'append',
-    },
-    as_const=True,
-)
+@cli_action.register(typing.Union)
+def cli_action_any(u, *ts):
+    actions = set(map(cli_action, (t for t in ts if t is not NoneType)))
+    if len(actions) >  1:
+        raise CLIIOUndefined(u, *ts)
+    return next(iter(actions))
+
+
+cli_action.register(typing.Any, as_const=True)(None)
+cli_action.register(typing.Collection[NonStrCollection], as_const=True)("append")

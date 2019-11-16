@@ -14,7 +14,7 @@ from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
 from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR, to_str_cli_repr
-from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity, repr_value
+from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, Missing, identity, repr_value
 
 
 class ArgSource(enum.Enum):
@@ -196,7 +196,7 @@ class TypedIO(PicklableWithType):
 
     @cached_property
     def cli_option_parser(self):
-        return cli_parser(self.type_)
+        return cli_option_parser(self.type_)
 
     @cached_property
     def cli_nargs(self):
@@ -224,8 +224,7 @@ class TypedIO(PicklableWithType):
 
     @cached_property
     def cli_completer(self):
-        comp = cli_completer(self.type_)
-        return comp
+        return cli_completer(self.type_)
 
     @cached_property
     def env_parser(self):
@@ -243,9 +242,9 @@ class TypedIO(PicklableWithType):
     def config_repr(self):
         return config_repr(self.type_)
 
-    def parser_for_source(self, source: ArgSource, cli_option: bool = False):
+    def parser_for_source(self, source: ArgSource):
         if source == CLI:
-            return self.cli_option_parser if cli_option else self.cli_parser
+            return self.cli_parser
         elif source == CONFIG:
             return self.config_decoder
         elif source == ENV:
@@ -262,7 +261,7 @@ class TypedIO(PicklableWithType):
                       docs: Optional[Doc]=None):
         name, default, kind = param.name, param.default, param.kind
         if default is Empty:
-            default = missing
+            default = Missing()
             has_default = False
         else:
             has_default = True
@@ -296,14 +295,15 @@ class TypedIO(PicklableWithType):
             if include_default:
                 kw["default"] = default
             else:
-                kw["default"] = missing
+                kw["default"] = Missing()
             # negative flags get name-mangled so we do this to be sure
             kw["dest"] = name
             defaultstr = None
             type_str = None
+            actionstr = None
         else:
             nargs = self.cli_nargs if positional else self.cli_option_nargs
-            action = self.cli_action if positional else None
+            action = None if positional else self.cli_action
 
             if isinstance(metavar, dict):
                 metavar = metavar.get(name)
@@ -335,7 +335,7 @@ class TypedIO(PicklableWithType):
             if has_default and include_default:
                 kw['default'] = default
             elif not required:
-                kw['default'] = missing
+                kw['default'] = Missing()
 
             if not positional:  # no required/dest kwargs allowed for positionals; they are implicit
                 kw['required'] = required
@@ -354,8 +354,13 @@ class TypedIO(PicklableWithType):
             else:
                 defaultstr = None
 
+            if action == 'append':
+                actionstr = "repeat to pass multiple values"
+            else:
+                actionstr = None
+
         help_ = doc
-        helpstr = ": ".join(s for s in (type_str, help_, defaultstr) if s)
+        helpstr = "; ".join(s for s in (type_str, help_, actionstr, defaultstr) if s)
         if helpstr:
             kw['help'] = helpstr
 

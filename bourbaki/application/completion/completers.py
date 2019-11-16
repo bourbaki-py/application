@@ -19,7 +19,7 @@ from .compgen_python_classpaths import MODULE_FLAG, CALLABLE_FLAG, CLASS_FLAG, I
 
 REPEATABLE_ACTIONS = tuple(
     cls for cls in vars(argparse).values()
-    if isinstance(cls, type) and isinstance(cls, Action)
+    if isinstance(cls, type) and issubclass(cls, Action)
     and ("Count" in cls.__name__ or "Append" in cls.__name__)
 )
 
@@ -76,8 +76,8 @@ def shellquote(s: str):
 
 
 def install_shell_completion(parser: ArgumentParser, *commands: str,
-                             completion_options: Sequence[str]=DEFAULT_BASH_COMPLETE_OPTIONS,
-                             last_edit_time: Opt[Union[float, str, Path]]=None):
+                             completion_options: Sequence[str] = DEFAULT_BASH_COMPLETE_OPTIONS,
+                             last_edit_time: Opt[Union[float, str, Path]] = None):
     completions_file, completions_dir, helpers_file = install_application_shell_completion()
     cmdname = _shortest_identifier(*commands)
     custom_file = os.path.join(completions_dir, cmdname + ".sh")

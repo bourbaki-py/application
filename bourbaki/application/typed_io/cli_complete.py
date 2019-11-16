@@ -16,6 +16,7 @@ from bourbaki.application.completion.completers import (
     CompleteFloats, CompleteInts, CompleteBools, NoComplete,
 )
 from .cli_repr_ import cli_repr
+from .cli_nargs_ import cli_nargs
 from .utils import File
 
 NoneType = type(None)
@@ -106,21 +107,17 @@ def completer_for_any(type_, *args):
 
 
 def _multi_completer(completer_cls, *types, remove_no_complete=False):
-    if len(types) == 1:
-        return cli_completer(types[0])
-
     completers = []
     for t in types:
         try:
             comp = cli_completer(t)
         except NotImplementedError:
-            comp = NoComplete
-        if comp is None:
-            comp = NoComplete
-        if remove_no_complete and isinstance(comp, type(NoComplete)):
+            comp = None
+
+        if remove_no_complete and ((comp is None) or isinstance(comp, type(NoComplete))):
             pass
         else:
-            completers.append(comp)
+            completers.append(comp or NoComplete)
 
     return completer_cls(*completers) if completers else None
 
