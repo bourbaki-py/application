@@ -81,6 +81,15 @@ class ReservedNameError(AttributeError):
                      .format(reserved, which_lookup, what_names),)
 
 
+class RepeatedCLIKeywordArgs(ValueError):
+    def __init__(self, overlap, kwargs_name):
+        super().__init__(overlap, kwargs_name)
+
+    def __str__(self):
+        return ("Got multiple values for keyword args {}; repeated values came from variadic option '{}'"
+                .format(self.args[0], self.args[1]))
+
+
 class AmbiguousSignature(TypeError):
     pass
 
@@ -94,13 +103,6 @@ def setup_warn(msg):
 
 
 # custom formatters
-
-class MultiplePositionalSequenceArgs(AmbiguousSignature):
-    def __init__(self, func_name, names, container_types):
-        msg = ("At most one positional arg can have a collection type; otherwise parsing from command line "
-               "is ambiguous. Got container types {} for arguments {} of function {}"
-               .format(tuple(container_types), tuple(names), func_name))
-        self.args = (msg,)
 
 
 class WideHelpFormatter(RawDescriptionHelpFormatter):
@@ -1591,7 +1593,9 @@ class SubCommandFunc(Logged):
                           spec: FinalCLISignatureSpec,
                           sig: Signature):
         final_args = ()
-        final_kwargs = {}
+        final_kw = {}
+        kwargs_name = None
+        final_kwargs = None
         typed_io = self.typed_io
         parse_config_as_cli = spec.parse_config_as_cli
         typecheck = spec.typecheck
@@ -1602,7 +1606,7 @@ class SubCommandFunc(Logged):
             tio = typed_io[name]
 
             if source == ArgSource.CONFIG and name in parse_config_as_cli:
-                parser = tio.cli_parser
+                parser = tio.parser_for_source(ArgSource.CLI)
             else:
                 parser = tio.parser_for_source(source)
 
@@ -1624,13 +1628,20 @@ class SubCommandFunc(Logged):
                 # only use *args for the args to start, then extend named positionals with these below
                 final_args = parsed
             elif kind == Parameter.VAR_KEYWORD:
-                final_kwargs.update(parsed)
+                final_kwargs = parsed
             else:
-                final_kwargs[name] = parsed
+                final_kw[name] = parsed
+
+        if final_kwargs:
+            overlap = tuple(k for k in final_kwargs if k in final_kw)
+            if overlap:
+                raise RepeatedCLIKeywordArgs(overlap, kwargs_name)
 
         if spec.positional_names:
-            final_args = (*(final_kwargs.pop(n, params[n].default) for n in spec.positional_names), *final_args)
+            final_args = (*(final_kw.pop(n, params[n].default) for n in spec.positional_names), *final_args)
 
+        final_kw.update(final_kwargs)
+        
         self.logger.debug("Parsed all values successfully for signature %s", sig)
         return final_args, final_kwargs
 
