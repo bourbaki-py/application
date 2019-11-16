@@ -5,7 +5,7 @@ from inspect import Parameter
 from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
 from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class
-from .cli_parse import cli_parser
+from .cli_parse import cli_parser, cli_option_parser
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_repr_ import cli_repr
 from .cli_complete import cli_completer
@@ -195,6 +195,10 @@ class TypedIO(PicklableWithType):
         return cli_parser(self.type_)
 
     @cached_property
+    def cli_option_parser(self):
+        return cli_parser(self.type_)
+
+    @cached_property
     def cli_nargs(self):
         return cli_nargs(self.type_)
 
@@ -239,9 +243,9 @@ class TypedIO(PicklableWithType):
     def config_repr(self):
         return config_repr(self.type_)
 
-    def parser_for_source(self, source: ArgSource):
+    def parser_for_source(self, source: ArgSource, cli_option: bool = False):
         if source == CLI:
-            return self.cli_parser
+            return self.cli_option_parser if cli_option else self.cli_parser
         elif source == CONFIG:
             return self.config_decoder
         elif source == ENV:
