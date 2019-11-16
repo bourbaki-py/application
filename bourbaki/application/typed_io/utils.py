@@ -182,6 +182,24 @@ def get_dest_name(args, prefix_chars):
     return dest
 
 
+@singledispatch
+def to_str_cli_repr(repr_, n: Optional[int] = None):
+    if n == ONE_OR_MORE:
+        "{r} [{r} ...]".format(r=repr_)
+    elif n == ZERO_OR_MORE:
+        return "[{r} [{r} ...]]".format(r=repr_)
+    elif n == OPTIONAL:
+        return "[{}]".format(repr_)
+    return repr_
+
+
+@to_str_cli_repr.register(tuple)
+@to_str_cli_repr.register(list)
+def to_str_cli_repr_tuple(repr_, n):
+    return ' '.join(map(to_str_cli_repr, repr_))
+
+
+
 def normalize_encoding(enc):
     if enc is None:
         return sys.getdefaultencoding()

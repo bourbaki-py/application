@@ -36,8 +36,6 @@ class TypedIOConfigReprError(TypedIOException):
 
 
 bool_constants = {
-    '0': False,
-    '1': True,
     'true': True,
     'false': False,
 }

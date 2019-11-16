@@ -1,6 +1,6 @@
 # coding:utf-8
 from .main import TypedIO, ArgSource, CLI, CONFIG, ENV
-from .cli_nargs_ import cli_nargs
+from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_complete import cli_completer
 from .cli_repr_ import cli_repr
 # import this last because it can register default implementations for the others

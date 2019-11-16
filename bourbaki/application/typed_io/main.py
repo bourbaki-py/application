@@ -6,14 +6,14 @@ from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
 from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class
 from .cli_parse import cli_parser
-from .cli_nargs_ import cli_nargs
+from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_repr_ import cli_repr
 from .cli_complete import cli_completer
 from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
-from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR
+from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR, to_str_cli_repr
 from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, missing, identity, repr_value
 
 
@@ -112,9 +112,8 @@ class TypedIO(PicklableWithType):
             a function with signature `(base_type, *generic_args) -> parser`, where `parser` has the specified
             signature. (see `as_const` above)
 
-        :param cli_nargs_: a function with signature `(command_line_value: Union[str, List[str]]) -> nargs`,
-            where `nargs` is a legal value for the `argparse.ArgumentParser.add_argument` method (None, or a positive
-            int, or `argparse.ZERO_OR_MORE/ONE_OR_MORE/OPTIONAL`)
+        :param cli_nargs_: a legal value for the `nargs` argument of the `argparse.ArgumentParser.add_argument` method
+            (None, or a positive int, or `argparse.ZERO_OR_MORE/ONE_OR_MORE/OPTIONAL`)
             Note: if you omit this, and `as_const=True` (the default), cli_nargs_ will be inferred from the signature
             of `cli_parser_` (see `cli_parser_` above), with the fallback value being `None`.
 
@@ -199,11 +198,19 @@ class TypedIO(PicklableWithType):
     def cli_nargs(self):
         return cli_nargs(self.type_)
 
-    @property
+    @cached_property
+    def cli_option_nargs(self):
+        return cli_option_nargs(self.type_)
+
+    @cached_property
+    def cli_action(self):
+        return cli_action(self.type_)
+
+    @cached_property
     def is_variadic(self):
         return cli_nargs(self.type_) in (ZERO_OR_MORE, ONE_OR_MORE)
 
-    @property
+    @cached_property
     def is_optional(self):
         return cli_nargs(self.type_) == OPTIONAL
 
@@ -291,7 +298,8 @@ class TypedIO(PicklableWithType):
             defaultstr = None
             type_str = None
         else:
-            nargs = self.cli_nargs
+            nargs = self.cli_nargs if positional else self.cli_option_nargs
+            action = self.cli_action if positional else None
 
             if isinstance(metavar, dict):
                 metavar = metavar.get(name)
@@ -302,7 +310,7 @@ class TypedIO(PicklableWithType):
                 if kind == Parameter.VAR_KEYWORD:
                     metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
                 elif is_named_tuple_class(self.type_):
-                    metavar = tuple(map(str.upper, self.type_.__annotations__.keys()))
+                    metavar = tuple(to_str_cli_repr(k, cli_nargs(v)) for k, v in self.type_.__annotations__.items())
                 elif positional:
                     metavar = name.upper()
                 else:
@@ -333,6 +341,9 @@ class TypedIO(PicklableWithType):
                 kw['nargs'] = nargs
             elif positional and not required:
                 kw['nargs'] = OPTIONAL
+
+            if action is not None:
+                kw['action'] = action
 
             if has_default and default is not None and not variadic:
                 defaultstr = "default {}".format(repr_value(default))
