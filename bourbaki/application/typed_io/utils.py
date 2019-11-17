@@ -182,6 +182,24 @@ def get_dest_name(args, prefix_chars):
     return dest
 
 
+@singledispatch
+def to_str_cli_repr(repr_, n: Optional[int] = None):
+    if n == ONE_OR_MORE:
+        "{r} [{r} ...]".format(r=repr_)
+    elif n == ZERO_OR_MORE:
+        return "[{r} [{r} ...]]".format(r=repr_)
+    elif n == OPTIONAL:
+        return "[{}]".format(repr_)
+    return repr_
+
+
+@to_str_cli_repr.register(tuple)
+@to_str_cli_repr.register(list)
+def to_str_cli_repr_tuple(repr_, n):
+    return ' '.join(map(to_str_cli_repr, repr_))
+
+
+
 def normalize_encoding(enc):
     if enc is None:
         return sys.getdefaultencoding()
@@ -381,21 +399,16 @@ def to_param_doc(param: Doc, name: str) -> Optional[str]:
                         .format(type(param)))
 
 
-class MissingMeta(type):
-    """Just a placeholder for command line args which get no default from a function sig, but we need to know whether
-    they were explicitly passed on the command line"""
-    def __repr__(self):
-        return "<missing>"
-
-    def __bool__(self):
-        # if thing: <-- False if thing is missing
+class Missing(list):
+    # we make this a list subclass to allow argparse append actions to take place
+    @classmethod
+    def missing(cls, value):
+        if isinstance(value, cls):
+            # nothing appended yet
+            return not value
+        elif isinstance(value, type):
+            return issubclass(value, cls)
         return False
-
-
-class missing(metaclass=MissingMeta):
-    # we make this a metaclass -> class relationship rather than class -> instance to avoid issues with checking
-    # pickled values for identity; unpickling looks this up at runtime and the `is` operator works as expected
-    pass
 
 
 class IODispatch(Dispatcher):

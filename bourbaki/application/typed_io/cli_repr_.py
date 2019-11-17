@@ -5,10 +5,11 @@ from itertools import repeat
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.introspection.types import (issubclass_generic, is_named_tuple_class, get_named_tuple_arg_types,
                                           is_top_type, LazyType, NonStrCollection)
+from .cli_nargs_ import cli_nargs
 from .exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
 from .parsers import bool_constants, EnumParser
 from .utils import byte_repr, any_repr, classpath_function_repr, default_repr_values, repr_type
-from .utils import type_spec, KEY_VAL_JOIN_CHAR
+from .utils import type_spec, KEY_VAL_JOIN_CHAR, to_str_cli_repr
 
 NoneType = type(None)
 
@@ -34,7 +35,7 @@ def default_cli_repr(type_, *args):
 def cli_repr_union(u, *types):
     def inner(types_):
         for t in types_:
-            if t is NoneType:
+            if t is NoneType or t is None:
                 continue
             try:
                 repr_ = cli_repr(t)
@@ -61,13 +62,9 @@ def cli_repr_union(u, *types):
 def cli_repr_tuple(t, *types):
     if not types and is_named_tuple_class(t):
         types = get_named_tuple_arg_types(t)
-        return tuple(map(cli_repr, types))
-
-    if any(issubclass_generic(t_, NonStrCollection) for t_ in types if t_ is not Ellipsis):
-        raise CLINestedCollectionsNotAllowed((t, *types))
 
     if types and Ellipsis not in types:
-        return tuple(map(cli_repr, types))
+        return tuple(to_str_cli_repr(cli_repr(t), cli_nargs(t)) for t in types)
     elif not types:
         t = typing.Any
     else:
@@ -88,6 +85,12 @@ def cli_repr_mapping(m, k, v):
 def cli_repr_seq(s, t=typing.Any):
     if issubclass_generic(t, NonStrCollection):
         raise CLINestedCollectionsNotAllowed((s, t))
+    return cli_repr(t)
+
+
+@cli_repr.register(typing.Collection[NonStrCollection])
+def cli_repr_nested_seq(s, t=typing.Any):
+    # this allows going down one level of nesting in the case of options where an append mode can parse
     return cli_repr(t)
 
 

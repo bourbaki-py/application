@@ -176,6 +176,12 @@ class CollectionCLIParser(GenericCLIParserMixin, CollectionWrapper):
         super().__init__(coll_type, val_type)
 
 
+@cli_parser.register(typing.Collection[NonStrCollection])
+class NestedCollectionCLIParser(GenericCLIParserMixin, CollectionWrapper):
+    def __init__(self, coll_type, val_type=object):
+        super().__init__(coll_type, val_type)
+
+
 @cli_parser.register(typing.Mapping)
 class MappingCLIParser(GenericCLIParserMixin, MappingWrapper):
     constructor_allows_iterable = True
@@ -214,12 +220,37 @@ class UnionCLIParser(GenericCLIParserMixin, UnionWrapper):
 @cli_parser.register(typing.Tuple)
 class TupleCLIParser(GenericCLIParserMixin, TupleWrapper):
     _collection_cls = CollectionCLIParser
+    _nargs = None
+    _entry_nargs = None
+    require_same_len = False
 
     def __new__(cls, t, *types):
         if is_named_tuple_class(t):
             types = get_named_tuple_arg_types(t)
-        check_tuple_nargs(t, *types)
-        return TupleWrapper.__new__(cls, t, *types)
+
+        self = TupleWrapper.__new__(cls, t, *types)
+        if Ellipsis in types:
+            return self
+
+        self._entry_nargs, self._nargs = check_tuple_nargs(t, *types)
+        self.require_same_len = all(n in (None, 1) for n in self._entry_nargs)
+        return self
+
+    def iter_chunks(self, args):
+        ix = 0
+        for n in self._entry_nargs:
+            if n is None:
+                yield args[ix]
+                ix += 1
+            elif isinstance(n, int):
+                yield args[ix:ix+n]
+                ix += n
+            else:
+                yield args[ix:]
+                ix = None
+
+    def call_iter(self, arg):
+        return (f(a) for f, a in zip(self.funcs, self.iter_chunks(arg)))
 
 
 @cli_parser.register(LazyType)
@@ -242,3 +273,11 @@ cli_parser.register(File)(identity)
 
 
 cli_parser.register_from_mapping(cli_parse_methods, as_const=True)
+
+
+cli_option_parser = GenericTypeLevelSingleDispatch("cli_option_parser", isolated_bases=cli_parser.isolated_bases)
+
+
+@cli_option_parser.register(typing.Collection[NonStrCollection])
+class CollectionCLIOptionParser(GenericCLIParserMixin, CollectionWrapper):
+    pass

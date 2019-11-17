@@ -1,5 +1,5 @@
 # coding:utf-8
-from typing import Generic, Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
+from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
 from types import FunctionType
 import os
 import sys
@@ -31,7 +31,7 @@ from ..logging import configure_default_logging, Logged, LoggedMeta, ProgressLog
 from ..logging.helpers import validate_log_level_int
 from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
-from ..typed_io.utils import to_cmd_line_name, get_dest_name, missing, ellipsis_, text_path_repr
+from ..typed_io.utils import to_cmd_line_name, get_dest_name, Missing, ellipsis_, text_path_repr
 from ..typed_io import TypedIO, ArgSource
 from .actions import (InfoAction, PackageVersionAction, InstallShellCompletionAction, SetExecuteFlagAction)
 from .helpers import (_help_kwargs_from_docs, _combined_cli_sig, _type,
@@ -192,7 +192,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
     _main = None
     parsed = None
     _source_files = None
-    _last_edit_time = missing
+    _last_edit_time = Missing
     _pickle_load_path = None
     _pickle_dump_path = None
 
@@ -326,10 +326,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
             that fact, using appropriate process-safe loggers and handlers. This is passed through to
             `application.logging.config.configure_default_logging` via the `multiprocessing` keyword arg.
         :param install_bash_completion: bool. If True, shell completions are installed automatically at the end of
-            interface inference in a `CommandLineInterface.definition` decorator call. If you are registering individual
-            functions with `CommandLineInterface.main` or `CommandLineInterface.subcommand`, this option has no effect,
-            since it is unknown when the CLI definition is complete. In that case, you can manually call
-            `CommandLineInterface.install_shell_completion` in your script. Also see `add_install_bash_completion_flag`.
+            interface inference in a `CommandLineInterface.definition` decorator call, if the source file(s) have
+            changed more recently than the completion definition files or the completion definition files don't yet
+            exist. If you are registering individual functions with `CommandLineInterface.main` or
+            `CommandLineInterface.subcommand`, this option has no effect, since it is unknown when the CLI definition
+            is complete. In that case, you can manually call `CommandLineInterface.install_shell_completion` in your
+            script. Also see `add_install_bash_completion_flag`.
         :param use_verbose_flag: bool. If passed, a flag is added to the command line interface using the option strings
             `application.cli.VERBOSE_FLAGS` which may be repeated to increase verbosity. This affects verbosity by
              decreasing the logging level by 10 for every repetition. At the DEBUG level (usually 4 repetitions),
@@ -1096,7 +1098,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta
         return sourcepath
 
     def last_edit_time(self):
-        if self._last_edit_time is not missing:
+        if self._last_edit_time is not Missing:
             return self._last_edit_time
 
         sources = self.source_files()
@@ -1499,9 +1501,9 @@ class SubCommandFunc(Logged):
         if self.config_subsections:
             confs = []
             for section in self.config_subsections:
-                conf_ = get_in(section, config, missing)
+                conf_ = get_in(section, config, Missing)
 
-                if conf_ is not missing:
+                if conf_ is not Missing:
                     if not isinstance(conf_, Mapping):
                         raise TypeError('config subsections for function arguments must be str->value mappings; got {} '
                                         'for command {} in section {} of the config'
@@ -1547,7 +1549,7 @@ class SubCommandFunc(Logged):
         conf = self.get_conf(config)
         env = self.get_env()
         cli = argparse_namespace.__dict__ if isinstance(argparse_namespace, Namespace) else argparse_namespace
-        cli = {name: value for name, value in cli.items() if value is not missing}
+        cli = {name: value for name, value in cli.items() if not Missing.missing(value)}
 
         lookup = {ArgSource.CLI: cli, ArgSource.ENV: env, ArgSource.CONFIG: conf, ArgSource.DEFAULTS: self.defaults}
         sources = []
@@ -1604,13 +1606,13 @@ class SubCommandFunc(Logged):
         for name, source, value in values:
             self.logger.debug("parsing arg %r from %s with value %r", name, source.value, value)
             tio = typed_io[name]
+            param = params[name]
 
             if source == ArgSource.CONFIG and name in parse_config_as_cli:
                 parser = tio.parser_for_source(ArgSource.CLI)
             else:
                 parser = tio.parser_for_source(source)
 
-            param = params[name]
             parsed = parser(value)
             self.logger.debug("parsed value %r for arg %r from %s", parsed, name, source.value)
 
@@ -1640,10 +1642,11 @@ class SubCommandFunc(Logged):
         if spec.positional_names:
             final_args = (*(final_kw.pop(n, params[n].default) for n in spec.positional_names), *final_args)
 
-        final_kw.update(final_kwargs)
-        
+        if final_kwargs:
+            final_kw.update(final_kwargs)
+
         self.logger.debug("Parsed all values successfully for signature %s", sig)
-        return final_args, final_kwargs
+        return final_args, final_kw
 
     @staticmethod
     def _prepare_raw_values(namespace: NamedChainMap, spec: FinalCLISignatureSpec) -> Tuple[List[Tuple[str, ArgSource, object]], List[str]]:

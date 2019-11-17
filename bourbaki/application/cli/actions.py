@@ -98,7 +98,11 @@ class InstallShellCompletionAction(Action):
             help=help)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        install_shell_completion(parser, parser.prog)
+        cmds = [parser.prog]
+        src = getattr(parser, "source_file", None)
+        if src is not None:
+            cmds.append(os.path.basename(src))
+        install_shell_completion(parser, *cmds)
         exit(0)
 
 
