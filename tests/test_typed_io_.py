@@ -317,7 +317,7 @@ if NEW_TYPING:
 
 test_cases = [
     # atomic
-    _TestCase(bool, None, bool_cli_repr, bool_config_repr, True, ['1', 'true', 'True'], [True],
+    _TestCase(bool, None, bool_cli_repr, bool_config_repr, True, ['true', 'True'], [True],
               multi_test=True),
     _TestCase(int, None, type_spec(int), type_spec(int), -1234, '-1234', -1234),
     _TestCase(datetime.date, None, date_repr, date_repr, date_, [date_str], [date_str, date_int, date_tup],
@@ -392,7 +392,7 @@ test_cases = [
     _TestCase(Tuple[int], 1, (type_spec(int),), [type_spec(int)], tuple_int_[:1], list_int_as_str[:1], list_int[:1]),
     _TestCase(Tuple[bool, datetime.datetime, ipaddress.IPv4Address], 3,
               (bool_cli_repr, datetime_repr, ipv4_repr), [bool_config_repr, datetime_repr, ipv4_repr],
-              (False, datetime_, ipv4), [['0', datetime_str, ipv4_str]], [[False, datetime_str, ipv4_str], [False, datetime_int, ipv4_int]],
+              (False, datetime_, ipv4), [['false', datetime_str, ipv4_str]], [[False, datetime_str, ipv4_str], [False, datetime_int, ipv4_int]],
               multi_test=True),
     _TestCase(FooTup, 2, (type_spec(int), type_spec(str)),
               {"foo": type_spec(int), "bar": type_spec(str)},

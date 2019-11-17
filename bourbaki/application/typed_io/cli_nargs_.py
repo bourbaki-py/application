@@ -3,6 +3,7 @@ import typing
 from argparse import ZERO_OR_MORE, ONE_OR_MORE
 import decimal
 import fractions
+from urllib.parse import ParseResult as URL
 from bourbaki.introspection.types import NonStrCollection, is_named_tuple_class, get_named_tuple_arg_types
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
 from .utils import maybe_map
@@ -67,7 +68,7 @@ def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
 
 cli_nargs = GenericTypeLevelSingleDispatch("cli_nargs", isolated_bases=[typing.Union])
 
-cli_nargs.register_all(decimal.Decimal, fractions.Fraction, as_const=True)(None)
+cli_nargs.register_all(decimal.Decimal, fractions.Fraction, URL, as_const=True)(None)
 
 
 @cli_nargs.register(typing.Any)
@@ -94,6 +95,8 @@ def tuple_nargs(t, *types):
         types = get_named_tuple_arg_types(t)
     elif types and types[-1] is Ellipsis:
         return cli_nargs(typing.List[types[0]])
+    elif not types:
+        return ZERO_OR_MORE
     else:
         _, nargs = check_tuple_nargs(t, *types)
         return nargs

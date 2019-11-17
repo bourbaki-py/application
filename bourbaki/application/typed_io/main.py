@@ -364,6 +364,9 @@ class TypedIO(PicklableWithType):
         if helpstr:
             kw['help'] = helpstr
 
+        if kw.get('nargs') == 0:
+            print(name, kw)
+
         return names, kw, positional
 
     def add_argparse_arg(self, parser: ArgumentParser,

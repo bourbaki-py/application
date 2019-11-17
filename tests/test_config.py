@@ -1,6 +1,7 @@
 #coding:utf-8
 from typing import Mapping, Any
 import os
+import functools
 import io
 import tempfile
 import pytest
@@ -17,7 +18,6 @@ NON_JSON_INI_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in (
 NON_JSON_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in ('.toml', '.json',))
 NON_INI_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in ('.ini',))
 ALLOW_INT_KEYS_EXTENSIONS = ('.yml', '.py')
-allow_unsafe_yaml()
 
 construct_instances_recursively = config_decoder(Mapping[str, BaseEstimator])
 
@@ -59,15 +59,16 @@ fooconf = dict(foo="bar", baz=(1, 2, {3: 4, 5: [6, 7]}), qux=["foo", ("bar", "ba
 
 # replace lists with tuples
 @dispatch(dict)
-def jsonify(obj):
-    return {str(k): jsonify(v) for k, v in obj.items()}
+def jsonify(obj, str_keys=True):
+    f = str if str_keys else lambda x: x
+    return {f(k): jsonify(v, str_keys=str_keys) for k, v in obj.items()}
 
 @dispatch((list, tuple))
-def jsonify(obj):
-    return list(map(jsonify, obj))
+def jsonify(obj, str_keys=True):
+    return list(map(functools.partial(jsonify, str_keys=str_keys), obj))
 
 @dispatch(object)
-def jsonify(obj):
+def jsonify(obj, str_keys=True):
     return obj
 
 
@@ -106,7 +107,7 @@ def test_dump_load_python_yaml(conf, ext, tmp):
             pass
     dump_config(conf, tmp, ext=ext)
     conf_ = load_config(tmp + ext, disambiguate=True)
-    assert conf == conf_
+    assert jsonify(conf, str_keys=False) == jsonify(conf_, str_keys=False)
     os.remove(tmp + ext)
 
 
