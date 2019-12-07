@@ -35,7 +35,7 @@ class TimeUnit(IntEnum):
     weeks = 7 * 24 * 60 * 60
 
 
-def write_to_file(response, *, outfile: File['w'] = sys.stdout, literal: bool=False):
+def write_to_file(response, *, outfile: File["w"] = sys.stdout, literal: bool = False):
     """
     Write the response to a file
     :param response: The response to write
@@ -75,6 +75,7 @@ class Greeting:
     """
     CLI for saying hello 👋
     """
+
     def __init__(self, person: Person):
         """
         Args:
@@ -89,7 +90,9 @@ class Greeting:
         :param greeting: The greeting to use
         :return: The resulting greeting
         """
-        return "{}, {}! I see that you're a fellow {}".format(greeting, self.person.name, self.person.desc.value)
+        return "{}, {}! I see that you're a fellow {}".format(
+            greeting, self.person.name, self.person.desc.value
+        )
 
     def hello(self):
         """
@@ -110,7 +113,9 @@ class Greeting:
         return "{}, {}!".format(greeting, ", ".join(oxford_comma(list(friends))))
 
     @cli_spec.command_prefix("apply")
-    def apply_funcs(self, name_func: Callable[[str], Any], birthday_func: Callable[[datetime], Any]):
+    def apply_funcs(
+        self, name_func: Callable[[str], Any], birthday_func: Callable[[datetime], Any]
+    ):
         """
         Apply some functions to one's attributes
 

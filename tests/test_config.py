@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 from typing import Mapping, Any
 import os
 import functools
@@ -9,50 +9,83 @@ from itertools import chain, repeat
 from copy import deepcopy
 from sklearn.base import BaseEstimator
 from multipledispatch import dispatch
-from bourbaki.application.config import (load_config, dump_config, allow_unsafe_yaml, LEGAL_CONFIG_EXTENSIONS)
+from bourbaki.application.config import (
+    load_config,
+    dump_config,
+    allow_unsafe_yaml,
+    LEGAL_CONFIG_EXTENSIONS,
+)
 from bourbaki.application.typed_io.inflation import CLASSPATH_KEY, KWARGS_KEY
 from bourbaki.application.typed_io.config_decode import config_decoder
+
 # remove duplicate .yaml -> .yml
-LEGAL_CONFIG_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e != '.yaml')
-NON_JSON_INI_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in ('.toml', '.json', '.ini'))
-NON_JSON_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in ('.toml', '.json',))
-NON_INI_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in ('.ini',))
-ALLOW_INT_KEYS_EXTENSIONS = ('.yml', '.py')
+LEGAL_CONFIG_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e != ".yaml")
+NON_JSON_INI_EXTENSIONS = tuple(
+    e for e in LEGAL_CONFIG_EXTENSIONS if e not in (".toml", ".json", ".ini")
+)
+NON_JSON_EXTENSIONS = tuple(
+    e for e in LEGAL_CONFIG_EXTENSIONS if e not in (".toml", ".json")
+)
+NON_INI_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e not in (".ini",))
+ALLOW_INT_KEYS_EXTENSIONS = (".yml", ".py")
 
 construct_instances_recursively = config_decoder(Mapping[str, BaseEstimator])
 
-sklearnconf = {'forest': {CLASSPATH_KEY: 'sklearn.ensemble.RandomForestClassifier',
-                          KWARGS_KEY: {'min_samples_split': 5, 'n_estimators': 100}},
-               'isolation_forest_n192_s1024': {CLASSPATH_KEY: 'sklearn.ensemble.iforest.IsolationForest',
-                                               KWARGS_KEY: {'bootstrap': True,
-                                                          'max_samples': 1024,
-                                                          'n_estimators': 192,
-                                                          'n_jobs': 7}},
-               'logistic_l1': {CLASSPATH_KEY: 'sklearn.linear_model.LogisticRegression',
-                               KWARGS_KEY: {'penalty': 'l1'}},
-               'logistic_l1_highreg': {CLASSPATH_KEY: 'sklearn.linear_model.LogisticRegression',
-                                       KWARGS_KEY: {'C': 0.1,
-                                                  # 'class_weight': {0: 0.01, 1: 0.99},
-                                                  'penalty': 'l1'}},
-               'logistic_l2': {CLASSPATH_KEY: 'sklearn.linear_model.LogisticRegression',
-                               KWARGS_KEY: {'penalty': 'l2'}},
-               'logistic_l2_highreg': {CLASSPATH_KEY: 'sklearn.linear_model.LogisticRegression',
-                                       KWARGS_KEY: {'C': 0.1,
-                                                  # 'class_weight': {0: 0.01, 1: 0.99},
-                                                  'penalty': 'l2'}},
-               'svc': {CLASSPATH_KEY: 'sklearn.svm.SVC',
-                       KWARGS_KEY: {'C': 1.0,
-                       'cache_size': 1024,
-                       # 'class_weight': {0: 0.01, 1: 0.99},
-                       'coef0': 0.0,
-                       'degree': 2,
-                       'gamma': 'auto',
-                       'kernel': 'poly',
-                       'probability': True}}
-               }
+sklearnconf = {
+    "forest": {
+        CLASSPATH_KEY: "sklearn.ensemble.RandomForestClassifier",
+        KWARGS_KEY: {"min_samples_split": 5, "n_estimators": 100},
+    },
+    "isolation_forest_n192_s1024": {
+        CLASSPATH_KEY: "sklearn.ensemble.iforest.IsolationForest",
+        KWARGS_KEY: {
+            "bootstrap": True,
+            "max_samples": 1024,
+            "n_estimators": 192,
+            "n_jobs": 7,
+        },
+    },
+    "logistic_l1": {
+        CLASSPATH_KEY: "sklearn.linear_model.LogisticRegression",
+        KWARGS_KEY: {"penalty": "l1"},
+    },
+    "logistic_l1_highreg": {
+        CLASSPATH_KEY: "sklearn.linear_model.LogisticRegression",
+        KWARGS_KEY: {
+            "C": 0.1,
+            # 'class_weight': {0: 0.01, 1: 0.99},
+            "penalty": "l1",
+        },
+    },
+    "logistic_l2": {
+        CLASSPATH_KEY: "sklearn.linear_model.LogisticRegression",
+        KWARGS_KEY: {"penalty": "l2"},
+    },
+    "logistic_l2_highreg": {
+        CLASSPATH_KEY: "sklearn.linear_model.LogisticRegression",
+        KWARGS_KEY: {
+            "C": 0.1,
+            # 'class_weight': {0: 0.01, 1: 0.99},
+            "penalty": "l2",
+        },
+    },
+    "svc": {
+        CLASSPATH_KEY: "sklearn.svm.SVC",
+        KWARGS_KEY: {
+            "C": 1.0,
+            "cache_size": 1024,
+            # 'class_weight': {0: 0.01, 1: 0.99},
+            "coef0": 0.0,
+            "degree": 2,
+            "gamma": "auto",
+            "kernel": "poly",
+            "probability": True,
+        },
+    },
+}
 
 sklearnconf_w_int_keys = deepcopy(sklearnconf)
-sklearnconf_w_int_keys['svc'][KWARGS_KEY]['class_weight'] = {0: 0.01, 1: 0.99}
+sklearnconf_w_int_keys["svc"][KWARGS_KEY]["class_weight"] = {0: 0.01, 1: 0.99}
 
 
 fooconf = dict(foo="bar", baz=(1, 2, {3: 4, 5: [6, 7]}), qux=["foo", ("bar", "baz")])
@@ -63,9 +96,11 @@ def jsonify(obj, str_keys=True):
     f = str if str_keys else lambda x: x
     return {f(k): jsonify(v, str_keys=str_keys) for k, v in obj.items()}
 
+
 @dispatch((list, tuple))
 def jsonify(obj, str_keys=True):
     return list(map(functools.partial(jsonify, str_keys=str_keys), obj))
+
 
 @dispatch(object)
 def jsonify(obj, str_keys=True):
@@ -86,11 +121,11 @@ def test_top_level_in_ini():
     value2 = 1
     """
     f = io.StringIO(s)
-    c = load_config(f, ext='.toml')
+    c = load_config(f, ext=".toml")
     newf = io.StringIO()
-    dump_config(c, newf, ext='.ini')
+    dump_config(c, newf, ext=".ini")
     newf.seek(0)
-    assert c == load_config(newf, ext='.ini')
+    assert c == load_config(newf, ext=".ini")
 
 
 def test_inflate_instances():
@@ -113,15 +148,20 @@ def test_dump_load_python_yaml(conf, ext, tmp):
 
 @pytest.mark.parametrize("conf", [sklearnconf, fooconf])
 def test_dump_load_json(conf, tmp):
-    ext = '.json'
+    ext = ".json"
     dump_config(conf, tmp, ext=ext)
     conf_ = load_config(tmp, disambiguate=True)
     assert jsonify(conf) == conf_
     # os.remove(tmp + ext)
 
 
-@pytest.mark.parametrize("ext,conf", chain(zip(NON_INI_EXTENSIONS, repeat(sklearnconf)),
-                                           zip(ALLOW_INT_KEYS_EXTENSIONS, repeat(sklearnconf_w_int_keys))))
+@pytest.mark.parametrize(
+    "ext,conf",
+    chain(
+        zip(NON_INI_EXTENSIONS, repeat(sklearnconf)),
+        zip(ALLOW_INT_KEYS_EXTENSIONS, repeat(sklearnconf_w_int_keys)),
+    ),
+)
 def test_dump_load_class_instances(ext, conf, tmp):
     dump_config(conf, tmp, ext=ext)
     conf_ = load_config(tmp, disambiguate=True)
@@ -140,7 +180,7 @@ def test_dump_load_class_instances(ext, conf, tmp):
         c = conf[k]
         for attr in c[KWARGS_KEY]:
             attr1 = getattr(m1, attr)
-            if ext == '.json':
+            if ext == ".json":
                 attr1 = jsonify(attr1)
 
             assert attr1 == getattr(m2, attr)

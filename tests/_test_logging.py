@@ -1,12 +1,14 @@
 #!/usr/bin/env python
-#coding:utf-8
+# coding:utf-8
 from logging import setLoggerClass
 from bourbaki.application.logging.loggers import CountingLogger, SwissArmyLogger
 
+
 class _TestLogger(SwissArmyLogger):
     def _log(self, level, msg, *a, **kw):
-        msg = ' '.join((nextcounter(), msg or ''))
+        msg = " ".join((nextcounter(), msg or ""))
         super()._log(level, msg, *a, **kw)
+
 
 setLoggerClass(_TestLogger)
 # mpl_logger = getLogger('matplotlib')
@@ -19,7 +21,11 @@ from collections import Counter
 from warnings import warn
 import pytest
 from bourbaki.application.logging import LoggedMeta, getLogger, configure_debug_logging
-from bourbaki.application.logging.defaults import METALOG, DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT
+from bourbaki.application.logging.defaults import (
+    METALOG,
+    DEFAULT_LOG_MSG_FMT,
+    DEFAULT_LOG_DATE_FMT,
+)
 from bourbaki.application.logging.analysis import log_line_regex, log_file_to_df
 
 global TestLoggedClass
@@ -73,18 +79,27 @@ def logger():
 
 
 def test_setup(logfile):
-    configure_debug_logging(filename=logfile, dated_logfiles=False, disable_existing_loggers=True)
+    configure_debug_logging(
+        filename=logfile, dated_logfiles=False, disable_existing_loggers=True
+    )
 
     global TestLoggedClass, _TestLogger
 
-    class TestLoggedClass(metaclass=LoggedMeta,
-                          level="DEBUG", use_full_path=False,
-                          verbose=True,
-                          logger_cls=_TestLogger,
-                          instance_naming="keyword"):
+    class TestLoggedClass(
+        metaclass=LoggedMeta,
+        level="DEBUG",
+        use_full_path=False,
+        verbose=True,
+        logger_cls=_TestLogger,
+        instance_naming="keyword",
+    ):
         def talk(self, *args, **kwargs):
             logger = self.logger
-            logger.info("I'm a class instance and my args are {} and my kwargs are {}".format(args, kwargs))
+            logger.info(
+                "I'm a class instance and my args are {} and my kwargs are {}".format(
+                    args, kwargs
+                )
+            )
             logger.warning("logged class Test Warning")
             logger.error("logged class TEST ERROR")
 
@@ -121,7 +136,11 @@ def warn_logger_disabled(logger):
     if logger.disabled:
         warn("This logger is disabled!")
         warn("The logger and its handlers are {}, {}".format(logger, logger.handlers))
-        warn("The parent logger and its handlers are {}, {}".format(logger.parent, logger.parent.handlers))
+        warn(
+            "The parent logger and its handlers are {}, {}".format(
+                logger.parent, logger.parent.handlers
+            )
+        )
 
 
 def test_logging_multiline1(logger):
@@ -141,10 +160,10 @@ def test_logged_class():
 def test_logged_class_pickle(test_pickle_path):
     ti3 = get_test_instance("three")
 
-    with open(test_pickle_path, 'wb') as f:
+    with open(test_pickle_path, "wb") as f:
         pickle.dump(ti3, f)
 
-    with open(test_pickle_path, 'rb') as f:
+    with open(test_pickle_path, "rb") as f:
         ti4 = pickle.load(f)
 
     ti4.logger.info("Still kickin'!")
@@ -154,7 +173,7 @@ def test_logged_class_pickle(test_pickle_path):
 
 def test_log_exception(logger):
     try:
-        1/0
+        1 / 0
     except:
         logger.critical("You CANNOT do that!", exc_info=True)
 
@@ -165,15 +184,20 @@ def test_log_multiline(logger):
 
 def test_logfile_dataframe_parse(this_logfile, logger):
     logger.info("Now parsing {} to a dataframe".format(this_logfile))
-    logger.debug("parsing using regex:\n\t%s" % log_line_regex(DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT))
+    logger.debug(
+        "parsing using regex:\n\t%s"
+        % log_line_regex(DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT)
+    )
 
     # this adds some METALOG-level messages to the file
     log_all_counts()
     # which should be parsed here
-    parsed_log = log_file_to_df(this_logfile, datetime_index=True, validate=True, raise_=False)
+    parsed_log = log_file_to_df(
+        this_logfile, datetime_index=True, validate=True, raise_=False
+    )
 
-    msgid = parsed_log.message[parsed_log.levelno!=METALOG].str.slice(0, 4)
-    msgid = msgid[msgid.str.match(r'^[0-9]+$')].astype(int).values
+    msgid = parsed_log.message[parsed_log.levelno != METALOG].str.slice(0, 4)
+    msgid = msgid[msgid.str.match(r"^[0-9]+$")].astype(int).values
     assert msgid[0] == 1
     assert msgid[-1] == MSG_COUNTER
     # assert np.all(np.diff(msgid) == 1)
@@ -184,18 +208,27 @@ def test_logfile_dataframe_parse(this_logfile, logger):
 
 def test_logfile_dataframe_parse_to_pickle(this_logfile, log_pickle_file, logger):
     log_all_counts()
-    parsed_log = log_file_to_df(this_logfile, datetime_index=True, validate=True, raise_=False)
+    parsed_log = log_file_to_df(
+        this_logfile, datetime_index=True, validate=True, raise_=False
+    )
     assert_parsed_equals_logged(parsed_message_counts(parsed_log), all_message_counts())
 
-    parsed_log = log_file_to_df(this_logfile, datetime_index=True, validate=True, raise_=False)
+    parsed_log = log_file_to_df(
+        this_logfile, datetime_index=True, validate=True, raise_=False
+    )
     parsed_log.to_pickle(log_pickle_file)
 
-    logger.info("You can inspect the parsed log file using pandas.read_pickle('%s')" % log_pickle_file)
+    logger.info(
+        "You can inspect the parsed log file using pandas.read_pickle('%s')"
+        % log_pickle_file
+    )
 
 
 def assert_parsed_equals_logged(parsed_message_counts, all_message_counts):
     total_msgs, total_multiline, total_exceptions, total_types = all_message_counts
-    parsed_msgs, parsed_multiline, parsed_exceptions, parsed_types = parsed_message_counts
+    parsed_msgs, parsed_multiline, parsed_exceptions, parsed_types = (
+        parsed_message_counts
+    )
     assert total_multiline <= parsed_multiline
     assert total_exceptions <= parsed_exceptions
     assert total_msgs <= parsed_msgs
