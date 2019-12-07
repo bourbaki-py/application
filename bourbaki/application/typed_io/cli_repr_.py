@@ -3,28 +3,45 @@ import typing
 import enum
 from itertools import repeat
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
-from bourbaki.introspection.types import (issubclass_generic, is_named_tuple_class, get_named_tuple_arg_types,
-                                          is_top_type, LazyType, NonStrCollection)
+from bourbaki.introspection.types import (
+    issubclass_generic,
+    is_named_tuple_class,
+    get_named_tuple_arg_types,
+    is_top_type,
+    LazyType,
+    NonStrCollection,
+)
 from .cli_nargs_ import cli_nargs
 from .exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
 from .parsers import bool_constants, EnumParser
-from .utils import byte_repr, any_repr, classpath_function_repr, default_repr_values, repr_type
+from .utils import (
+    byte_repr,
+    any_repr,
+    classpath_function_repr,
+    default_repr_values,
+    repr_type,
+)
 from .utils import type_spec, KEY_VAL_JOIN_CHAR, to_str_cli_repr
 
 NoneType = type(None)
 
-bool_cli_repr = "{{{}}}".format('|'.join(bool_constants))
+bool_cli_repr = "{{{}}}".format("|".join(bool_constants))
 
 cli_repr_values = default_repr_values.copy()
-cli_repr_values.update([(typing.ByteString, byte_repr),
-                        (bool, bool_cli_repr),
-                        (typing.Callable, classpath_function_repr)])
+cli_repr_values.update(
+    [
+        (typing.ByteString, byte_repr),
+        (bool, bool_cli_repr),
+        (typing.Callable, classpath_function_repr),
+    ]
+)
 
 
 cli_repr = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing.Union])
 
 
 # base generic handlers
+
 
 @cli_repr.register(typing.Any)
 def default_cli_repr(type_, *args):
@@ -43,19 +60,24 @@ def cli_repr_union(u, *types):
                 continue
             else:
                 yield repr_
+
     reprs = list(inner(types))
     if not reprs:
         raise CLIIOUndefined((u, *types))
     if all(isinstance(r, str) for r in reprs):
-        return '|'.join(reprs)
+        return "|".join(reprs)
     else:
         lens = set(len(t) for t in reprs if not isinstance(t, str))
         if len(lens) > 1:
-            raise ValueError("can't format CLI representation for {}; got sub-reprs {}. for a Union, the reprs "
-                             "of the types must all be str or tuples of a single length".format(u[types], reprs))
+            raise ValueError(
+                "can't format CLI representation for {}; got sub-reprs {}. for a Union, the reprs "
+                "of the types must all be str or tuples of a single length".format(
+                    u[types], reprs
+                )
+            )
         maxlen = max(lens) if lens else 1
         tups = zip(*(repeat(s, maxlen) if isinstance(s, str) else s for s in reprs))
-        return tuple('|'.join(tup) for tup in tups)
+        return tuple("|".join(tup) for tup in tups)
 
 
 @cli_repr.register(typing.Tuple)
@@ -75,9 +97,11 @@ def cli_repr_tuple(t, *types):
 
 @cli_repr.register(typing.Mapping)
 def cli_repr_mapping(m, k, v):
-    if issubclass_generic(k, NonStrCollection) or issubclass_generic(v, NonStrCollection):
+    if issubclass_generic(k, NonStrCollection) or issubclass_generic(
+        v, NonStrCollection
+    ):
         raise CLINestedCollectionsNotAllowed((m, k, v))
-    return '{k}{j}{v}'.format(k=cli_repr(k), v=cli_repr(v), j=KEY_VAL_JOIN_CHAR)
+    return "{k}{j}{v}".format(k=cli_repr(k), v=cli_repr(v), j=KEY_VAL_JOIN_CHAR)
 
 
 # uni-typed tuples are variable-length, and sets can be parsed from sequences as well

@@ -8,9 +8,16 @@ from itertools import chain
 from logging import getLogger
 from cytoolz import valmap
 from bourbaki.introspection.imports import import_object, import_type
-from bourbaki.introspection.types import (typetypes, eval_forward_refs, concretize_typevars,
-                                             get_generic_origin, get_param_dict, reparameterized_bases,
-                                             fully_concretize_type, issubclass_generic)
+from bourbaki.introspection.types import (
+    typetypes,
+    eval_forward_refs,
+    concretize_typevars,
+    get_generic_origin,
+    get_param_dict,
+    reparameterized_bases,
+    fully_concretize_type,
+    issubclass_generic,
+)
 from bourbaki.introspection.types.compat import NEW_TYPING, _GenericAlias
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.callables import to_bound_method_signature, get_globals
@@ -24,8 +31,14 @@ CLASSPATH_KEY = "__classpath__"
 ARGS_KEY = "__args__"
 KWARGS_KEY = "__kwargs__"
 CONSTRUCTOR_KEY = "__constructor__"
-INFLATABLE_CONFIG_KEYS = frozenset([CLASSPATH_KEY, ARGS_KEY, KWARGS_KEY, CONSTRUCTOR_KEY])
-NON_VARIADIC_KINDS = (Parameter.POSITIONAL_OR_KEYWORD, Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_ONLY)
+INFLATABLE_CONFIG_KEYS = frozenset(
+    [CLASSPATH_KEY, ARGS_KEY, KWARGS_KEY, CONSTRUCTOR_KEY]
+)
+NON_VARIADIC_KINDS = (
+    Parameter.POSITIONAL_OR_KEYWORD,
+    Parameter.KEYWORD_ONLY,
+    Parameter.POSITIONAL_ONLY,
+)
 TYPE_TYPES = (type, *typetypes)
 
 
@@ -35,14 +48,17 @@ class ConfigInflationError(ValueError, ExceptionReprMixin):
         self.func, self.argname, self.value, self.exc = func, argname, value, exc
 
     def __str__(self):
-        return ("Decoding config value {} for argument '{}' of function {} raised {}"
-                .format(repr(self.value), self.argname, self.func, self.exc))
+        return "Decoding config value {} for argument '{}' of function {} raised {}".format(
+            repr(self.value), self.argname, self.func, self.exc
+        )
 
 
 def _is_inflatable_config(obj):
-    return (isinstance(obj, Mapping)
-            and (CLASSPATH_KEY in obj or CONSTRUCTOR_KEY in obj)
-            and INFLATABLE_CONFIG_KEYS.issuperset(obj.keys()))
+    return (
+        isinstance(obj, Mapping)
+        and (CLASSPATH_KEY in obj or CONSTRUCTOR_KEY in obj)
+        and INFLATABLE_CONFIG_KEYS.issuperset(obj.keys())
+    )
 
 
 def inflate_config(conf, target_type=None):
@@ -54,7 +70,13 @@ def inflate_config(conf, target_type=None):
     return conf
 
 
-def instance_from(__classpath__=None, __args__=None, __kwargs__=None, __constructor__=None, target_type=None):
+def instance_from(
+    __classpath__=None,
+    __args__=None,
+    __kwargs__=None,
+    __constructor__=None,
+    target_type=None,
+):
     """
     Instantiate general values from configuration files. E.g. with the json-compatible configuration
         conf = {"__classpath__":"sklearn.cluster.KMeans", "__kwargs__": {"n_clusters": 10, "n_init": 10}},
@@ -69,21 +91,34 @@ def instance_from(__classpath__=None, __args__=None, __kwargs__=None, __construc
     :param target_type: optional type to check the classpath against before attempting to inflate an instance
     :return: an instance of the class (or the results of calling the function) identified by classpath
     """
-    logger.debug("Attempting to instantiate {} instance with{} args {} and kwargs {}"
-                 .format(__classpath__,
-                         " constructor {},".format(__constructor__) if __constructor__ is not None else "",
-                         __args__, __kwargs__))
+    logger.debug(
+        "Attempting to instantiate {} instance with{} args {} and kwargs {}".format(
+            __classpath__,
+            " constructor {},".format(__constructor__)
+            if __constructor__ is not None
+            else "",
+            __args__,
+            __kwargs__,
+        )
+    )
 
     if __classpath__ is not None:
         cls = import_type(__classpath__)
         if not isinstance(cls, TYPE_TYPES):
-            raise TypeError("classpath {} does not specify a class or type; got {}".format(__classpath__, cls))
+            raise TypeError(
+                "classpath {} does not specify a class or type; got {}".format(
+                    __classpath__, cls
+                )
+            )
         # don't waste time on the construction if the specified type is incorrect
         if target_type is not None:
             target_type_ = concretize_typevars(target_type)
             if not issubclass_generic(cls, target_type_):
-                raise TypeError("classpath {} does not specify a generic subclass of the target type {}"
-                                .format(__classpath__, target_type))
+                raise TypeError(
+                    "classpath {} does not specify a generic subclass of the target type {}".format(
+                        __classpath__, target_type
+                    )
+                )
         # only check the instance if the constructor is other than the class itself
         instance_check = __constructor__ is not None
     else:
@@ -93,7 +128,11 @@ def instance_from(__classpath__=None, __args__=None, __kwargs__=None, __construc
     if __constructor__ is not None:
         constructor = import_object(__constructor__)
         if not callable(constructor):
-            raise TypeError("constructor {} does not specify a callable; got {}".format(__constructor__, constructor))
+            raise TypeError(
+                "constructor {} does not specify a callable; got {}".format(
+                    __constructor__, constructor
+                )
+            )
     elif cls is None:
         raise ValueError("Must pass either __classpath__ or __constructor__")
     else:
@@ -111,12 +150,20 @@ def instance_from(__classpath__=None, __args__=None, __kwargs__=None, __construc
         obj = wrapper(*__args__, **__kwargs__)
 
     if instance_check and not isinstance_generic(obj, cls):
-        raise TypeError("Inflation using constructor {} resulted in a {} instance; expected {}"
-                        .format(constructor, type(obj), cls))
+        raise TypeError(
+            "Inflation using constructor {} resulted in a {} instance; expected {}".format(
+                constructor, type(obj), cls
+            )
+        )
 
-    logger.info("Instantiated {} instance successfully{}".format(__classpath__,
-                                                                 " with constructor {}".format(__constructor__)
-                                                                 if __constructor__ is not None else ""))
+    logger.info(
+        "Instantiated {} instance successfully{}".format(
+            __classpath__,
+            " with constructor {}".format(__constructor__)
+            if __constructor__ is not None
+            else "",
+        )
+    )
 
     return obj
 
@@ -129,7 +176,9 @@ class TypedConfigCallable:
         func_for_sig = func
 
         if isinstance(func, TYPE_TYPES):
-            cls_for_sig, func_for_sig = most_specific_constructor(func, return_class=True)
+            cls_for_sig, func_for_sig = most_specific_constructor(
+                func, return_class=True
+            )
             skip_first_arg = not isinstance(func_for_sig, staticmethod)
 
             _cls_for_sig = get_generic_origin(cls_for_sig)
@@ -171,14 +220,23 @@ class TypedConfigCallable:
         global config_decoder
         if not TypedConfigCallable.called:
             from bourbaki.application.typed_io.config_decode import config_decoder
+
             TypedConfigCallable.called = True
 
         if self.__signature__ is None:
             return None
 
         globals_ = get_globals(self.func_for_sig)
-        return OrderedDict((name, config_decoder(fully_concretize_type(p.annotation, self.param_dict, globals_)))
-                           for name, p in self.__signature__.parameters.items() if name not in self.ignore_args)
+        return OrderedDict(
+            (
+                name,
+                config_decoder(
+                    fully_concretize_type(p.annotation, self.param_dict, globals_)
+                ),
+            )
+            for name, p in self.__signature__.parameters.items()
+            if name not in self.ignore_args
+        )
 
     def __call__(self, *args, **kwargs):
         if self.__signature__ is not None:

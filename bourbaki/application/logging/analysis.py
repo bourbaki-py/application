@@ -1,8 +1,15 @@
-#coding:utf-8
+# coding:utf-8
 import json
 from warnings import warn
 from datetime import datetime
-from ..reutils import find_lambda, sub_lambda, extract_groups, datetime_regex, named_group, re_escaped
+from ..reutils import (
+    find_lambda,
+    sub_lambda,
+    extract_groups,
+    datetime_regex,
+    named_group,
+    re_escaped,
+)
 from .defaults import DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT, METALOG, METALOG_LEVEL
 from .regexes import *
 
@@ -12,12 +19,14 @@ def log_fmt_fields(log_fmt: str):
     return fields
 
 
-def log_line_regex(log_fmt: str, date_fmt: str=None):
+def log_line_regex(log_fmt: str, date_fmt: str = None):
     def get_field_re(match):
         name, typ = match.groups()
         if typ != log_fields[name]:
-            warn("default printf formatting style for '%s' is '%s' but '%s' is "
-                 "specified instead" % (name, log_fields[name], typ))
+            warn(
+                "default printf formatting style for '%s' is '%s' but '%s' is "
+                "specified instead" % (name, log_fields[name], typ)
+            )
         pat = field_regexes.get(typ, string_field_regexes.get(name))
         if pat is None:
             if name == "asctime":
@@ -52,8 +61,10 @@ def begins_stacktrace(line):
 def check_message_last(fields):
     not_last = any(t[0] == "message" for t in fields) and fields[-1][0] != "message"
     if not_last:
-        warn("The 'message' field of the log format is not placed last; regex parsing "
-             "of log files may be slow or impossible")
+        warn(
+            "The 'message' field of the log format is not placed last; regex parsing "
+            "of log files may be slow or impossible"
+        )
     return not not_last
 
 
@@ -92,10 +103,13 @@ def log_file_record_iter(filepath, log_fmt, date_fmt, raise_=False):
             if append_trace:
                 last_record["stackTrace"].append(line)
             elif message_last:
-                last_record["message"] += ("\n%s" % line.rstrip('\n'))
+                last_record["message"] += "\n%s" % line.rstrip("\n")
             else:
-                _warn_or_raise("could not parse line: '{}'".format(line.rstrip('\n')),
-                               IOError, raise_)
+                _warn_or_raise(
+                    "could not parse line: '{}'".format(line.rstrip("\n")),
+                    IOError,
+                    raise_,
+                )
         else:
             # we have a new record; yield the last one
             if counter > 0:
@@ -114,21 +128,30 @@ def log_file_record_iter(filepath, log_fmt, date_fmt, raise_=False):
         file.close()
 
 
-def log_file_to_df(filepath, log_fmt=DEFAULT_LOG_MSG_FMT,
-                   date_fmt=DEFAULT_LOG_DATE_FMT, datetime_index=False,
-                   validate=False, raise_=False):
+def log_file_to_df(
+    filepath,
+    log_fmt=DEFAULT_LOG_MSG_FMT,
+    date_fmt=DEFAULT_LOG_DATE_FMT,
+    datetime_index=False,
+    validate=False,
+    raise_=False,
+):
     import pandas
+
     fields = [t[0] for t in log_fmt_fields(log_fmt)]
 
     fields.append("stackTrace")
 
     if datetime_index:
         if "asctime" not in fields:
-            raise ValueError("datetime_index is specified but 'asctime' is not one of "
-                             "the log format fields")
+            raise ValueError(
+                "datetime_index is specified but 'asctime' is not one of "
+                "the log format fields"
+            )
 
     df = pandas.DataFrame.from_records(
-        log_file_record_iter(filepath, log_fmt, date_fmt, raise_), columns=fields)
+        log_file_record_iter(filepath, log_fmt, date_fmt, raise_), columns=fields
+    )
 
     if validate:
         _validate_dataframe_parse(df, raise_)
@@ -151,13 +174,14 @@ def _warn_or_raise(errmsg, exception, raise_):
 
 def _validate_dataframe_parse(df, raise_):
     import pandas
+
     levelfield = None
     metalevel = None
-    if 'levelname' in df.columns:
-        levelfield = 'levelname'
+    if "levelname" in df.columns:
+        levelfield = "levelname"
         metalevel = METALOG_LEVEL
-    elif 'levelno' in df.columns:
-        levelfield = 'levelno'
+    elif "levelno" in df.columns:
+        levelfield = "levelno"
         metalevel = METALOG
 
     def _tryparse(msg):
@@ -169,50 +193,74 @@ def _validate_dataframe_parse(df, raise_):
     stats = None
     if levelfield and metalevel:
         stats = df.loc[df[levelfield] == metalevel, ["name", "message"]]
-        stats['stats'] = stats['message'].map(_tryparse)
+        stats["stats"] = stats["message"].map(_tryparse)
 
-        nonnull_stats_ix = stats['stats'].notnull()
+        nonnull_stats_ix = stats["stats"].notnull()
         if len(stats.index.unique()) > nonnull_stats_ix.sum():
-            _warn_or_raise("Not all loggers that issued {}/{}-level messages "
-                           "had parseable statistics reports".format(METALOG_LEVEL, METALOG),
-                           IOError, raise_)
+            _warn_or_raise(
+                "Not all loggers that issued {}/{}-level messages "
+                "had parseable statistics reports".format(METALOG_LEVEL, METALOG),
+                IOError,
+                raise_,
+            )
         if len(stats) == 0:
-            errmsg = "validation is requested but this is only possible if " \
-                     "messages are logged at the {}/{} level".format(METALOG_LEVEL, METALOG)
+            errmsg = (
+                "validation is requested but this is only possible if "
+                "messages are logged at the {}/{} level".format(METALOG_LEVEL, METALOG)
+            )
             _warn_or_raise(errmsg, ValueError, raise_)
-        stats = stats[nonnull_stats_ix].drop_duplicates(subset="name", keep="last")\
-                                       .set_index("name")
-        stats = pandas.DataFrame.from_records(stats['stats'], index=stats.index)
+        stats = (
+            stats[nonnull_stats_ix]
+            .drop_duplicates(subset="name", keep="last")
+            .set_index("name")
+        )
+        stats = pandas.DataFrame.from_records(stats["stats"], index=stats.index)
     else:
-        errmsg = "validation is requested but this is only possible if " \
-                 "'levelname' or 'levelno' are fields in the log message format"
+        errmsg = (
+            "validation is requested but this is only possible if "
+            "'levelname' or 'levelno' are fields in the log message format"
+        )
         _warn_or_raise(errmsg, ValueError, raise_)
 
-    levelcounts = pandas.DataFrame.from_records(stats['levelcounts'], index=stats.index)
+    levelcounts = pandas.DataFrame.from_records(stats["levelcounts"], index=stats.index)
 
-    msg_template = "logger '{name}' reports differing %s from what was parsed;\nreported in log:\n" \
-                   "{reported}\nparsed:\n{parsed}"
+    msg_template = (
+        "logger '{name}' reports differing %s from what was parsed;\nreported in log:\n"
+        "{reported}\nparsed:\n{parsed}"
+    )
     levelcount_msg = msg_template % "level counts"
     multiline_msg = msg_template % "multiline message count"
     stacktrace_msg = msg_template % "stacktrace count"
 
     for name in stats.index:
-        subset = df.loc[df['name'] == name, ['levelname', 'message', 'stackTrace']]
+        subset = df.loc[df["name"] == name, ["levelname", "message", "stackTrace"]]
 
-        parsed = subset['levelname'].value_counts(dropna=True).sort_index()
+        parsed = subset["levelname"].value_counts(dropna=True).sort_index()
         reported = levelcounts.loc[name].dropna().sort_index().astype(int)
 
         if not (parsed == reported).all():
-            _warn_or_raise(levelcount_msg.format(name=name, reported=reported, parsed=parsed), IOError, raise_)
+            _warn_or_raise(
+                levelcount_msg.format(name=name, reported=reported, parsed=parsed),
+                IOError,
+                raise_,
+            )
 
-        parsed = subset['message'].str.contains('\n').sum()
-        reported = stats.loc[name, 'multiline']
-
-        if parsed != reported:
-            _warn_or_raise(multiline_msg.format(name=name, reported=reported, parsed=parsed), IOError, raise_)
-
-        parsed = subset['stackTrace'].notnull().sum()
-        reported = stats.loc[name, 'stacktraces']
+        parsed = subset["message"].str.contains("\n").sum()
+        reported = stats.loc[name, "multiline"]
 
         if parsed != reported:
-            _warn_or_raise(multiline_msg.format(name=name, reported=reported, parsed=parsed), IOError, raise_)
+            _warn_or_raise(
+                multiline_msg.format(name=name, reported=reported, parsed=parsed),
+                IOError,
+                raise_,
+            )
+
+        parsed = subset["stackTrace"].notnull().sum()
+        reported = stats.loc[name, "stacktraces"]
+
+        if parsed != reported:
+            _warn_or_raise(
+                multiline_msg.format(name=name, reported=reported, parsed=parsed),
+                IOError,
+                raise_,
+            )

@@ -1,4 +1,4 @@
-#coding: utf-8
+# coding: utf-8
 from operator import attrgetter
 import multiprocessing
 import threading
@@ -15,44 +15,73 @@ from .config import validate_log_level_int
 
 
 class BufferingSMTPHandler(MemoryHandler):
-    def __init__(self, capacity, mailhost, toaddrs, subject=None, flushLevel=ERROR, *,
-                 credentials=None, fromaddr=None,
-                 secure=None, mailport=None, timeout=5.0):
+    def __init__(
+        self,
+        capacity,
+        mailhost,
+        toaddrs,
+        subject=None,
+        flushLevel=ERROR,
+        *,
+        credentials=None,
+        fromaddr=None,
+        secure=None,
+        mailport=None,
+        timeout=5.0
+    ):
         flushLevel = validate_log_level_int(flushLevel)
 
         if isinstance(credentials, str):
-            credentials = (credentials, getpass("Please enter a password for {}: ".format(credentials)))
+            credentials = (
+                credentials,
+                getpass("Please enter a password for {}: ".format(credentials)),
+            )
 
         if fromaddr is None:
             if not isinstance(credentials, (list, tuple)) or len(credentials) != 2:
-                raise ValueError("you must supply either fromaddr or credentials=(uername, password); "
-                                 "fromaddr is None but credentials = {}".format(credentials))
+                raise ValueError(
+                    "you must supply either fromaddr or credentials=(uername, password); "
+                    "fromaddr is None but credentials = {}".format(credentials)
+                )
             fromaddr = credentials[0]
 
         if isinstance(toaddrs, str):
             toaddrs = [toaddrs]
         elif not toaddrs:
-            raise ValueError("you must supply toaddrs, either a single email address or a list thereof")
+            raise ValueError(
+                "you must supply toaddrs, either a single email address or a list thereof"
+            )
 
         if mailport is not None:
             # SMTPHandler uses a tuple for this
             mailhost = (mailhost, mailport)
         elif not isinstance(mailhost, (list, tuple)) or len(mailhost) != 2:
-            raise ValueError("If mailport is not explicitly passed, mailhost must be a (host, port) tuple; got {}"
-                             .format(mailhost))
+            raise ValueError(
+                "If mailport is not explicitly passed, mailhost must be a (host, port) tuple; got {}".format(
+                    mailhost
+                )
+            )
 
         MemoryHandler.__init__(self, capacity, flushLevel=flushLevel)
-        SMTPHandler.__init__(self, mailhost=mailhost, fromaddr=fromaddr, toaddrs=toaddrs,
-                             subject=subject, credentials=credentials, secure=secure, timeout=timeout)
+        SMTPHandler.__init__(
+            self,
+            mailhost=mailhost,
+            fromaddr=fromaddr,
+            toaddrs=toaddrs,
+            subject=subject,
+            credentials=credentials,
+            secure=secure,
+            timeout=timeout,
+        )
 
     def send_mail(self, content, subject=None):
         msg = EmailMessage()
-        msg['From'] = self.fromaddr
-        msg['To'] = ','.join(self.toaddrs)
+        msg["From"] = self.fromaddr
+        msg["To"] = ",".join(self.toaddrs)
         subject = subject or self.subject
         if subject is not None:
-            msg['Subject'] = subject
-        msg['Date'] = email.utils.localtime()
+            msg["Subject"] = subject
+        msg["Date"] = email.utils.localtime()
         msg.set_content(content)
 
         port = self.mailport or smtplib.SMTP_PORT
@@ -69,15 +98,17 @@ class BufferingSMTPHandler(MemoryHandler):
             smtp.quit()
 
     def get_content(self):
-        return '\n'.join(map(self.format, self.buffer))
+        return "\n".join(map(self.format, self.buffer))
 
     def get_subject(self):
         if self.subject:
             return self.subject
-        top_record = max(self.buffer, key=attrgetter('levelno'))
+        top_record = max(self.buffer, key=attrgetter("levelno"))
         top_records = [r for r in self.buffer if r.levelno >= top_record.levelno]
         names = sorted(set(r.name for r in top_records))
-        return "{} messages from loggers {}".format(top_record.levelname, ", ".join(names))
+        return "{} messages from loggers {}".format(
+            top_record.levelname, ", ".join(names)
+        )
 
     def flush(self):
         if len(self.buffer) > 0:
@@ -87,8 +118,17 @@ class BufferingSMTPHandler(MemoryHandler):
             try:
                 self.send_mail(content, subject)
             except:
-                self.handleError(LogRecord(self.name, self.level, pathname=None, lineno=None,
-                                           msg=content, args=(), exc_info=sys.exc_info()))  # no particular record
+                self.handleError(
+                    LogRecord(
+                        self.name,
+                        self.level,
+                        pathname=None,
+                        lineno=None,
+                        msg=content,
+                        args=(),
+                        exc_info=sys.exc_info(),
+                    )
+                )  # no particular record
             finally:
                 self.buffer = []
 
@@ -102,6 +142,7 @@ class MultiProcHandler(logging.Handler):
     https://stackoverflow.com/questions/641420/how-should-i-log-while-using-multiprocessing-in-python
     Tweaked and subclassed here - added the get_subhandler() method for generality.
     """
+
     subhandler_cls = None
 
     def __init__(self, *args, **kwargs):
@@ -169,7 +210,7 @@ class MultiProcHandler(logging.Handler):
 class MultiProcRotatingFileHandler(MultiProcHandler):
     subhandler_cls = RotatingFileHandler
 
-    def __init__(self, filename, mode='a', maxBytes=2**20, backupCount=0):
+    def __init__(self, filename, mode="a", maxBytes=2 ** 20, backupCount=0):
         super().__init__(filename, mode, maxBytes, backupCount)
 
 
@@ -183,8 +224,29 @@ class MultiProcStreamHandler(MultiProcHandler):
 class MultiProcBufferingSMTPHandler(MultiProcHandler):
     subhandler_cls = BufferingSMTPHandler
 
-    def __init__(self, capacity, mailhost, toaddrs, subject=None, flushLevel=ERROR, *,
-                 credentials=None, fromaddr=None, secure=None, mailport=None, timeout=5.0):
-        super().__init__(capacity=capacity, mailhost=mailhost, toaddrs=toaddrs, subject=subject,
-                         flushLevel=flushLevel, credentials=credentials, fromaddr=fromaddr,
-                         secure=secure, mailport=mailport, timeout=timeout)
+    def __init__(
+        self,
+        capacity,
+        mailhost,
+        toaddrs,
+        subject=None,
+        flushLevel=ERROR,
+        *,
+        credentials=None,
+        fromaddr=None,
+        secure=None,
+        mailport=None,
+        timeout=5.0
+    ):
+        super().__init__(
+            capacity=capacity,
+            mailhost=mailhost,
+            toaddrs=toaddrs,
+            subject=subject,
+            flushLevel=flushLevel,
+            credentials=credentials,
+            fromaddr=fromaddr,
+            secure=secure,
+            mailport=mailport,
+            timeout=timeout,
+        )

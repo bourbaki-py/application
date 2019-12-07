@@ -1,10 +1,11 @@
-#coding:utf-8
+# coding:utf-8
 from logging import _nameToLevel, _levelToName
 
 
 def validate_log_level(level):
-    assert level in _nameToLevel or level in _levelToName or level == "NOTSET", \
-        "'{}' is not a valid logging level".format(level)
+    assert (
+        level in _nameToLevel or level in _levelToName or level == "NOTSET"
+    ), "'{}' is not a valid logging level".format(level)
     return level
 
 

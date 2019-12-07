@@ -22,12 +22,18 @@ _type = tuple({type, *(type(t) for t in (Mapping, Tuple, Generic))})
 
 class LookupOrderConfigError(ValueError):
     def __init__(self, name_or_names):
-        self.args = ("all names in lookup_order must be in {}; got {}".format(tuple(s.name for s in ArgSource), name_or_names),)
+        self.args = (
+            "all names in lookup_order must be in {}; got {}".format(
+                tuple(s.name for s in ArgSource), name_or_names
+            ),
+        )
 
 
 class LookupOrderRepeated(LookupOrderConfigError):
     def __init__(self, name_or_names):
-        self.args = ("names in lookup_order must be unique; got {}".format(name_or_names),)
+        self.args = (
+            "names in lookup_order must be unique; got {}".format(name_or_names),
+        )
 
 
 _sentinel = object()
@@ -58,12 +64,12 @@ def strip_command_prefix(prefix: Union[str, Tuple[str, ...]], funcname: str) -> 
     if isinstance(prefix, str):
         prefix = (prefix,)
 
-    suffix = tuple(p.replace('-', '_') for p in prefix)
-    while not funcname.startswith('_'.join(suffix)):
+    suffix = tuple(p.replace("-", "_") for p in prefix)
+    while not funcname.startswith("_".join(suffix)):
         suffix = suffix[1:]
 
-    strip_prefix = '_'.join(suffix)
-    funcname = funcname[len(strip_prefix):].lstrip("_")
+    strip_prefix = "_".join(suffix)
+    funcname = funcname[len(strip_prefix) :].lstrip("_")
 
     return funcname
 
@@ -73,11 +79,18 @@ def sibling_files(path):
     return list(Path(path).parent.glob("*.py"))
 
 
-def get_task(logger, name, log_level=PROGRESS, error_level=ERROR, time_units='s'):
+def get_task(logger, name, log_level=PROGRESS, error_level=ERROR, time_units="s"):
     if isinstance(logger, ProgressLogger):
-        return logger.task(name, time_units=time_units, level=log_level, error_level=error_level)
-    return TimedTaskContext(name, logger_or_print_func=logger, time_units=time_units,
-                            level=log_level, error_level=error_level)
+        return logger.task(
+            name, time_units=time_units, level=log_level, error_level=error_level
+        )
+    return TimedTaskContext(
+        name,
+        logger_or_print_func=logger,
+        time_units=time_units,
+        level=log_level,
+        error_level=error_level,
+    )
 
 
 def update_in(conf, subsection, subconf):
@@ -104,7 +117,9 @@ def try_or_exit(func, exit, error_status, *args, **kwargs):
         return result
 
 
-def _help_kwargs_from_docs(docs: CallableDocs, long_desc_as_epilog: bool=False, help_: bool=True):
+def _help_kwargs_from_docs(
+    docs: CallableDocs, long_desc_as_epilog: bool = False, help_: bool = True
+):
     if help_:
         kw = {"help": docs.short_desc}
     else:
@@ -156,11 +171,21 @@ def _validate_lookup_order(*lookup_order: ArgSource, include_defaults=True):
 
 def _validate_parse_order(*parse_order):
     if not parse_order:
-        raise ValueError("can't make sense of an empty parse_order: {}".format(parse_order))
+        raise ValueError(
+            "can't make sense of an empty parse_order: {}".format(parse_order)
+        )
     if parse_order.count(Ellipsis) > 1:
-        raise ValueError("at most one `...` may be present in parse_order; got {}".format(parse_order))
+        raise ValueError(
+            "at most one `...` may be present in parse_order; got {}".format(
+                parse_order
+            )
+        )
     if not all((isinstance(n, str) or n is Ellipsis) for n in parse_order):
-        raise TypeError("all elements of parse_order must be str or `...`; got {}".format(parse_order))
+        raise TypeError(
+            "all elements of parse_order must be str or `...`; got {}".format(
+                parse_order
+            )
+        )
     return parse_order
 
 
@@ -178,8 +203,11 @@ def _to_name_set(maybe_names, default_set=None, metavar=None):
     if default_set is not None:
         extra = names.difference(default_set)
         if extra:
-            raise NameError("{} must all be in {}; values {} are not"
-                            .format(metavar or 'names', default_set, extra))
+            raise NameError(
+                "{} must all be in {}; values {} are not".format(
+                    metavar or "names", default_set, extra
+                )
+            )
     return names
 
 
@@ -189,10 +217,12 @@ def _maybe_bool(names, fallback=_to_name_set):
     return fallback(names)
 
 
-def _combined_cli_sig(signature: Signature,
-                      *other_signatures: Signature,
-                      parse: Optional[Set[str]] = None,
-                      have_fallback: Optional[Set[str]] = None):
+def _combined_cli_sig(
+    signature: Signature,
+    *other_signatures: Signature,
+    parse: Optional[Set[str]] = None,
+    have_fallback: Optional[Set[str]] = None
+):
     all_signatures = (signature, *other_signatures)
 
     all_names = chain.from_iterable(s.parameters for s in all_signatures)
@@ -201,12 +231,20 @@ def _combined_cli_sig(signature: Signature,
     name_counts = Counter(all_names)
     common_names = tuple(n for n, c in name_counts.items() if c > 1)
     if common_names:
-        raise OutputHandlerSignatureError("signatures share overlapping arg names: {}"
-                                          .format(common_names))
+        raise OutputHandlerSignatureError(
+            "signatures share overlapping arg names: {}".format(common_names)
+        )
 
-    params = {k: [] for k in
-              (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD, Parameter.VAR_POSITIONAL,
-               Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD)}
+    params = {
+        k: []
+        for k in (
+            Parameter.POSITIONAL_ONLY,
+            Parameter.POSITIONAL_OR_KEYWORD,
+            Parameter.VAR_POSITIONAL,
+            Parameter.KEYWORD_ONLY,
+            Parameter.VAR_KEYWORD,
+        )
+    }
     for sig in all_signatures:
         for param in sig.parameters.values():
             if parse is None or param.name in parse:
@@ -218,12 +256,18 @@ def _combined_cli_sig(signature: Signature,
     # if there are no positional variadics, move the first *args to the end of positionals, the rest to kw_only
     # if there are more than one **kwargs, move the tail to kw_only
 
-    all_pos = params[Parameter.POSITIONAL_ONLY] + params[Parameter.POSITIONAL_OR_KEYWORD]
+    all_pos = (
+        params[Parameter.POSITIONAL_ONLY] + params[Parameter.POSITIONAL_OR_KEYWORD]
+    )
     non_variadic_pos, variadic_pos = _separate_variadic_params(all_pos)
     maybe_variadic_pos = []
     if variadic_pos:
         first_variadic = variadic_pos[0]
-        last_pos_kind = max(non_variadic_pos[-1].kind, first_variadic.kind) if non_variadic_pos else first_variadic.kind
+        last_pos_kind = (
+            max(non_variadic_pos[-1].kind, first_variadic.kind)
+            if non_variadic_pos
+            else first_variadic.kind
+        )
         maybe_variadic_pos.append(first_variadic.replace(kind=last_pos_kind))
         params[Parameter.KEYWORD_ONLY].extend(
             p.replace(kind=Parameter.KEYWORD_ONLY) for p in variadic_pos[1:]
@@ -232,7 +276,10 @@ def _combined_cli_sig(signature: Signature,
         varargs = params[Parameter.VAR_POSITIONAL]
         first_varargs = varargs[0]
         maybe_variadic_pos.append(
-            first_varargs.replace(kind=Parameter.POSITIONAL_OR_KEYWORD, annotation=Tuple[first_varargs.annotation, ...])
+            first_varargs.replace(
+                kind=Parameter.POSITIONAL_OR_KEYWORD,
+                annotation=Tuple[first_varargs.annotation, ...],
+            )
         )
         params[Parameter.VAR_POSITIONAL] = varargs[1:]
 
@@ -242,29 +289,47 @@ def _combined_cli_sig(signature: Signature,
             p.replace(
                 kind=Parameter.KEYWORD_ONLY,
                 annotation=Tuple[p.annotation, ...]
-                if kind is Parameter.VAR_POSITIONAL else Dict[str, p.annotation],
+                if kind is Parameter.VAR_POSITIONAL
+                else Dict[str, p.annotation],
             )
             for p in ps
         )
 
-    nondefault_pos, default_pos = _separate_default_params(non_variadic_pos, have_fallback=have_fallback)
-    all_params = nondefault_pos + default_pos + maybe_variadic_pos + params[Parameter.KEYWORD_ONLY]
+    nondefault_pos, default_pos = _separate_default_params(
+        non_variadic_pos, have_fallback=have_fallback
+    )
+    all_params = (
+        nondefault_pos
+        + default_pos
+        + maybe_variadic_pos
+        + params[Parameter.KEYWORD_ONLY]
+    )
 
     # Don't validate because we may have defaults preceding non-defaults at this point
-    return Signature(all_params, return_annotation=signature.return_annotation, __validate_parameters__=False)
+    return Signature(
+        all_params,
+        return_annotation=signature.return_annotation,
+        __validate_parameters__=False,
+    )
 
 
-def _separate_default_params(params: List[Parameter], have_fallback: Optional[Set[str]] = None) -> Tuple[List[Parameter], List[Parameter]]:
+def _separate_default_params(
+    params: List[Parameter], have_fallback: Optional[Set[str]] = None
+) -> Tuple[List[Parameter], List[Parameter]]:
     nondefaults, defaults = [], []
     for param in params:
-        if param.default is Parameter.empty and (not have_fallback or param.name not in have_fallback):
+        if param.default is Parameter.empty and (
+            not have_fallback or param.name not in have_fallback
+        ):
             nondefaults.append(param)
         else:
             defaults.append(param)
     return nondefaults, defaults
 
 
-def _separate_variadic_params(params: List[Parameter]) -> Tuple[List[Parameter], List[Parameter]]:
+def _separate_variadic_params(
+    params: List[Parameter]
+) -> Tuple[List[Parameter], List[Parameter]]:
     args, variadics = [], []
     for param in params:
         if param.annotation is Parameter.empty:

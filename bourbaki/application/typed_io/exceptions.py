@@ -27,7 +27,7 @@ class IOUndefinedForType(TypedIOTypeError, ExceptionReprMixin):
     msg = "{}I/O is not defined for type {}"
 
     def __str__(self):
-        source = "{} ".format(self.source.title()) if self.source else ''
+        source = "{} ".format(self.source.title()) if self.source else ""
         msg = self.msg.format(source, self.type_)
         if self.args:
             msg = msg + "; {}".format(self.args)
@@ -38,8 +38,10 @@ class TypedInputError(TypedIOValueError, ExceptionReprMixin):
     source = None
 
     def __str__(self):
-        source = "{} ".format(self.source) if self.source else ''
-        msg = "Cannot parse type {} from {}value {}".format(self.type_, source, repr(self.value))
+        source = "{} ".format(self.source) if self.source else ""
+        msg = "Cannot parse type {} from {}value {}".format(
+            self.type_, source, repr(self.value)
+        )
         if self.exc is None:
             return msg
         return msg + "; raised {}".format(self.exc)
@@ -49,8 +51,10 @@ class TypedOutputError(TypedIOValueError, ExceptionReprMixin):
     source = None
 
     def __str__(self):
-        source = "{} ".format(self.source) if self.source else ''
-        msg = "Cannot write value {} to {}with target type {}".format(repr(self.value), source, self.type_)
+        source = "{} ".format(self.source) if self.source else ""
+        msg = "Cannot write value {} to {}with target type {}".format(
+            repr(self.value), source, self.type_
+        )
         if self.exc is None:
             return msg
         return msg + "; raised {}".format(self.exc)
@@ -61,8 +65,10 @@ class ConfigIOUndefined(IOUndefinedForType):
 
 
 class ConfigIOUndefinedForKeyType(ConfigIOUndefined):
-    msg = ("{}I/O is undefined for Mapping types with keys of type {}; "
-           "use config_key_encoder.register to define a custom method")
+    msg = (
+        "{}I/O is undefined for Mapping types with keys of type {}; "
+        "use config_key_encoder.register to define a custom method"
+    )
 
 
 class ConfigCollectionKeysNotAllowed(ConfigIOUndefinedForKeyType):

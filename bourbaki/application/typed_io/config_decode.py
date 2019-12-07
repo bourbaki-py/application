@@ -14,16 +14,45 @@ from urllib.parse import ParseResult as URL, urlparse
 from functools import partial
 from bourbaki.introspection.callables import UnStarred
 from bourbaki.introspection.imports import import_object
-from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
-from bourbaki.introspection.types import (issubclass_generic, get_constructor_for,
-                                          NamedTupleABC, NonStrCollection, NonAnyStrCollection, LazyType)
-from bourbaki.introspection.generic_dispatch_helpers import (LazyWrapper, CollectionWrapper, TupleWrapper,
-                                                             MappingWrapper, NamedTupleWrapper, UnionWrapper)
+from bourbaki.introspection.generic_dispatch import (
+    GenericTypeLevelSingleDispatch,
+    UnknownSignature,
+)
+from bourbaki.introspection.types import (
+    issubclass_generic,
+    get_constructor_for,
+    NamedTupleABC,
+    NonStrCollection,
+    NonAnyStrCollection,
+    LazyType,
+)
+from bourbaki.introspection.generic_dispatch_helpers import (
+    LazyWrapper,
+    CollectionWrapper,
+    TupleWrapper,
+    MappingWrapper,
+    NamedTupleWrapper,
+    UnionWrapper,
+)
 from bourbaki.application.typed_io.inflation import inflate_config
-from .parsers import (parse_regex_bytes, parse_regex, parse_range, parse_iso_date, parse_iso_datetime, parse_bool,
-                      parse_path, EnumParser, FlagParser)
-from .exceptions import (ConfigTypedInputError, ConfigIOUndefined, ConfigUnionInputError,
-                         ConfigCollectionKeysNotAllowed, ConfigCallableInputError)
+from .parsers import (
+    parse_regex_bytes,
+    parse_regex,
+    parse_range,
+    parse_iso_date,
+    parse_iso_datetime,
+    parse_bool,
+    parse_path,
+    EnumParser,
+    FlagParser,
+)
+from .exceptions import (
+    ConfigTypedInputError,
+    ConfigIOUndefined,
+    ConfigUnionInputError,
+    ConfigCollectionKeysNotAllowed,
+    ConfigCallableInputError,
+)
 from .utils import identity, Empty, IODispatch, TypeCheckInput, PicklableWithType, File
 from .parsers import TypeCheckImportFunc, TypeCheckImportType
 from .config_repr_ import bytes_config_key_repr
@@ -61,7 +90,11 @@ to_fraction.register((int, str, float))(fractions.Fraction)
 @to_fraction.register((list, tuple))
 def numerator_denominator_to_fraction(tup):
     if len(tup) != 2:
-        raise ValueError("If instantiated from a tuple, Fraction requires a 2-tuple; got {}".format(tup))
+        raise ValueError(
+            "If instantiated from a tuple, Fraction requires a 2-tuple; got {}".format(
+                tup
+            )
+        )
     return fractions.Fraction(*tup)
 
 
@@ -77,14 +110,21 @@ to_bytes.register((list, bytearray))(bytes)
 @to_bytes.register(str)
 def str_to_bytes(s, type_=bytes, exc_type=ConfigTypedInputError):
     try:
-        t = ast.parse(s, mode='eval')
+        t = ast.parse(s, mode="eval")
     except SyntaxError as e:
         raise exc_type(type_, s, e)
     else:
         expr = t.body
         if not isinstance(expr, ast.Bytes):
-            raise exc_type(type_, s, SyntaxError("{} is not a legal bytes expression; use format {}"
-                                                 .format(repr(s), bytes_config_key_repr)))
+            raise exc_type(
+                type_,
+                s,
+                SyntaxError(
+                    "{} is not a legal bytes expression; use format {}".format(
+                        repr(s), bytes_config_key_repr
+                    )
+                ),
+            )
         b = eval(s)
         if type_ is bytearray:
             b = bytearray(b)
@@ -153,9 +193,13 @@ config_key_decoder_methods = {
 
 # The main dispatcher
 
-config_decoder = GenericTypeLevelSingleDispatch("config_decoder", isolated_bases=[typing.Union, typing.Generic])
+config_decoder = GenericTypeLevelSingleDispatch(
+    "config_decoder", isolated_bases=[typing.Union, typing.Generic]
+)
 
-config_key_decoder = GenericTypeLevelSingleDispatch("config_key_decoder", isolated_bases=[typing.Union, typing.Generic])
+config_key_decoder = GenericTypeLevelSingleDispatch(
+    "config_key_decoder", isolated_bases=[typing.Union, typing.Generic]
+)
 
 
 # no typecheck for unannotated params
@@ -188,7 +232,7 @@ class TypeCheckInflateConfig(TypeCheckInput):
 @config_decoder.register(typing.Callable)
 class TypeCheckInflateCallableConfig(TypeCheckInflateConfig):
     exc_cls = ConfigCallableInputError
-    
+
     def decode(self, conf):
         if isinstance(conf, str):
             # try a function import for a string
@@ -226,9 +270,15 @@ class GenericConfigDecoderMixin(PicklableWithType):
         if self.legal_container_types is None:
             return conf
         if not isinstance(conf, self.legal_container_types):
-            raise ConfigTypedInputError(self.type_, conf,
-                                        TypeError("{} is not an instance of any of {}"
-                                                  .format(conf, self.legal_container_types)))
+            raise ConfigTypedInputError(
+                self.type_,
+                conf,
+                TypeError(
+                    "{} is not an instance of any of {}".format(
+                        conf, self.legal_container_types
+                    )
+                ),
+            )
         return conf
 
     def __call__(self, conf):

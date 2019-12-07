@@ -18,12 +18,33 @@ from operator import attrgetter
 from urllib.parse import ParseResult as URL, urlunparse
 from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.types import LazyType, NamedTupleABC
-from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
-from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, TupleWrapper, MappingWrapper,
-                                                             UnionWrapper, LazyWrapper)
+from bourbaki.introspection.generic_dispatch import (
+    GenericTypeLevelSingleDispatch,
+    UnknownSignature,
+)
+from bourbaki.introspection.generic_dispatch_helpers import (
+    CollectionWrapper,
+    TupleWrapper,
+    MappingWrapper,
+    UnionWrapper,
+    LazyWrapper,
+)
 from .parsers import EnumParser, FlagParser
-from .exceptions import ConfigIOUndefined, ConfigTypedOutputError, ConfigTypedKeyOutputError, ConfigUnionOutputError
-from .utils import Empty, identity, File, IODispatch, TypeCheckOutput, TypeCheckOutputFunc, TypeCheckOutputType
+from .exceptions import (
+    ConfigIOUndefined,
+    ConfigTypedOutputError,
+    ConfigTypedKeyOutputError,
+    ConfigUnionOutputError,
+)
+from .utils import (
+    Empty,
+    identity,
+    File,
+    IODispatch,
+    TypeCheckOutput,
+    TypeCheckOutputFunc,
+    TypeCheckOutputType,
+)
 
 
 class ConfigEncodeDispatch(IODispatch):
@@ -162,7 +183,9 @@ class TypeCheckConfigEncoder(TypeCheckOutput):
 
 # don't isolate user-defined Generics because in general we don't know how to encode them...
 
-config_key_encoder = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing.Union])
+config_key_encoder = GenericTypeLevelSingleDispatch(
+    __name__, isolated_bases=[typing.Union]
+)
 
 config_encoder = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing.Union])
 
@@ -288,10 +311,12 @@ for t, enc in config_encoder_methods.items():
 
 
 # don't need to typecheck these; they're dispatched selectively
-for t, (enc, key_enc) in {int: (to_int_config, int_to_str),
-                          float: (to_float_config, float_to_str),
-                          bool: (to_bool_config, bool_to_str),
-                          typing.ByteString: (to_bytes_config, bytes_to_str)}.items():
+for t, (enc, key_enc) in {
+    int: (to_int_config, int_to_str),
+    float: (to_float_config, float_to_str),
+    bool: (to_bool_config, bool_to_str),
+    typing.ByteString: (to_bytes_config, bytes_to_str),
+}.items():
     config_encoder.register(t, as_const=True)(enc)
     config_key_encoder.register(t, as_const=True)(key_enc)
 
