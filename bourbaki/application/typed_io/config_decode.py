@@ -303,7 +303,7 @@ class SequenceConfigDecoder(CollectionConfigDecoder):
 
 @config_decoder.register(typing.Mapping)
 class MappingConfigDecoder(GenericConfigDecoderMixin, MappingWrapper):
-    legal_container_types = (collections.Mapping, NonAnyStrCollection)
+    legal_container_types = (collections.abc.Mapping, NonAnyStrCollection)
     helper_cls = MappingWrapper
 
     def __init__(self, coll_type, key_type=typing.Any, val_type=Empty):
