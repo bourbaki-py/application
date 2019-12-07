@@ -4,30 +4,42 @@ from argparse import ZERO_OR_MORE, ONE_OR_MORE
 import decimal
 import fractions
 from urllib.parse import ParseResult as URL
-from bourbaki.introspection.types import NonStrCollection, is_named_tuple_class, get_named_tuple_arg_types
-from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature
+from bourbaki.introspection.types import (
+    NonStrCollection,
+    is_named_tuple_class,
+    get_named_tuple_arg_types,
+)
+from bourbaki.introspection.generic_dispatch import (
+    GenericTypeLevelSingleDispatch,
+    UnknownSignature,
+)
 from .utils import maybe_map
 from .exceptions import CLIIOUndefined
 
 
 NoneType = type(None)
 
-NestedCollectionTypes = (typing.Collection[NonStrCollection],
-                         typing.Tuple[NonStrCollection, ...],
-                         typing.Mapping[NonStrCollection, typing.Any],
-                         typing.Mapping[typing.Any, NonStrCollection])
+NestedCollectionTypes = (
+    typing.Collection[NonStrCollection],
+    typing.Tuple[NonStrCollection, ...],
+    typing.Mapping[NonStrCollection, typing.Any],
+    typing.Mapping[typing.Any, NonStrCollection],
+)
 
 
 class AmbiguousUnionNargs(CLIIOUndefined):
     def __str__(self):
-        return ("Types in union {} imply an ambiguous number of command line args"
-                .format(self.type_))
+        return "Types in union {} imply an ambiguous number of command line args".format(
+            self.type_
+        )
 
 
 class NestedCollectionsCLIArgError(CLIIOUndefined):
     def __str__(self):
-        return ("Some type parameters of sequence type {} require more than one command line arg; can't parse "
-                "unambiguously".format(self.type_))
+        return (
+            "Some type parameters of sequence type {} require more than one command line arg; can't parse "
+            "unambiguously".format(self.type_)
+        )
 
 
 def check_union_nargs(*types):
@@ -111,7 +123,9 @@ def union_nargs(u, *types):
     return next(iter(all_nargs))
 
 
-cli_option_nargs = GenericTypeLevelSingleDispatch("cli_option_nargs", isolated_bases=[typing.Union])
+cli_option_nargs = GenericTypeLevelSingleDispatch(
+    "cli_option_nargs", isolated_bases=[typing.Union]
+)
 
 cli_option_nargs.funcs.update(cli_nargs.funcs)
 
@@ -123,13 +137,15 @@ def nested_option_nargs(t, *types):
     return cli_nargs(types[0])
 
 
-cli_action = GenericTypeLevelSingleDispatch("cli_action", isolated_bases=[typing.Union, typing.Tuple])
+cli_action = GenericTypeLevelSingleDispatch(
+    "cli_action", isolated_bases=[typing.Union, typing.Tuple]
+)
 
 
 @cli_action.register(typing.Union)
 def cli_action_any(u, *ts):
     actions = set(map(cli_action, (t for t in ts if t is not NoneType)))
-    if len(actions) >  1:
+    if len(actions) > 1:
         raise CLIIOUndefined(u, *ts)
     return next(iter(actions))
 

@@ -13,8 +13,23 @@ from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
-from .utils import Empty, Doc, to_param_doc, cmd_line_arg_names, CLI_PREFIX_CHAR, KEY_VAL_JOIN_CHAR, to_str_cli_repr
-from .utils import cached_property, PicklableWithType, PositionalMetavarFormatter, Missing, identity, repr_value
+from .utils import (
+    Empty,
+    Doc,
+    to_param_doc,
+    cmd_line_arg_names,
+    CLI_PREFIX_CHAR,
+    KEY_VAL_JOIN_CHAR,
+    to_str_cli_repr,
+)
+from .utils import (
+    cached_property,
+    PicklableWithType,
+    PositionalMetavarFormatter,
+    Missing,
+    identity,
+    repr_value,
+)
 
 
 class ArgSource(enum.Enum):
@@ -60,11 +75,21 @@ class TypedIO(PicklableWithType):
         return cls(type_)
 
     @classmethod
-    def register(cls, type_, *,
-                 cli_parser_=None, cli_nargs_=None, cli_repr_=None, cli_completer_=None,
-                 config_decoder_=None, config_encoder_=None, config_repr_=None,
-                 config_key_decoder_=None, config_key_encoder_=None,
-                 as_const=True):
+    def register(
+        cls,
+        type_,
+        *,
+        cli_parser_=None,
+        cli_nargs_=None,
+        cli_repr_=None,
+        cli_completer_=None,
+        config_decoder_=None,
+        config_encoder_=None,
+        config_repr_=None,
+        config_key_decoder_=None,
+        config_key_encoder_=None,
+        as_const=True
+    ):
         """Convenience method to allow registration of all relevant typed I/O functions and constants with one call.
         For purposes of readability and debugging, this is the recommended way, since scattering registrations
         throughout a code base can make errors difficult to locate, and increase the likelihood of forgetting to
@@ -177,16 +202,17 @@ class TypedIO(PicklableWithType):
             a function with signature `(base_type, *generic_args) -> config_value_for_type`. (see `as_const` above)
         """
         # cli_parser first, since cli_nargs/repr/completer may be derivable
-        for dispatcher, func in [(cli_parser, cli_parser_),
-                                 (cli_nargs, cli_nargs_),
-                                 (cli_repr, cli_repr_),
-                                 (cli_completer, cli_completer_),
-                                 (config_decoder, config_decoder_),
-                                 (config_encoder, config_encoder_),
-                                 (config_repr, config_repr_),
-                                 (config_key_decoder, config_key_decoder_),
-                                 (config_key_encoder, config_key_encoder_),
-                                 ]:
+        for dispatcher, func in [
+            (cli_parser, cli_parser_),
+            (cli_nargs, cli_nargs_),
+            (cli_repr, cli_repr_),
+            (cli_completer, cli_completer_),
+            (config_decoder, config_decoder_),
+            (config_encoder, config_encoder_),
+            (config_repr, config_repr_),
+            (config_key_decoder, config_key_decoder_),
+            (config_key_encoder, config_key_encoder_),
+        ]:
             if func is not None:
                 dispatcher.register(type_, as_const=as_const)(func)
 
@@ -252,13 +278,16 @@ class TypedIO(PicklableWithType):
         # function defaults
         return identity
 
-    def argparse_spec(self, param: Parameter,
-                      allow_positionals=False,
-                      implicit_flags=False,
-                      has_fallback=False,
-                      metavar=None,
-                      include_default=False,
-                      docs: Optional[Doc]=None):
+    def argparse_spec(
+        self,
+        param: Parameter,
+        allow_positionals=False,
+        implicit_flags=False,
+        has_fallback=False,
+        metavar=None,
+        include_default=False,
+        docs: Optional[Doc] = None,
+    ):
         name, default, kind = param.name, param.default, param.kind
         if default is Empty:
             default = Missing()
@@ -284,11 +313,17 @@ class TypedIO(PicklableWithType):
         required = not has_default and not has_fallback and not variadic
         doc = to_param_doc(docs, name)
 
-        is_flag = self.type_ is bool and implicit_flags and not positional and not variadic
+        is_flag = (
+            self.type_ is bool and implicit_flags and not positional and not variadic
+        )
         is_negative_flag = is_flag and default is True
 
-        names = cmd_line_arg_names(name, positional=positional, prefix_char=CLI_PREFIX_CHAR,
-                                   negative_flag=is_negative_flag)
+        names = cmd_line_arg_names(
+            name,
+            positional=positional,
+            prefix_char=CLI_PREFIX_CHAR,
+            negative_flag=is_negative_flag,
+        )
 
         if is_flag:
             kw = dict(action="store_false" if is_negative_flag else "store_true")
@@ -312,9 +347,14 @@ class TypedIO(PicklableWithType):
 
             if metavar is None:
                 if kind == Parameter.VAR_KEYWORD:
-                    metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
+                    metavar = "NAME{}{}".format(
+                        KEY_VAL_JOIN_CHAR, name.upper().rstrip("S")
+                    )
                 elif is_named_tuple_class(self.type_):
-                    metavar = tuple(to_str_cli_repr(k, cli_nargs(v)) for k, v in self.type_.__annotations__.items())
+                    metavar = tuple(
+                        to_str_cli_repr(k, cli_nargs(v))
+                        for k, v in self.type_.__annotations__.items()
+                    )
                 elif positional:
                     metavar = name.upper()
                 else:
@@ -323,38 +363,42 @@ class TypedIO(PicklableWithType):
 
             if not isinstance(type_str, (str, type(None))):
                 # tuple types
-                type_str = ' '.join(type_str)
+                type_str = " ".join(type_str)
 
             if positional and not isinstance(metavar, (str, type(None))):
                 # hack to deal with the fact that argparse handles fixed-length positionals differently than
                 # fixed-length options when formatting help strings
-                metavar = PositionalMetavarFormatter(*(metavar or ()), name=name.upper())
+                metavar = PositionalMetavarFormatter(
+                    *(metavar or ()), name=name.upper()
+                )
 
             # don't pass the parser here; we handle parsing as a postprocessing step
             kw = dict(metavar=metavar)
             if has_default and include_default:
-                kw['default'] = default
+                kw["default"] = default
             elif not required:
-                kw['default'] = Missing()
+                kw["default"] = Missing()
 
-            if not positional:  # no required/dest kwargs allowed for positionals; they are implicit
-                kw['required'] = required
-                kw['dest'] = name
+            if (
+                not positional
+            ):  # no required/dest kwargs allowed for positionals; they are implicit
+                kw["required"] = required
+                kw["dest"] = name
 
             if nargs is not None:
-                kw['nargs'] = nargs
+                kw["nargs"] = nargs
             elif positional and not required:
-                kw['nargs'] = OPTIONAL
+                kw["nargs"] = OPTIONAL
 
             if action is not None:
-                kw['action'] = action
+                kw["action"] = action
 
             if has_default and default is not None and not variadic:
                 defaultstr = "default {}".format(repr_value(default))
             else:
                 defaultstr = None
 
-            if action == 'append':
+            if action == "append":
                 actionstr = "repeat to pass multiple values"
             else:
                 actionstr = None
@@ -362,25 +406,34 @@ class TypedIO(PicklableWithType):
         help_ = doc
         helpstr = "; ".join(s for s in (type_str, help_, actionstr, defaultstr) if s)
         if helpstr:
-            kw['help'] = helpstr
+            kw["help"] = helpstr
 
-        if kw.get('nargs') == 0:
+        if kw.get("nargs") == 0:
             print(name, kw)
 
         return names, kw, positional
 
-    def add_argparse_arg(self, parser: ArgumentParser,
-                         param: Parameter,
-                         group_name: Optional[str]=None,
-                         allow_positionals=False,
-                         implicit_flags=False,
-                         has_fallback=False,
-                         metavar: Optional[Union[str, Dict[str, str]]]=None,
-                         include_default=False,
-                         docs: Optional[Doc]=None):
-        names, kw, positional = self.argparse_spec(param, allow_positionals=allow_positionals,
-                                                   implicit_flags=implicit_flags, include_default=include_default,
-                                                   has_fallback=has_fallback, metavar=metavar, docs=docs)
+    def add_argparse_arg(
+        self,
+        parser: ArgumentParser,
+        param: Parameter,
+        group_name: Optional[str] = None,
+        allow_positionals=False,
+        implicit_flags=False,
+        has_fallback=False,
+        metavar: Optional[Union[str, Dict[str, str]]] = None,
+        include_default=False,
+        docs: Optional[Doc] = None,
+    ):
+        names, kw, positional = self.argparse_spec(
+            param,
+            allow_positionals=allow_positionals,
+            implicit_flags=implicit_flags,
+            include_default=include_default,
+            has_fallback=has_fallback,
+            metavar=metavar,
+            docs=docs,
+        )
 
         if group_name is None:
             group = parser

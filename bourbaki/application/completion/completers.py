@@ -15,11 +15,19 @@ from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import const
 
 from ..paths import is_newer
-from .compgen_python_classpaths import MODULE_FLAG, CALLABLE_FLAG, CLASS_FLAG, INSTANCE_FLAG, SUBCLASS_FLAG
+from .compgen_python_classpaths import (
+    MODULE_FLAG,
+    CALLABLE_FLAG,
+    CLASS_FLAG,
+    INSTANCE_FLAG,
+    SUBCLASS_FLAG,
+)
 
 REPEATABLE_ACTIONS = tuple(
-    cls for cls in vars(argparse).values()
-    if isinstance(cls, type) and issubclass(cls, Action)
+    cls
+    for cls in vars(argparse).values()
+    if isinstance(cls, type)
+    and issubclass(cls, Action)
     and ("Count" in cls.__name__ or "Append" in cls.__name__)
 )
 
@@ -39,7 +47,7 @@ BASH_COMPLETION_TREE_INDENT = "  "
 
 DEFAULT_BASH_COMPLETE_OPTIONS = ("bashdefault", "filenames")
 BASH_SHEBANG = "#!/usr/bin/env bash"
-BASH_SOURCE_TEMPLATE = '[ -f {} ] && source {}'
+BASH_SOURCE_TEMPLATE = "[ -f {} ] && source {}"
 
 BASH_COMPLETION_USER_FILENAME = ".bash_completion"
 BASH_COMPLETION_USER_DIRNAME = ".bash_completion.d"
@@ -75,18 +83,28 @@ def shellquote(s: str):
     return quote(s)
 
 
-def install_shell_completion(parser: ArgumentParser, *commands: str,
-                             completion_options: Sequence[str] = DEFAULT_BASH_COMPLETE_OPTIONS,
-                             last_edit_time: Opt[Union[float, str, Path]] = None):
-    completions_file, completions_dir, helpers_file = install_application_shell_completion()
+def install_shell_completion(
+    parser: ArgumentParser,
+    *commands: str,
+    completion_options: Sequence[str] = DEFAULT_BASH_COMPLETE_OPTIONS,
+    last_edit_time: Opt[Union[float, str, Path]] = None
+):
+    completions_file, completions_dir, helpers_file = (
+        install_application_shell_completion()
+    )
     cmdname = _shortest_identifier(*commands)
     custom_file = os.path.join(completions_dir, cmdname + ".sh")
     custom_file_abs = os.path.expanduser(custom_file)
     completions_file_abs = os.path.expanduser(completions_file)
 
     if last_edit_time is None or is_newer(last_edit_time, custom_file_abs):
-        with open(custom_file_abs, 'w') as outfile:
-            write_bash_completion_for_parser(parser, outfile, commands=commands, completion_options=completion_options)
+        with open(custom_file_abs, "w") as outfile:
+            write_bash_completion_for_parser(
+                parser,
+                outfile,
+                commands=commands,
+                completion_options=completion_options,
+            )
 
     custom_source_command = BASH_SOURCE_TEMPLATE.format(custom_file, custom_file)
     _ensure_lines([custom_source_command], completions_file_abs)
@@ -113,19 +131,19 @@ class Complete(ABC):
 
     def __str__(self):
         if not self.args:
-            return self._shell_func_name or ''
+            return self._shell_func_name or ""
 
         args = map(shellquote, map(str, self.args))
         try:
             if not self._shell_func_name:
-                return ' '.join(args)
+                return " ".join(args)
             else:
-                return "{} {}".format(self._shell_func_name, ' '.join(args))
+                return "{} {}".format(self._shell_func_name, " ".join(args))
         except Exception as e:
             warn("Couldn't represent {} as a shell command: {}".format(repr(self), e))
 
     def __repr__(self):
-        return "{}({})".format(self.__class__.__name__, ', '.join(map(repr, self.args)))
+        return "{}({})".format(self.__class__.__name__, ", ".join(map(repr, self.args)))
 
     def to_bash_call(self):
         return str(self)
@@ -147,13 +165,17 @@ class _BashCompletionCompleters:
     This uses simple .attribute access using '_'-stripped bash_completion shell function names."""
 
     def __dir__(self):
-        return [name.lstrip('_') for name in BASH_COMPLETION_FUNCTIONS]
+        return [name.lstrip("_") for name in BASH_COMPLETION_FUNCTIONS]
 
     @lru_cache(None)
     def __getattr__(self, item: str):
-        func_name = '_' + item
+        func_name = "_" + item
         if func_name not in BASH_COMPLETION_FUNCTIONS:
-            warn("'{}' is not registered as a know bash completion function".format(func_name))
+            warn(
+                "'{}' is not registered as a know bash completion function".format(
+                    func_name
+                )
+            )
 
         # always const, so that cli_completer.register(some_type)(BashCompletion.some_completer_name) just works
         bash_completion_cls = const(RawShellFunctionComplete(func_name))
@@ -167,18 +189,18 @@ class CompleteFiles(Complete):
     _shell_func_name = COMPLETE_FILES_FUNC_NAME
 
     def __init__(self, *exts: str):
-        self.args = tuple(e.lstrip('.') for e in exts)
+        self.args = tuple(e.lstrip(".") for e in exts)
 
 
 class CompleteDirs(CompleteFiles):
     def __init__(self):
         # from bash completion docs: "If `-d', complete only on directories"
-        super().__init__('-d')
+        super().__init__("-d")
 
 
 class CompleteFilesAndDirs(CompleteFiles):
     def __init__(self, *exts: str):
-        super().__init__('-d', *exts)
+        super().__init__("-d", *exts)
 
 
 class CompletePythonClassPaths(FixedShellFunctionComplete):
@@ -199,8 +221,10 @@ class _CompletePythonPathsWithTypes(CompletePythonClassPaths):
     _flag = None
 
     def __init__(self, *superclasses):
-        super().__init__(self._flag,
-                         *(parameterized_classpath(cls).replace(' ', '') for cls in superclasses))
+        super().__init__(
+            self._flag,
+            *(parameterized_classpath(cls).replace(" ", "") for cls in superclasses)
+        )
 
 
 class CompletePythonClasses(_CompletePythonPathsWithPrefixes):
@@ -275,8 +299,11 @@ class CompleteKeyValues(_MultiComplete):
 
     def __init__(self, key_completer, val_completer, *args):
         if args:
-            warn("got {} extra args for CompleteKeyValues; {} will be ignored"
-                 .format(len(args), repr(args)))
+            warn(
+                "got {} extra args for CompleteKeyValues; {} will be ignored".format(
+                    len(args), repr(args)
+                )
+            )
         if key_completer is None:
             key_completer = NoComplete
         if val_completer is None:
@@ -288,25 +315,33 @@ class CompleteKeyValues(_MultiComplete):
 
 
 class CompleteTuple(_MultiComplete):
-    sep = '; '
+    sep = "; "
 
 
 class CompleteUnion(_MultiComplete):
-    sep = ' && '
+    sep = " && "
     unique = True
 
 
-def write_bash_completion_for_parser(parser: ArgumentParser, file: IO[str], commands: Sequence[str],
-                                     completion_options: Opt[Union[str, Sequence[str]]]=None,
-                                     shebang: Opt[str]=BASH_SHEBANG):
+def write_bash_completion_for_parser(
+    parser: ArgumentParser,
+    file: IO[str],
+    commands: Sequence[str],
+    completion_options: Opt[Union[str, Sequence[str]]] = None,
+    shebang: Opt[str] = BASH_SHEBANG,
+):
     if isinstance(commands, str):
         commands = [commands]
 
     if completion_options:
-        optionstr = ' -o '.join(completion_options) if not isinstance(completion_options, str) else completion_options
-        optionstr = '-o {} '.format(optionstr)
+        optionstr = (
+            " -o ".join(completion_options)
+            if not isinstance(completion_options, str)
+            else completion_options
+        )
+        optionstr = "-o {} ".format(optionstr)
     else:
-        optionstr = ''
+        optionstr = ""
 
     def print_(*line):
         print(*line, file=file)
@@ -315,12 +350,12 @@ def write_bash_completion_for_parser(parser: ArgumentParser, file: IO[str], comm
     print("WRITING LINES TO {}:".format(file.name), file=sys.stderr)
     if shebang:
         print_(shebang)
-    print_('')
+    print_("")
 
     name = _shortest_identifier(*commands)
     completion_funcname = "_complete_{}".format(name)
 
-    print_('{}() {{'.format(completion_funcname))
+    print_("{}() {{".format(completion_funcname))
     print_('{} """'.format(BASH_COMPLETION_FUNC_NAME))
     print_cli_def_tree(parser, file=file)
     print_('"""')
@@ -333,26 +368,37 @@ def write_bash_completion_for_parser(parser: ArgumentParser, file: IO[str], comm
     print_()
 
 
-def print_cli_def_tree(parser: Union[ArgumentParser, _SubParsersAction],
-                       file: IO[str]=sys.stdout, indent: str=''):
+def print_cli_def_tree(
+    parser: Union[ArgumentParser, _SubParsersAction],
+    file: IO[str] = sys.stdout,
+    indent: str = "",
+):
     args, options, commands = gather_args_options_subparsers(parser)
+
     def print_(*line):
         print(*line, file=file)
         print(*line, file=sys.stderr)
 
     for a in args:
-        print_('{}- {}'.format(indent, completion_spec(a, positional=True)))
+        print_("{}- {}".format(indent, completion_spec(a, positional=True)))
 
     for a in options:
-        print_('{}{} {}'.format(indent, OPTION_SEP.join(a.option_strings), completion_spec(a, positional=False)))
+        print_(
+            "{}{} {}".format(
+                indent,
+                OPTION_SEP.join(a.option_strings),
+                completion_spec(a, positional=False),
+            )
+        )
 
     for name, c in commands:
         print_("{}{}".format(indent, name))
         print_cli_def_tree(c, file, indent=indent + BASH_COMPLETION_TREE_INDENT)
 
 
-def gather_args_options_subparsers(parser: ArgumentParser) -> \
-        Tuple[List[Action], List[Action], List[Tuple[str, Action]]]:
+def gather_args_options_subparsers(
+    parser: ArgumentParser
+) -> Tuple[List[Action], List[Action], List[Tuple[str, Action]]]:
     args = []
     options = []
     commands = []
@@ -371,16 +417,20 @@ def gather_args_options_subparsers(parser: ArgumentParser) -> \
 
 def completion_spec(action: Action, positional=False) -> str:
     if isinstance(action, REPEATABLE_ACTIONS):
-        nreps = '+' if action.required else '*'
+        nreps = "+" if action.required else "*"
     elif positional:
         nreps = None
     else:
-        nreps = '1' if action.required else '?'
+        nreps = "1" if action.required else "?"
 
     nargs = action.nargs if action.nargs is not None else 1
     completer = get_completer(action) if nargs != 0 else None
-    repstr = "{}{}".format(nargs, '' if nreps is None else "({})".format(nreps))
-    return "{} {}".format(repstr, bash_call_str(completer)) if completer is not None else repstr
+    repstr = "{}{}".format(nargs, "" if nreps is None else "({})".format(nreps))
+    return (
+        "{} {}".format(repstr, bash_call_str(completer))
+        if completer is not None
+        else repstr
+    )
 
 
 def get_completer(action: Action) -> Opt[Union[str, List[str], Complete]]:
@@ -412,17 +462,19 @@ def bash_call_str(completer: Union[str, Complete]):
 
 @bash_call_str.register(list)
 def bash_call_str_args_list(args):
-    return ' '.join(map(shellquote, args))
+    return " ".join(map(shellquote, args))
 
 
 def get_user_bash_completion_path() -> str:
     name = str(Path("~") / BASH_COMPLETION_USER_FILENAME)
     absolute = os.path.expanduser(name)
     if os.path.exists(absolute) and not os.path.isfile(absolute):
-        raise FileExistsError("{} is not a file but is required to be by application bash completion")
+        raise FileExistsError(
+            "{} is not a file but is required to be by application bash completion"
+        )
     elif not os.path.exists(absolute):
         # touch the file
-        with open(absolute, 'a'):
+        with open(absolute, "a"):
             pass
     return name
 
@@ -433,7 +485,9 @@ def get_user_bash_completion_dir() -> str:
     if not os.path.exists(absolute):
         os.mkdir(absolute)
     elif not os.path.isdir(absolute):
-        raise NotADirectoryError("{} is not a directory but is required to be by application bash completion")
+        raise NotADirectoryError(
+            "{} is not a directory but is required to be by application bash completion"
+        )
 
     return name
 
@@ -445,7 +499,7 @@ def get_application_bash_completion_helpers_path() -> str:
 
 def _shortest_identifier(*commands: str):
     def to_identifier(name):
-        return re.sub(r'[^.\w]', '_', name)
+        return re.sub(r"[^.\w]", "_", name)
 
     return min(map(to_identifier, commands), key=len)
 
@@ -459,7 +513,7 @@ def _ensure_lines(lines, textfile: str):
     present = set()
 
     if os.path.exists(textfile):
-        with open(textfile, 'r') as outfile:
+        with open(textfile, "r") as outfile:
             for line in map(str.strip, outfile):
                 if line in missing:
                     present.add(line)

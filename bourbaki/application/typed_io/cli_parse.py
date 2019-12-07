@@ -12,18 +12,56 @@ import uuid
 from inspect import Parameter
 from functools import lru_cache
 from warnings import warn
-from bourbaki.introspection.types import (get_named_tuple_arg_types, is_named_tuple_class, issubclass_generic, is_top_type, LazyType, NonStrCollection)
+from bourbaki.introspection.types import (
+    get_named_tuple_arg_types,
+    is_named_tuple_class,
+    issubclass_generic,
+    is_top_type,
+    LazyType,
+    NonStrCollection,
+)
 from bourbaki.introspection.callables import signature
-from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch, UnknownSignature, DEBUG
-from bourbaki.introspection.generic_dispatch_helpers import (CollectionWrapper, MappingWrapper, UnionWrapper,
-                                                                TupleWrapper, LazyWrapper)
+from bourbaki.introspection.generic_dispatch import (
+    GenericTypeLevelSingleDispatch,
+    UnknownSignature,
+    DEBUG,
+)
+from bourbaki.introspection.generic_dispatch_helpers import (
+    CollectionWrapper,
+    MappingWrapper,
+    UnionWrapper,
+    TupleWrapper,
+    LazyWrapper,
+)
 from .cli_complete import cli_completer
 from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs
 from .cli_repr_ import cli_repr
-from .exceptions import CLITypedInputError, CLIIOUndefined, CLIUnionInputError, CLINestedCollectionsNotAllowed
-from .parsers import (parse_iso_date, parse_iso_datetime, parse_range, parse_regex, parse_regex_bytes, parse_bool,
-                      parse_path, EnumParser, FlagParser, TypeCheckImportType, TypeCheckImportFunc)
-from .utils import File, Empty, identity, KEY_VAL_JOIN_CHAR, parser_constructor_for_collection
+from .exceptions import (
+    CLITypedInputError,
+    CLIIOUndefined,
+    CLIUnionInputError,
+    CLINestedCollectionsNotAllowed,
+)
+from .parsers import (
+    parse_iso_date,
+    parse_iso_datetime,
+    parse_range,
+    parse_regex,
+    parse_regex_bytes,
+    parse_bool,
+    parse_path,
+    EnumParser,
+    FlagParser,
+    TypeCheckImportType,
+    TypeCheckImportFunc,
+)
+from .utils import (
+    File,
+    Empty,
+    identity,
+    KEY_VAL_JOIN_CHAR,
+    parser_constructor_for_collection,
+)
 
 NoneType = type(None)
 
@@ -34,7 +72,7 @@ class InvalidCLIParser(TypeError):
 
 def cli_split_keyval(s: str):
     i = s.index(KEY_VAL_JOIN_CHAR)
-    return s[:i], s[i+1:]
+    return s[:i], s[i + 1 :]
 
 
 def cli_parse_bytes(seq: typing.Sequence[str]):
@@ -87,20 +125,36 @@ def _validate_parser(func):
         if len(sig.parameters) == 0:
             raise InvalidCLIParser(msg + "{} takes no arguments!".format(func))
 
-        required = [p for p in sig.parameters.values() if p.default is Parameter.empty
-                    and p.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)]
+        required = [
+            p
+            for p in sig.parameters.values()
+            if p.default is Parameter.empty
+            and p.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD)
+        ]
 
         if len(required) > 1:
-            raise InvalidCLIParser(msg + "{} requires {} args with signature {}".format(func, len(required), sig))
+            raise InvalidCLIParser(
+                msg
+                + "{} requires {} args with signature {}".format(
+                    func, len(required), sig
+                )
+            )
         elif any(p.kind == Parameter.KEYWORD_ONLY for p in required):
-            raise InvalidCLIParser(msg + "{} requires keyword args with signature {}".format(func, sig))
+            raise InvalidCLIParser(
+                msg + "{} requires keyword args with signature {}".format(func, sig)
+            )
         else:
             param = next(iter(sig.parameters.values()))
             if param.kind in (Parameter.KEYWORD_ONLY, Parameter.VAR_KEYWORD):
-                raise InvalidCLIParser(msg + "{} takes only keyword args with signature {}".format(func, sig))
+                raise InvalidCLIParser(
+                    msg
+                    + "{} takes only keyword args with signature {}".format(func, sig)
+                )
             if param.kind is Parameter.VAR_POSITIONAL:
-                warn("{} accepts *args for its first argument; when called as a parser, only one arg will be passed. "
-                     "Is this what was intended?")
+                warn(
+                    "{} accepts *args for its first argument; when called as a parser, only one arg will be passed. "
+                    "Is this what was intended?"
+                )
 
         annotation = param.annotation
 
@@ -108,8 +162,15 @@ def _validate_parser(func):
 
 
 class CLIParserDispatch(GenericTypeLevelSingleDispatch):
-    def register(self, *sig, debug: bool=DEBUG, as_const: bool=False,
-                 derive_nargs: bool=False, derive_repr: bool=False, derive_completer: bool=False):
+    def register(
+        self,
+        *sig,
+        debug: bool = DEBUG,
+        as_const: bool = False,
+        derive_nargs: bool = False,
+        derive_repr: bool = False,
+        derive_completer: bool = False
+    ):
         """
         Register a parser for a type, and optionally, if the following are defined for the parser's single arg
         annotation type and not yet registered, register them too for the type:
@@ -126,9 +187,11 @@ class CLIParserDispatch(GenericTypeLevelSingleDispatch):
             # register an inferred nargs with cli_nargs if possible
             func, type_ = _validate_parser(f)
             if type_ is not None and type_ is not Parameter.empty:
-                for derive, dispatcher in [(derive_nargs, cli_nargs),
-                                           (derive_repr, cli_repr),
-                                           (derive_completer, cli_completer)]:
+                for derive, dispatcher in [
+                    (derive_nargs, cli_nargs),
+                    (derive_repr, cli_repr),
+                    (derive_completer, cli_completer),
+                ]:
                     # if derivation is indicated and the signature is not already registered
                     if derive and sig not in dispatcher.funcs:
                         try:
@@ -187,7 +250,9 @@ class MappingCLIParser(GenericCLIParserMixin, MappingWrapper):
     constructor_allows_iterable = True
 
     def __init__(self, coll_type, key_type=object, val_type=object):
-        if issubclass_generic(key_type, NonStrCollection) or issubclass_generic(val_type, NonStrCollection):
+        if issubclass_generic(key_type, NonStrCollection) or issubclass_generic(
+            val_type, NonStrCollection
+        ):
             raise CLINestedCollectionsNotAllowed((coll_type, key_type, val_type))
         super().__init__(coll_type, key_type, val_type)
         coll_type = self.reduce
@@ -243,7 +308,7 @@ class TupleCLIParser(GenericCLIParserMixin, TupleWrapper):
                 yield args[ix]
                 ix += 1
             elif isinstance(n, int):
-                yield args[ix:ix+n]
+                yield args[ix : ix + n]
                 ix += n
             else:
                 yield args[ix:]
@@ -275,7 +340,9 @@ cli_parser.register(File)(identity)
 cli_parser.register_from_mapping(cli_parse_methods, as_const=True)
 
 
-cli_option_parser = GenericTypeLevelSingleDispatch("cli_option_parser", isolated_bases=cli_parser.isolated_bases)
+cli_option_parser = GenericTypeLevelSingleDispatch(
+    "cli_option_parser", isolated_bases=cli_parser.isolated_bases
+)
 
 
 @cli_option_parser.register(typing.Collection[NonStrCollection])

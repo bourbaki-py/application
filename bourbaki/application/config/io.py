@@ -27,21 +27,37 @@ EMPTY_CONFIG_VALUE = "________"
 # Force indentation for small collections for readability
 YAML_DUMP_KWARGS = dict(default_flow_style=False, width=MAX_PY_WIDTH, indent=2)
 
-loaders = {".yml": yaml.safe_load, ".yaml": yaml.safe_load, ".json": json.load, ".toml": toml.load,
-           ".py": load_python, '.ini': load_ini}
+loaders = {
+    ".yml": yaml.safe_load,
+    ".yaml": yaml.safe_load,
+    ".json": json.load,
+    ".toml": toml.load,
+    ".py": load_python,
+    ".ini": load_ini,
+}
 loader_kw = {}
 
-dumpers = {".yml": yaml.safe_dump, ".yaml": yaml.safe_dump, ".json": json.dump, ".toml": toml.dump,
-           ".py": dump_python, '.ini': dump_ini}
-dumper_kw = {'.json': dict(indent=2), '.yml': YAML_DUMP_KWARGS, '.yaml': YAML_DUMP_KWARGS}
+dumpers = {
+    ".yml": yaml.safe_dump,
+    ".yaml": yaml.safe_dump,
+    ".json": json.dump,
+    ".toml": toml.dump,
+    ".py": dump_python,
+    ".ini": dump_ini,
+}
+dumper_kw = {
+    ".json": dict(indent=2),
+    ".yml": YAML_DUMP_KWARGS,
+    ".yaml": YAML_DUMP_KWARGS,
+}
 
 
 class ConfigFormat(Enum):
-    yaml = yml = '.yml'
-    toml = '.toml'
-    json = '.json'
-    ini = '.ini'
-    py = '.py'
+    yaml = yml = ".yml"
+    toml = ".toml"
+    json = ".json"
+    ini = ".ini"
+    py = ".py"
 
 
 class UnknownConfigExtension(ValueError):
@@ -50,8 +66,9 @@ class UnknownConfigExtension(ValueError):
         self.ext = ext
 
     def __str__(self):
-        return ("Unknown config extension: {}; legal choices are {}"
-                .format(repr(self.ext), tuple(sorted(LEGAL_CONFIG_EXTENSIONS))))
+        return "Unknown config extension: {}; legal choices are {}".format(
+            repr(self.ext), tuple(sorted(LEGAL_CONFIG_EXTENSIONS))
+        )
 
 
 class UnknownConfigLoadExtension(UnknownConfigExtension):
@@ -65,7 +82,7 @@ class UnknownConfigDumpExtension(UnknownConfigExtension):
 
 
 def normalize_ext(ext):
-    return '.' + ext.lstrip('.')
+    return "." + ext.lstrip(".")
 
 
 def _register_config_io(exts, default_kw, func_registry, kw_registry):
@@ -115,25 +132,37 @@ def register_dump_config(*exts: str, **default_kw):
 
 def allow_unsafe_yaml():
     global loaders, dumpers
-    for ext in ('.yml', '.yaml'):
+    for ext in (".yml", ".yaml"):
         loaders[ext] = yaml.load
-    for ext in ('.yml', '.yaml'):
+    for ext in (".yml", ".yaml"):
         dumpers[ext] = yaml.dump
 
 
 def require_safe_yaml():
     global loaders, dumpers
-    for ext in ('.yml', '.yaml'):
+    for ext in (".yml", ".yaml"):
         loaders[ext] = yaml.safe_load
-    for ext in ('.yml', '.yaml'):
+    for ext in (".yml", ".yaml"):
         dumpers[ext] = yaml.safe_dump
 
 
-def _config_io(load: bool, obj: Any, file: IO, ext: str, kw: Opt[Mapping[str, Any]]=None):
+def _config_io(
+    load: bool, obj: Any, file: IO, ext: str, kw: Opt[Mapping[str, Any]] = None
+):
     if load:
-        func_registry, kw_registry, exc_type, args = loaders, loader_kw, UnknownConfigLoadExtension, (file,)
+        func_registry, kw_registry, exc_type, args = (
+            loaders,
+            loader_kw,
+            UnknownConfigLoadExtension,
+            (file,),
+        )
     else:
-        func_registry, kw_registry, exc_type, args = dumpers, dumper_kw, UnknownConfigDumpExtension, (obj, file)
+        func_registry, kw_registry, exc_type, args = (
+            dumpers,
+            dumper_kw,
+            UnknownConfigDumpExtension,
+            (obj, file),
+        )
 
     try:
         io_func = func_registry[ext]
@@ -150,11 +179,11 @@ def _config_io(load: bool, obj: Any, file: IO, ext: str, kw: Opt[Mapping[str, An
     return result
 
 
-def _load_config(file: IO, ext: str, kw: Opt[Mapping[str, Any]]=None):
+def _load_config(file: IO, ext: str, kw: Opt[Mapping[str, Any]] = None):
     return _config_io(True, None, file, ext, kw)
 
 
-def _dump_config(obj: Any, file: IO, ext: str, kw: Opt[Mapping[str, Any]]=None):
+def _dump_config(obj: Any, file: IO, ext: str, kw: Opt[Mapping[str, Any]] = None):
     return _config_io(False, obj, file, ext, kw)
 
 
@@ -166,8 +195,13 @@ def _load_config_dir(config_file, ext=None):
     return dict(zip(stripped_names, map(load, qualified_names)))
 
 
-def load_config(config_file: Union[str, Path, IO], ext: Opt[str]=None,
-                disambiguate: bool=False, namespace: bool=False, **load_kw):
+def load_config(
+    config_file: Union[str, Path, IO],
+    ext: Opt[str] = None,
+    disambiguate: bool = False,
+    namespace: bool = False,
+    **load_kw
+):
     # try to get a name for the file to dispatch on
     if isinstance(config_file, (Path, str)):
         if os.path.isdir(config_file) and disambiguate:
@@ -190,8 +224,10 @@ def load_config(config_file: Union[str, Path, IO], ext: Opt[str]=None,
     # if passed, ext determines the serialization protocol used, otherwise it is inferred from config_file
     if ext is None:
         if filename is None:
-            raise ValueError("To load config from filename {}, you must pass `ext` to specify the "
-                             "serialization protocol".format(config_file))
+            raise ValueError(
+                "To load config from filename {}, you must pass `ext` to specify the "
+                "serialization protocol".format(config_file)
+            )
 
         filename, ext = path_with_ext(filename, ext, disambiguate=disambiguate)
     else:
@@ -211,12 +247,19 @@ def load_config(config_file: Union[str, Path, IO], ext: Opt[str]=None,
     return conf
 
 
-def dump_config(conf: Union[Mapping, Sequence, argparse.Namespace],
-                config_file: Union[str, Path, IO],
-                ext: Opt[Union[ConfigFormat, str]]=None, disambiguate: bool=False,
-                as_dir: bool=False, allow_dir: bool=False, **dump_kw):
+def dump_config(
+    conf: Union[Mapping, Sequence, argparse.Namespace],
+    config_file: Union[str, Path, IO],
+    ext: Opt[Union[ConfigFormat, str]] = None,
+    disambiguate: bool = False,
+    as_dir: bool = False,
+    allow_dir: bool = False,
+    **dump_kw
+):
     if not isinstance(conf, (Mapping, Sequence)):
-        raise ConfigNotSerializable("conf must be a Mapping or Sequence type; got {}".format(type(conf)))
+        raise ConfigNotSerializable(
+            "conf must be a Mapping or Sequence type; got {}".format(type(conf))
+        )
 
     if isinstance(ext, ConfigFormat):
         ext = ext.value
@@ -225,8 +268,11 @@ def dump_config(conf: Union[Mapping, Sequence, argparse.Namespace],
         if ext is None:
             raise ValueError("must provide an extension when as_dir=True")
         if not isinstance(config_file, (Path, str)):
-            raise TypeError("cannot determine a directory from config_file arg of type {}; pass a str or pathlib.Path"
-                            .format(type(config_file)))
+            raise TypeError(
+                "cannot determine a directory from config_file arg of type {}; pass a str or pathlib.Path".format(
+                    type(config_file)
+                )
+            )
         ensure_dir(config_file)
         allow_dir = True
     elif isinstance(config_file, (Path, str)):
@@ -240,7 +286,9 @@ def dump_config(conf: Union[Mapping, Sequence, argparse.Namespace],
             ext = os.path.splitext(fname)[-1]
 
         if not ext:
-            raise ValueError("Could not infer config extension from file {}".format(config_file))
+            raise ValueError(
+                "Could not infer config extension from file {}".format(config_file)
+            )
 
     # file is an open file handle if not a dir, else a Path
     file, close = get_file(config_file, "w", allow_dir=allow_dir)
@@ -248,10 +296,14 @@ def dump_config(conf: Union[Mapping, Sequence, argparse.Namespace],
     if isinstance(file, Path):
         # directory
         if not isinstance(conf, Mapping) or not has_identifier_keys(conf):
-            raise ConfigNotSerializable("Can only dump config of type Mapping[str, Any] with identifier keys to a "
-                                        "directory; got {}".format(type(conf)))
+            raise ConfigNotSerializable(
+                "Can only dump config of type Mapping[str, Any] with identifier keys to a "
+                "directory; got {}".format(type(conf))
+            )
         for name, subconf in conf.items():
-            dump_config(subconf, file / name, ext=ext, as_dir=False, allow_dir=True, **dump_kw)
+            dump_config(
+                subconf, file / name, ext=ext, as_dir=False, allow_dir=True, **dump_kw
+            )
     elif close:
         # file
         with file:

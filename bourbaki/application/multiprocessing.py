@@ -34,14 +34,20 @@ def get_pool(nproc, logger, init=None):
     Make sure your logger's handler is process-safe, e.g. application.logging.MultiProcStreamHandler or
     application.logging.MultiProcRotatingFileHandler"""
     if not isinstance(logger, Logger):
-        raise TypeError("You must pass a logging.Logger instance for logger; got {}".format(type(logger)))
+        raise TypeError(
+            "You must pass a logging.Logger instance for logger; got {}".format(
+                type(logger)
+            )
+        )
 
     if init is None:
         init = init_logger
         initargs = (logger,)
     else:
         if not callable(init):
-            raise TypeError("init must be a callable to be executed at the initialization of a process")
+            raise TypeError(
+                "init must be a callable to be executed at the initialization of a process"
+            )
         init = apply_all(init_logger, init)
         initargs = [[logger]]
 
@@ -69,7 +75,9 @@ class apply_all:
                     if kwargs is None:
                         kwargs = {}
                 else:
-                    raise ValueError("if args are tuples, they must be 2-tuples of (args_tuple, kwargs_dict)")
+                    raise ValueError(
+                        "if args are tuples, they must be 2-tuples of (args_tuple, kwargs_dict)"
+                    )
             if isinstance(a, dict):
                 args, kwargs = (), a
             elif isinstance(a, list):

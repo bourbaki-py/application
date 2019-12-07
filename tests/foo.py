@@ -3,8 +3,7 @@ from bourbaki.application.cli import CommandLineInterface, ArgSource
 from typing import *
 
 cli = CommandLineInterface(
-    prog="foo.py",
-    arg_lookup_order=(ArgSource.CLI, ArgSource.DEFAULTS),
+    prog="foo.py", arg_lookup_order=(ArgSource.CLI, ArgSource.DEFAULTS)
 )
 
 
@@ -22,7 +21,11 @@ class Foo:
         self.x = x
         self.y = y
 
-    def wut(self, tup: Tuple[Tuple[int, int], str, Tuple[complex, ...]], opt: Optional[List[Set[int]]]=None):
+    def wut(
+        self,
+        tup: Tuple[Tuple[int, int], str, Tuple[complex, ...]],
+        opt: Optional[List[Set[int]]] = None,
+    ):
         """
         wut to the wut
         :param tup: crazy nested tuple

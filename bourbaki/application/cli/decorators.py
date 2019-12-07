@@ -48,34 +48,44 @@ class cli_spec:
 
             This will register `do_something_fast` under the command 'do something-fast'
         """
+
         def dec(func):
             func.__command_prefix__ = prefix
             return func
+
         return dec
 
     @staticmethod
     def helpname(name):
         """decorator to apply a name to a function so that it prints in help strings on the command line with an
         appropriate name (usually the name of the return type)"""
+
         def dec(func):
             func.__helpname__ = name
             return func
+
         return dec
 
     @staticmethod
     def config_subsection(*section):
         def dec(func):
             section_ = _maybe_bool(section, fallback=tuple)
-            func.__config_subsections__ = section_ if isinstance(section_, bool) else [section_]
+            func.__config_subsections__ = (
+                section_ if isinstance(section_, bool) else [section_]
+            )
             return func
+
         return dec
 
     @staticmethod
     def config_subsections(*sections):
         def dec(func):
-            func.__config_subsections__ = [tuple(name) if isinstance(name, (list, tuple)) else (name,)
-                                           for name in sections]
+            func.__config_subsections__ = [
+                tuple(name) if isinstance(name, (list, tuple)) else (name,)
+                for name in sections
+            ]
             return func
+
         return dec
 
     @staticmethod
@@ -94,56 +104,69 @@ class cli_spec:
         def dec(f):
             f.__ignore_in_config__ = _maybe_bool(names)
             return f
+
         return dec
 
     @staticmethod
     def parse_config_as_cli(*names):
         """mark argument names to be parsed from configuration files using the parsers applied on the command line"""
+
         def dec(f):
             f.__parse_config_as_cli__ = _maybe_bool(names)
             return f
+
         return dec
 
     @staticmethod
     def ignore_on_cmd_line(*names):
         """mark argument names to be ignored on the command line for the decorated function"""
+
         def dec(f):
             f.__ignore_on_cmd_line__ = _maybe_bool(names)
             return f
+
         return dec
 
     @staticmethod
     def parse_env(**argname_to_envname: str):
         """mark argument names to be parsed from corresponding environment variable names"""
+
         def dec(f):
             f.__parse_env__ = argname_to_envname
             return f
+
         return dec
 
     @staticmethod
     def parse_order(*names):
         """specify the order in which arguments are parsed, for example to allow failing early when some arguments are
         much more costly to parse than others"""
+
         def dec(f):
             f.__parse_order__ = _validate_parse_order(*names)
             return f
+
         return dec
 
     @staticmethod
     def typecheck(*names):
         """mark argument names to be type-checked for the decorated function, or check all arguments if True is passed"""
+
         def dec(f):
             f.__typecheck__ = _maybe_bool(names)
             return f
+
         return dec
 
     @staticmethod
     def metavars(**renames):
         """mark argument names with metavar names as they will appear in the CLI help string, using
         `@cli_spec.metavars(original_var_name=metavar_name, ...)` syntax"""
+
         def dec(f):
             f.__metavars__ = renames
             return f
+
         return dec
 
     @staticmethod
@@ -171,8 +194,12 @@ class cli_spec:
     @staticmethod
     def named_groups(**name_to_argnames: Collection[str]):
         def dec(f):
-            f.__named_groups__ = {name.replace('_', ' '): {argnames} if isinstance(argnames, str) else set(argnames)
-                                  for name, argnames in name_to_argnames.items()}
+            f.__named_groups__ = {
+                name.replace("_", " "): {argnames}
+                if isinstance(argnames, str)
+                else set(argnames)
+                for name, argnames in name_to_argnames.items()
+            }
             return f
 
         return dec

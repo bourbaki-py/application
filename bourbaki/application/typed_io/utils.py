@@ -17,7 +17,12 @@ from urllib.parse import ParseResult as URL
 from functools import lru_cache, singledispatch
 from inspect import Parameter
 from multipledispatch import Dispatcher
-from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class, get_constructor_for, PseudoGenericMeta
+from bourbaki.introspection.types import (
+    deconstruct_generic,
+    is_named_tuple_class,
+    get_constructor_for,
+    PseudoGenericMeta,
+)
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import CallableDocs, ParamDocs, ParamDoc
 from bourbaki.introspection.imports import import_object
@@ -29,13 +34,13 @@ from .exceptions import TypedInputError, TypedOutputError
 Empty = Parameter.empty
 Doc = Union[CallableDocs, ParamDocs, ParamDoc]
 
-READ_MODES = {'r', 'rb', 'r+', 'rb+', 'a+', 'ab+', 'wb+'}
-WRITE_MODES = {'w', 'wb', 'w+', 'wb+', 'a', 'ab', 'a+', 'ab+', 'rb+', 'x', 'xb'}
+READ_MODES = {"r", "rb", "r+", "rb+", "a+", "ab+", "wb+"}
+WRITE_MODES = {"w", "wb", "w+", "wb+", "a", "ab", "a+", "ab+", "rb+", "x", "xb"}
 FILE_MODES = READ_MODES.union(WRITE_MODES)
 
 NARGS_OPTIONS = (ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL, None)
-CLI_PREFIX_CHAR = '-'
-KEY_VAL_JOIN_CHAR = '='
+CLI_PREFIX_CHAR = "-"
+KEY_VAL_JOIN_CHAR = "="
 
 
 class _FileHandleConstructor(PseudoGenericMeta):
@@ -47,13 +52,19 @@ class _FileHandleConstructor(PseudoGenericMeta):
             mode, encoding = mode_enc, None
 
         if cls.mode is not None or cls.encoding is not None:
-            raise TypeError("Can't subscript File more than once; tried to subscript {} with {}"
-                            .format(repr(cls), mode_enc))
+            raise TypeError(
+                "Can't subscript File more than once; tried to subscript {} with {}".format(
+                    repr(cls), mode_enc
+                )
+            )
         mode, encoding, is_binary, base = _file_args(mode, encoding)
         new_cls = BinaryFile if is_binary else TextFile
         mcs = type(cls)
         return type.__new__(
-            mcs, new_cls.__name__, (new_cls, base), dict(__args__=(mode, encoding), __origin__=File)
+            mcs,
+            new_cls.__name__,
+            (new_cls, base),
+            dict(__args__=(mode, encoding), __origin__=File),
         )
 
     def __repr__(cls):
@@ -61,7 +72,7 @@ class _FileHandleConstructor(PseudoGenericMeta):
         if cls.encoding:
             return "{}[{}, {}]".format(tname, repr(cls.mode), repr(cls.encoding))
         if cls.mode:
-            return"{}[{}]".format(tname, repr(cls.mode))
+            return "{}[{}]".format(tname, repr(cls.mode))
         else:
             return tname
 
@@ -75,7 +86,7 @@ class _FileHandleConstructor(PseudoGenericMeta):
 
     @property
     def binary(cls):
-        return 'b' in cls.mode
+        return "b" in cls.mode
 
     @property
     def mode(cls):
@@ -115,6 +126,7 @@ class BinaryFile(File):
 class PositionalMetavarFormatter:
     """Hack to deal with the fact that argparse doesn't allow tuples for positional arg metavars 
     (in contrast to the behavior for options)"""
+
     def __init__(self, *metavar: str, name: str):
         self.metavar = metavar
         self.name = name
@@ -142,7 +154,7 @@ class PositionalMetavarFormatter:
         return str(s)
 
     def __len__(self):
-        return len(self.metavar) #max(map(len, self.metavar))
+        return len(self.metavar)  # max(map(len, self.metavar))
 
 
 def validate_nargs(nargs):
@@ -151,15 +163,18 @@ def validate_nargs(nargs):
             return nargs
         raise ValueError("if an int, nargs must be positive; got {}".format(nargs))
     if nargs not in NARGS_OPTIONS:
-        raise ValueError("nargs must be a positive int or one of {}; got {}"
-                         .format(NARGS_OPTIONS, nargs))
+        raise ValueError(
+            "nargs must be a positive int or one of {}; got {}".format(
+                NARGS_OPTIONS, nargs
+            )
+        )
     return nargs
 
 
 def to_cmd_line_name(s: str, negative_flag=False):
-    name = s.replace('_', '-').rstrip('-')
+    name = s.replace("_", "-").rstrip("-")
     if negative_flag:
-        name = 'no-' + name
+        name = "no-" + name
     return name
 
 
@@ -167,7 +182,9 @@ def cmd_line_arg_names(name, positional=False, prefix_char=None, negative_flag=F
     if not positional:
         if prefix_char is None:
             prefix_char = CLI_PREFIX_CHAR
-        names = ((prefix_char * min(len(name), 2)) + to_cmd_line_name(name, negative_flag),)
+        names = (
+            (prefix_char * min(len(name), 2)) + to_cmd_line_name(name, negative_flag),
+        )
     else:
         names = (name,)
     return names
@@ -176,7 +193,9 @@ def cmd_line_arg_names(name, positional=False, prefix_char=None, negative_flag=F
 def get_dest_name(args, prefix_chars):
     cs = prefix_chars
     try:
-        dest = next(argname.lstrip(cs) for argname in args if len(argname.lstrip(cs)) > 1)
+        dest = next(
+            argname.lstrip(cs) for argname in args if len(argname.lstrip(cs)) > 1
+        )
     except StopIteration:
         dest = args[0]
     return dest
@@ -196,8 +215,7 @@ def to_str_cli_repr(repr_, n: Optional[int] = None):
 @to_str_cli_repr.register(tuple)
 @to_str_cli_repr.register(list)
 def to_str_cli_repr_tuple(repr_, n):
-    return ' '.join(map(to_str_cli_repr, repr_))
-
+    return " ".join(map(to_str_cli_repr, repr_))
 
 
 def normalize_encoding(enc):
@@ -205,8 +223,10 @@ def normalize_encoding(enc):
         return sys.getdefaultencoding()
     enc_ = encodings.search_function(enc)
     if not enc_:
-        raise ValueError("{} is not a valid text encoding; see encodings.aliases.aliases for the set of legal "
-                         "values".format(enc))
+        raise ValueError(
+            "{} is not a valid text encoding; see encodings.aliases.aliases for the set of legal "
+            "values".format(enc)
+        )
     return enc_.name
 
 
@@ -225,12 +245,16 @@ def cached_property(method):
 
 def normalize_file_mode(mode):
     if mode not in FILE_MODES:
-        raise ValueError("{} is not a valid file mode; choose one of {}".format(mode, tuple(FILE_MODES)))
+        raise ValueError(
+            "{} is not a valid file mode; choose one of {}".format(
+                mode, tuple(FILE_MODES)
+            )
+        )
     return mode
 
 
 def is_binary_mode(mode):
-    return 'b' in mode and mode in FILE_MODES
+    return "b" in mode and mode in FILE_MODES
 
 
 def is_write_mode(mode):
@@ -248,8 +272,11 @@ def _file_args(mode, encoding):
         is_binary = True
 
         if encoding is not None:
-            raise ValueError("binary mode {} can't be specified with an encoding; got encoding={}"
-                             .format(repr(mode), repr(encoding)))
+            raise ValueError(
+                "binary mode {} can't be specified with an encoding; got encoding={}".format(
+                    repr(mode), repr(encoding)
+                )
+            )
 
         if is_read_mode(mode) and is_write_mode(mode):
             base = io.BufferedRandom
@@ -297,28 +324,28 @@ def parser_constructor_for_collection(cls):
     return get_constructor_for(cls)
 
 
-byte_repr = '<0-255>'
-regex_repr = '<regex>'
-regex_bytes_repr = '<byte-regex>'
-date_repr = 'YYYY-MM-DD'
-path_repr = '<path>'
-binary_path_repr = '<binary-file>'
-text_path_repr = '<text-file>'
-classpath_type_repr = 'path.to.type[params]'
-classpath_function_repr = 'path.to.function'
+byte_repr = "<0-255>"
+regex_repr = "<regex>"
+regex_bytes_repr = "<byte-regex>"
+date_repr = "YYYY-MM-DD"
+path_repr = "<path>"
+binary_path_repr = "<binary-file>"
+text_path_repr = "<text-file>"
+classpath_type_repr = "path.to.type[params]"
+classpath_function_repr = "path.to.function"
 int_repr = type_spec(int)
 float_repr = type_spec(float)
-decimal_repr = '<decimal-str>'
-fraction_repr = '{i}[/{i}]'.format(i=int_repr)
-complex_repr = '{f}[+{f}j]'.format(f=float_repr)
-range_repr = '{i}:{i}[:{i}]'.format(i=int_repr)
-datetime_repr = 'YYYY-MM-DD[THH:MM:SS[.ms]]'
-ipv4_repr = '<ipaddr>'
-ipv6_repr = '<ipv6addr>'
-url_repr = 'scheme://netloc[/path][;params][?query][#fragment]'
-uuid_repr = '[0-f]{32}'
-ellipsis_ = '...'
-any_repr = '____'
+decimal_repr = "<decimal-str>"
+fraction_repr = "{i}[/{i}]".format(i=int_repr)
+complex_repr = "{f}[+{f}j]".format(f=float_repr)
+range_repr = "{i}:{i}[:{i}]".format(i=int_repr)
+datetime_repr = "YYYY-MM-DD[THH:MM:SS[.ms]]"
+ipv4_repr = "<ipaddr>"
+ipv6_repr = "<ipv6addr>"
+url_repr = "scheme://netloc[/path][;params][?query][#fragment]"
+uuid_repr = "[0-f]{32}"
+ellipsis_ = "..."
+any_repr = "____"
 
 
 default_repr_values = {
@@ -345,7 +372,9 @@ default_repr_values = {
     typing.Callable: classpath_function_repr,
     types.FunctionType: classpath_function_repr,
     types.BuiltinFunctionType: classpath_function_repr,
-    numbers.Number: "|".join((int_repr, float_repr, complex_repr.replace('[', '').replace(']', ''))),
+    numbers.Number: "|".join(
+        (int_repr, float_repr, complex_repr.replace("[", "").replace("]", ""))
+    ),
     numbers.Real: "|".join((int_repr, float_repr)),
     numbers.Integral: int_repr,
 }
@@ -395,8 +424,11 @@ def to_param_doc(param: Doc, name: str) -> Optional[str]:
     elif isinstance(param, ParamDoc):
         return param.doc
     else:
-        raise TypeError("must pass introspection.CallableDocs/Params/Param for a docstring; got {}"
-                        .format(type(param)))
+        raise TypeError(
+            "must pass introspection.CallableDocs/Params/Param for a docstring; got {}".format(
+                type(param)
+            )
+        )
 
 
 class Missing(list):
@@ -413,6 +445,7 @@ class Missing(list):
 
 class IODispatch(Dispatcher):
     """interject a custom exception into the dispatch process"""
+
     exc_type = IOError
 
     def __init__(self, name, return_type, doc=None):
@@ -480,14 +513,23 @@ class TypeCheckOutputFunc(TypeCheckOutput):
 
     def type_check(self, value):
         if not callable(value):
-            raise self.exc_cls(self.type_, value, TypeError("{} is not callable".format(value)))
+            raise self.exc_cls(
+                self.type_, value, TypeError("{} is not callable".format(value))
+            )
         return value
 
     def __call__(self, value):
         path = super().__call__(value)
         if import_object(path) is not value:
-            raise self.exc_cls(self.type_, value, ValueError("classpath {} does not refer to the same object as {}"
-                                                             .format(path, value)))
+            raise self.exc_cls(
+                self.type_,
+                value,
+                ValueError(
+                    "classpath {} does not refer to the same object as {}".format(
+                        path, value
+                    )
+                ),
+            )
         return path
 
 

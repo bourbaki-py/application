@@ -1,4 +1,4 @@
-#coding:utf-8
+# coding:utf-8
 from typing import Union, Dict, Mapping, Any, Optional
 import os
 import io
@@ -12,16 +12,33 @@ from logging.config import dictConfig
 from datetime import datetime
 from .helpers import validate_log_level_int, validate_log_level_str
 from .regexes import log_fields
-from .defaults import DEFAULT_FILE_HANDLER_CONFIG, DEFAULT_CONSOLE_HANDLER_CONFIG, DEFAULT_SMTP_HANDLER_CONFIG
-from .defaults import DEFAULT_FILE_HANDLER_MP_CONFIG, DEFAULT_CONSOLE_HANDLER_MP_CONFIG, DEFAULT_SMTP_HANDLER_MP_CONFIG
-from .defaults import DEFAULT_LOG_DATE_FMT, DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_MSG_MP_FMT, VERBOSE_LOG_MSG_FMT
+from .defaults import (
+    DEFAULT_FILE_HANDLER_CONFIG,
+    DEFAULT_CONSOLE_HANDLER_CONFIG,
+    DEFAULT_SMTP_HANDLER_CONFIG,
+)
+from .defaults import (
+    DEFAULT_FILE_HANDLER_MP_CONFIG,
+    DEFAULT_CONSOLE_HANDLER_MP_CONFIG,
+    DEFAULT_SMTP_HANDLER_MP_CONFIG,
+)
+from .defaults import (
+    DEFAULT_LOG_DATE_FMT,
+    DEFAULT_LOG_MSG_FMT,
+    DEFAULT_LOG_MSG_MP_FMT,
+    VERBOSE_LOG_MSG_FMT,
+)
 from bourbaki.application.config import load_config
 from bourbaki.application.paths import DEFAULT_FILENAME_DATE_FMT
-from .defaults import DEFAULT_FILE_LOG_LEVEL, DEFAULT_CONSOLE_LOG_LEVEL, DEFAULT_SMTP_LOG_LEVEL, empty_config_dict
+from .defaults import (
+    DEFAULT_FILE_LOG_LEVEL,
+    DEFAULT_CONSOLE_LOG_LEVEL,
+    DEFAULT_SMTP_LOG_LEVEL,
+    empty_config_dict,
+)
 
 
-__doc__ = \
-    """
+__doc__ = """
     Application-level logging configuration functions
     example, to configure logging globally, run the following at the start of a script:
     
@@ -31,20 +48,24 @@ __doc__ = \
     configure_logging(logconfig, dated_logfiles=False)  # here we specify that log files will not have run times
                                                         # appended to their names
     
-    # now any class that gets a logger as a child of the root logger (e.g. by having LoggedMeta as its metaclass)
+    # now any class that gets a logger as a child of the root logger
     # will have a logger attached that logs to the correct places, e.g.:
     
-    class MyClass(metaclass=LoggedMeta, instance_naming="int"):
+    class MyClass(Logged):
+        __instance_naming__ = 'int'
+        __verbose__ = True  # log constructor errors
+        
         def __init__(self, *args):
-            # at this point, the class __new__ has been called and the instance 'self' has a logger
-            self.logger.debug("initializing a {} with args {}".format(__class__, args))
+            # a DEBUG-level statement is logged prior to entering this function thanks to the __verbose__ flag
+            # and an ERROR-level statement will be logged if it fails
+            self.args = args
     
     my_instance = MyClass(1, 2, 3)
     my_instance.logger.info("hello!")
     
-    will print to the console and/or log file:
+    will print something like this to the console and/or log file:
     
-    MyClass: <line no> <datetime> DEBUG - creating new instance with args (1, 2, 3)
+    MyClass-1: <line no> <datetime> DEBUG - initializing new instance
     MyClass-1: <line no> <datetime> INFO - hello!
     """
 
@@ -61,22 +82,28 @@ def make_log_format(fields, sep=" - "):
     :param sep: str - separator to put between fields. Default is ' - '
     :return: a log format string usable to configure log formatters
     """
-    assert all(f in log_fields for f in fields), "Only fields from {} are valid".format(tuple(log_fields))
-    return sep.join('%({}){}'.format(f, log_fields[f]) for f in fields)
+    assert all(f in log_fields for f in fields), "Only fields from {} are valid".format(
+        tuple(log_fields)
+    )
+    return sep.join("%({}){}".format(f, log_fields[f]) for f in fields)
 
 
-def configure_default(filename=None, console=True, verbose_format=False,
-                      smtp_credentials=None,
-                      smtp_to_addrs=None,
-                      smtp_mailhost=None,
-                      smtp_tls_credentials=(),
-                      smtp_buffer_capacity=10,
-                      file_level=DEFAULT_FILE_LOG_LEVEL,
-                      console_level=DEFAULT_CONSOLE_LOG_LEVEL,
-                      smtp_level=DEFAULT_SMTP_LOG_LEVEL,
-                      multiprocessing=False,
-                      dated_logfiles=False,
-                      disable_existing_loggers=False):
+def configure_default_logging(
+    filename=None,
+    console=True,
+    verbose_format=False,
+    smtp_credentials=None,
+    smtp_to_addrs=None,
+    smtp_mailhost=None,
+    smtp_tls_credentials=(),
+    smtp_buffer_capacity=10,
+    file_level=DEFAULT_FILE_LOG_LEVEL,
+    console_level=DEFAULT_CONSOLE_LOG_LEVEL,
+    smtp_level=DEFAULT_SMTP_LOG_LEVEL,
+    multiprocessing=False,
+    dated_logfiles=False,
+    disable_existing_loggers=False,
+):
     """
     Batteries-included default configuration in one line.
 
@@ -93,25 +120,29 @@ def configure_default(filename=None, console=True, verbose_format=False,
     else:
         fmt = DEFAULT_LOG_MSG_FMT if not multiprocessing else DEFAULT_LOG_MSG_MP_FMT
 
-    conf = default_config(filename, console, format=fmt,
-                          smtp_credentials=smtp_credentials,
-                          smtp_to_addrs=smtp_to_addrs,
-                          smtp_mailhost=smtp_mailhost,
-                          smtp_tls_credentials=smtp_tls_credentials,
-                          smtp_buffer_capacity=smtp_buffer_capacity,
-                          file_log_level=file_level,
-                          console_log_level=console_level,
-                          smtp_log_level=smtp_level,
-                          multiprocessing=multiprocessing,
-                          disable_existing_loggers=disable_existing_loggers,
-                          dated_logfiles=dated_logfiles)
+    conf = default_config(
+        filename,
+        console,
+        format=fmt,
+        smtp_credentials=smtp_credentials,
+        smtp_to_addrs=smtp_to_addrs,
+        smtp_mailhost=smtp_mailhost,
+        smtp_tls_credentials=smtp_tls_credentials,
+        smtp_buffer_capacity=smtp_buffer_capacity,
+        file_log_level=file_level,
+        console_log_level=console_level,
+        smtp_log_level=smtp_level,
+        multiprocessing=multiprocessing,
+        disable_existing_loggers=disable_existing_loggers,
+        dated_logfiles=dated_logfiles,
+    )
 
     configure_custom(conf)
 
-configure_default_logging = configure_default
 
-
-def configure_debug(filename=None, dated_logfiles=True, disable_existing_loggers=False):
+def configure_debug_logging(
+    filename=None, dated_logfiles=True, disable_existing_loggers=False
+):
     """
     Batteries-included debug-level logging configuration in one line.
     All loggers are set to 'DEBUG' log level and log to console as well as a file, if
@@ -122,19 +153,21 @@ def configure_debug(filename=None, dated_logfiles=True, disable_existing_loggers
       new timestamped file for a fresh run.
     :return: None; this configures logging globally in the logging module
     """
-    conf = default_config(filename=filename, console=True,
-                          file_log_level=DEBUG,
-                          console_log_level=DEBUG,
-                          dated_logfiles=dated_logfiles,
-                          disable_existing_loggers=disable_existing_loggers)
+    conf = default_config(
+        filename=filename,
+        console=True,
+        file_log_level=DEBUG,
+        console_log_level=DEBUG,
+        dated_logfiles=dated_logfiles,
+        disable_existing_loggers=disable_existing_loggers,
+    )
 
     configure_custom(conf)
 
-configure_debug_logging = configure_debug
 
-
-def configure_custom(config: Union[str, Dict[str, Any]],
-                     disable_existing_loggers: Optional[bool]=None):
+def configure_custom(
+    config: Union[str, Dict[str, Any]], disable_existing_loggers: Optional[bool] = None
+):
     """
     Configure the global logging properties for a run of an application
 
@@ -149,14 +182,20 @@ def configure_custom(config: Union[str, Dict[str, Any]],
         config = load_config_from_file(config)
 
     elif not isinstance(config, Mapping):
-        raise ValueError("config must be a path to a config file or a dictionary as accepted by "
-                         "logging.config.dictConfig")
+        raise ValueError(
+            "config must be a path to a config file or a dictionary as accepted by "
+            "logging.config.dictConfig"
+        )
 
-    if disable_existing_loggers is not None and config.get("disable_existing_loggers") != disable_existing_loggers:
+    if (
+        disable_existing_loggers is not None
+        and config.get("disable_existing_loggers") != disable_existing_loggers
+    ):
         config = config.copy()
         config["disable_existing_loggers"] = disable_existing_loggers
 
     dictConfig(config)
+
 
 configure_custom_logging = configure_custom
 
@@ -165,30 +204,35 @@ def load_config_from_file(filename) -> Dict[str, Any]:
     conf = load_config(filename)
 
     if not isinstance(conf, dict):
-        warn("Warning: the loaded config does not appear to be a key-value mapping; a call to "
-              "logging.config.dictConfig or configure_logging will fail.")
+        warn(
+            "Warning: the loaded config does not appear to be a key-value mapping; a call to "
+            "logging.config.dictConfig or configure_logging will fail."
+        )
 
     return conf
 
 
-def default_config(filename: Optional[str]=None, console: bool=True,
-                   file_log_level: LogLevel=DEFAULT_FILE_LOG_LEVEL,
-                   console_log_level: LogLevel=DEFAULT_CONSOLE_LOG_LEVEL,
-                   smtp_log_level: LogLevel=DEFAULT_SMTP_LOG_LEVEL,
-                   root_log_level: Optional[LogLevel]=None,
-                   smtp_credentials=None,
-                   smtp_to_addrs=None,
-                   smtp_mailhost=None,
-                   smtp_tls_credentials=(),
-                   smtp_buffer_capacity=10,
-                   format: str=DEFAULT_LOG_MSG_FMT,
-                   datefmt: str=DEFAULT_LOG_DATE_FMT,
-                   stream: IOSpec="stderr",
-                   multiprocessing=False,
-                   dated_logfiles: bool=False,
-                   max_logfile_bytes: int=2 ** 30,
-                   disable_existing_loggers: bool=True,
-                   check_dir: bool=True):
+def default_config(
+    filename: Optional[str] = None,
+    console: bool = True,
+    file_log_level: LogLevel = DEFAULT_FILE_LOG_LEVEL,
+    console_log_level: LogLevel = DEFAULT_CONSOLE_LOG_LEVEL,
+    smtp_log_level: LogLevel = DEFAULT_SMTP_LOG_LEVEL,
+    root_log_level: Optional[LogLevel] = None,
+    smtp_credentials=None,
+    smtp_to_addrs=None,
+    smtp_mailhost=None,
+    smtp_tls_credentials=(),
+    smtp_buffer_capacity=10,
+    format: str = DEFAULT_LOG_MSG_FMT,
+    datefmt: str = DEFAULT_LOG_DATE_FMT,
+    stream: IOSpec = "stderr",
+    multiprocessing=False,
+    dated_logfiles: bool = False,
+    max_logfile_bytes: int = 2 ** 30,
+    disable_existing_loggers: bool = True,
+    check_dir: bool = True,
+):
     """
     Get a dictionary for configuring logging with a file logger and a console logger.
     The console logger is by default configured at the DEBUG level, while
@@ -223,28 +267,38 @@ def default_config(filename: Optional[str]=None, console: bool=True,
     config["root"]["level"] = root_log_level
 
     if console:
-        console_config = DEFAULT_CONSOLE_HANDLER_CONFIG.copy() if not multiprocessing \
+        console_config = (
+            DEFAULT_CONSOLE_HANDLER_CONFIG.copy()
+            if not multiprocessing
             else DEFAULT_CONSOLE_HANDLER_MP_CONFIG.copy()
+        )
         if stream is not None:
             console_config["stream"] = get_stream_name_for_config(stream)
         console_config["level"] = console_log_level
         config["handlers"]["console"] = console_config
 
     if filename is not None:
-        assert isinstance(filename, str), "filename must be a string, not {}".format(type(filename))
+        assert isinstance(filename, str), "filename must be a string, not {}".format(
+            type(filename)
+        )
         filename = os.path.abspath(filename)
 
         if check_dir:
             logdir = os.path.dirname(filename)
-            assert os.path.isdir(logdir), "the directory '{}' does not exist".format(logdir)
+            assert os.path.isdir(logdir), "the directory '{}' does not exist".format(
+                logdir
+            )
         if max_logfile_bytes is not None:
             assert isinstance(max_logfile_bytes, int), "max_bytes must be an int"
 
         if dated_logfiles:
             filename = append_log_date(filename)
 
-        fileconfig = DEFAULT_FILE_HANDLER_CONFIG.copy() if not multiprocessing \
+        fileconfig = (
+            DEFAULT_FILE_HANDLER_CONFIG.copy()
+            if not multiprocessing
             else DEFAULT_FILE_HANDLER_MP_CONFIG.copy()
+        )
 
         fileconfig["level"] = file_log_level
         fileconfig["filename"] = filename
@@ -252,8 +306,11 @@ def default_config(filename: Optional[str]=None, console: bool=True,
         config["handlers"]["file"] = fileconfig
 
     if smtp_mailhost is not None or smtp_credentials is not None:
-        smtp_config = DEFAULT_SMTP_HANDLER_CONFIG.copy() if not multiprocessing \
+        smtp_config = (
+            DEFAULT_SMTP_HANDLER_CONFIG.copy()
+            if not multiprocessing
             else DEFAULT_SMTP_HANDLER_MP_CONFIG.copy()
+        )
 
         if smtp_to_addrs is None:
             if isinstance(smtp_credentials, (list, tuple)):
@@ -261,12 +318,14 @@ def default_config(filename: Optional[str]=None, console: bool=True,
             elif isinstance(smtp_credentials, str):
                 smtp_to_addrs = [smtp_credentials]
 
-        for name, var in [("level", smtp_log_level),
-                          ("capacity", smtp_buffer_capacity),
-                          ("mailhost", smtp_mailhost),
-                          ("credentials", smtp_credentials),
-                          ("toaddrs", smtp_to_addrs),
-                          ("secure", smtp_tls_credentials)]:
+        for name, var in [
+            ("level", smtp_log_level),
+            ("capacity", smtp_buffer_capacity),
+            ("mailhost", smtp_mailhost),
+            ("credentials", smtp_credentials),
+            ("toaddrs", smtp_to_addrs),
+            ("secure", smtp_tls_credentials),
+        ]:
             if var is not None:
                 smtp_config[name] = var
 
@@ -295,12 +354,13 @@ def all_loggers():
         yield Logger.root
         for log in Logger.manager.loggerDict.values():
             yield log
+
     return list(inner())
 
 
 def logs_to_console(logger):
     def _logs_to_console(handler):
-        return handler.stream.name in ('<stderr>', '<stdout>', 'stderr', 'stdout')
+        return handler.stream.name in ("<stderr>", "<stdout>", "stderr", "stdout")
 
     if isinstance(logger, StreamHandler):
         return _logs_to_console(logger)
@@ -336,10 +396,14 @@ def enable_console_logging(*loggers):
 
 def get_stream_name_for_config(stream: IOSpec) -> Union[str, TextIOWrapper]:
     if isinstance(stream, str):
-        assert stream in ("stdout", "stderr"), "if stream is a string, it must be in ('stdout', 'stderr')"
+        assert stream in (
+            "stdout",
+            "stderr",
+        ), "if stream is a string, it must be in ('stdout', 'stderr')"
     else:
-        assert isinstance(stream, TextIOWrapper), \
-            "if stream is not a string, it must be an instance of _io.TextIOWrapper"
+        assert isinstance(
+            stream, TextIOWrapper
+        ), "if stream is not a string, it must be an instance of _io.TextIOWrapper"
 
     if stream in ("stdout", sys.stdout):
         return "ext://sys.stdout"
@@ -349,7 +413,7 @@ def get_stream_name_for_config(stream: IOSpec) -> Union[str, TextIOWrapper]:
         return stream
 
 
-def append_log_date(filename: str, datestr=None, sep='') -> str:
+def append_log_date(filename: str, datestr=None, sep="") -> str:
     cur_time_str = datestr or datetime.now().strftime(DEFAULT_FILENAME_DATE_FMT)
     name, ext = os.path.splitext(filename)
     return name + sep + cur_time_str + ext

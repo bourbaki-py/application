@@ -4,16 +4,35 @@ import enum
 import itertools
 import numbers
 import pathlib
-from bourbaki.introspection.types import (get_constraints, get_bound, get_generic_args, reconstruct_generic,
-                                          issubclass_generic, is_top_type, is_named_tuple_class,
-                                          get_named_tuple_arg_types, NonAnyStrCollection)
+from bourbaki.introspection.types import (
+    get_constraints,
+    get_bound,
+    get_generic_args,
+    reconstruct_generic,
+    issubclass_generic,
+    is_top_type,
+    is_named_tuple_class,
+    get_named_tuple_arg_types,
+    NonAnyStrCollection,
+)
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.application.completion.completers import (
     completer_argparser_from_type,
-    CompletePythonClasses, CompletePythonSubclasses, CompletePythonCallables, CompleteFiles,
-    CompleteFilesAndDirs, CompleteChoices, CompleteEnum, CompleteUnion, CompleteTuple, CompleteKeyValues,
-    CompleteFloats, CompleteInts, CompleteBools, NoComplete,
+    CompletePythonClasses,
+    CompletePythonSubclasses,
+    CompletePythonCallables,
+    CompleteFiles,
+    CompleteFilesAndDirs,
+    CompleteChoices,
+    CompleteEnum,
+    CompleteUnion,
+    CompleteTuple,
+    CompleteKeyValues,
+    CompleteFloats,
+    CompleteInts,
+    CompleteBools,
+    NoComplete,
 )
 from .cli_repr_ import cli_repr
 from .cli_nargs_ import cli_nargs
@@ -22,9 +41,13 @@ from .utils import File
 NoneType = type(None)
 
 
-cli_completer = GenericTypeLevelSingleDispatch("cli_completer", isolated_bases=[typing.Union])
+cli_completer = GenericTypeLevelSingleDispatch(
+    "cli_completer", isolated_bases=[typing.Union]
+)
 
-cli_completer.register_all(int, bytes, bytearray, numbers.Integral, as_const=True)(CompleteInts())
+cli_completer.register_all(int, bytes, bytearray, numbers.Integral, as_const=True)(
+    CompleteInts()
+)
 
 cli_completer.register_all(float, numbers.Real, as_const=True)(CompleteFloats())
 
@@ -38,7 +61,9 @@ cli_completer.register(typing.Callable, as_const=True)(CompletePythonCallables()
 
 cli_completer.register(NoneType, as_const=True)(NoComplete)
 
-cli_completer.register_all(enum.Enum, enum.Flag, enum.IntEnum, enum.IntFlag)(CompleteEnum)
+cli_completer.register_all(enum.Enum, enum.Flag, enum.IntEnum, enum.IntFlag)(
+    CompleteEnum
+)
 
 
 @cli_completer.register(NonAnyStrCollection)
@@ -114,7 +139,9 @@ def _multi_completer(completer_cls, *types, remove_no_complete=False):
         except NotImplementedError:
             comp = None
 
-        if remove_no_complete and ((comp is None) or isinstance(comp, type(NoComplete))):
+        if remove_no_complete and (
+            (comp is None) or isinstance(comp, type(NoComplete))
+        ):
             pass
         else:
             completers.append(comp or NoComplete)

@@ -14,8 +14,15 @@ class Namespace(Mapping[str, Any]):
     This also adds the option to include multiple config objects/dicts as positional args, whose keys override one
     another from left to right, and are finally overridden by any keyword args that are passed.
     """
-    def __init__(self, *args: Union[Mapping, argparse.Namespace, Iterable[Tuple[str, Any]]], **kwargs: Any):
-        if not all(isinstance(d, (Mapping, argparse.Namespace, Iterable)) for d in args):
+
+    def __init__(
+        self,
+        *args: Union[Mapping, argparse.Namespace, Iterable[Tuple[str, Any]]],
+        **kwargs: Any
+    ):
+        if not all(
+            isinstance(d, (Mapping, argparse.Namespace, Iterable)) for d in args
+        ):
             raise TypeError("all positional args must be dict or argparse.Namespace")
 
         for d in args:
@@ -24,8 +31,10 @@ class Namespace(Mapping[str, Any]):
             elif isinstance(d, (Namespace, argparse.Namespace)):
                 self.__dict__.update(d.__dict__)
             else:
-                raise TypeError("varargs must each be instances of Mapping, argparse.Namespace, "
-                                "or Iterable[Tuple[str, Any]]")
+                raise TypeError(
+                    "varargs must each be instances of Mapping, argparse.Namespace, "
+                    "or Iterable[Tuple[str, Any]]"
+                )
 
         self.__dict__.update(kwargs)
 
@@ -68,20 +77,24 @@ class Namespace(Mapping[str, Any]):
 
 def namespace_pretty_repr(ns, indent_=4):
     name = ns.__class__.__name__
-    break_ = "\n" if len(ns.__dict__) > 0 else ''
-    return ("{}({}{}{})"
-            .format(name,
-                    break_,
-                    indent(",\n".join("{}={}".format(k, namespace_pretty_repr(v, len(k) + 5)
-                                                     if isinstance(v, Namespace) else fmt_pyobj(v)
-                                                     )
-                                      for k, v in sorted(type(ns).items(ns), key=itemgetter(0))
-                                      ),
-                           ' ' * indent_,
-                           ),
-                    break_,
-                    )
-            )
+    break_ = "\n" if len(ns.__dict__) > 0 else ""
+    return "{}({}{}{})".format(
+        name,
+        break_,
+        indent(
+            ",\n".join(
+                "{}={}".format(
+                    k,
+                    namespace_pretty_repr(v, len(k) + 5)
+                    if isinstance(v, Namespace)
+                    else fmt_pyobj(v),
+                )
+                for k, v in sorted(type(ns).items(ns), key=itemgetter(0))
+            ),
+            " " * indent_,
+        ),
+        break_,
+    )
 
 
 @dispatch(_Mapping)

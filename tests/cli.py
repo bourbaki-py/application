@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import time
+
 tic = time.time()
 from typing import *
 import datetime
@@ -13,7 +14,15 @@ from uuid import UUID, uuid4
 import ipaddress
 from pprint import pprint
 from bourbaki.application.logging import Logged
-from bourbaki.application.cli import CommandLineInterface, cli_spec, File, CLI, ENV, CONFIG
+from bourbaki.application.cli import (
+    CommandLineInterface,
+    cli_spec,
+    File,
+    CLI,
+    ENV,
+    CONFIG,
+)
+
 toc = time.time()
 print("Import time: {}s".format(round(toc - tic, 3)))
 
@@ -32,7 +41,13 @@ class FooTuple(NamedTuple):
     baz: datetime.date
 
 
-def pprint_(value, *, outfile: Optional[File['w']] = None, pretty: bool = False, literal: bool = False):
+def pprint_(
+    value,
+    *,
+    outfile: Optional[File["w"]] = None,
+    pretty: bool = False,
+    literal: bool = False
+):
     """
     print value to a file, if specified, else stdout
 
@@ -53,17 +68,17 @@ def pprint_(value, *, outfile: Optional[File['w']] = None, pretty: bool = False,
 cli = CommandLineInterface(
     prog="cli.py",
     use_verbose_flag=True,
-    add_init_config_command=('init', 'config'),
+    add_init_config_command=("init", "config"),
     require_options=False,
     use_config_file=True,
     require_subcommand=True,
     implicit_flags=True,
     allow_abbrev=True,
     source_file=__file__,
-    package='bourbaki.application',
+    package="bourbaki.application",
     output_handler=pprint_,
     arg_lookup_order=(CLI, CONFIG, ENV),
-    package_info_keys=('version', 'license', 'summary', 'platforms'),
+    package_info_keys=("version", "license", "summary", "platforms"),
     suppress_setup_warnings=True,
 )
 
@@ -75,8 +90,11 @@ class MyCommandLineApp(Generic[Num], Logged):
 
     You can also add lots of extensive documentation down here.
     """
+
     @cli_spec.config_subsection("__main__")
-    def __init__(self, a: Num = 1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None):
+    def __init__(
+        self, a: Num = 1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None
+    ):
         """
         :param a: an number called a
         :param b: a list of numbers called b
@@ -101,7 +119,9 @@ class MyCommandLineApp(Generic[Num], Logged):
 
     @cli_spec.ignore_on_cmd_line("cant_parse_me")
     @cli_spec.command_prefix("cant")
-    def cant_parse(self, can_parse_me: List[str], cant_parse_me: Optional[List[List[str]]] = None):
+    def cant_parse(
+        self, can_parse_me: List[str], cant_parse_me: Optional[List[List[str]]] = None
+    ):
         """
         print a thing that can be parsed from the command line and another that can only be parsed from config
         :param can_parse_me: a list of strings, parseable from the command line
@@ -123,7 +143,9 @@ class MyCommandLineApp(Generic[Num], Logged):
         return tup
 
     @cli_spec.command_prefix("print")
-    def print_named_tuple(self, tup: FooTuple = FooTuple(FooEnum.foo, Path("."), datetime.date.today())):
+    def print_named_tuple(
+        self, tup: FooTuple = FooTuple(FooEnum.foo, Path("."), datetime.date.today())
+    ):
         """
         print an instance of a namedtuple
         :param tup: a namedtuple class with 3 fields of mixed type
@@ -153,8 +175,10 @@ class MyCommandLineApp(Generic[Num], Logged):
         """
         return tup
 
-    @cli_spec.named_groups(star_args='ips', kwargs=['named_ips'])
-    def args_and_kwargs(self, *ips: ipaddress.IPv6Address, **named_ips: ipaddress.IPv4Address):
+    @cli_spec.named_groups(star_args="ips", kwargs=["named_ips"])
+    def args_and_kwargs(
+        self, *ips: ipaddress.IPv6Address, **named_ips: ipaddress.IPv4Address
+    ):
         """
         print some named ipv4 addresses
 
@@ -197,7 +221,12 @@ class MyCommandLineApp(Generic[Num], Logged):
         return uuid or uuid4()
 
     @cli_spec.command_prefix("print")
-    def numbers(self, x: Optional[Decimal] = None, y: Optional[Fraction] = None, z: Optional[complex] = None):
+    def numbers(
+        self,
+        x: Optional[Decimal] = None,
+        y: Optional[Fraction] = None,
+        z: Optional[complex] = None,
+    ):
         """
         print varying numeric types of data
         :param x: an arbitrary-precision decimal
@@ -208,7 +237,7 @@ class MyCommandLineApp(Generic[Num], Logged):
         return x, y, z
 
     @cli_spec.command_prefix("print")
-    @cli_spec.parse_config_as_cli('b')
+    @cli_spec.parse_config_as_cli("b")
     def bytes(self, b: bytes):
         """
         print some bytes
@@ -237,8 +266,15 @@ class MyCommandLineApp(Generic[Num], Logged):
 
     @cli_spec.command_prefix("print")
     @cli_spec.no_output_handler
-    @cli_spec.parse_config_as_cli('boolean1')
-    def flags(self, boolean1: bool = False, boolean2: bool = False, *, flag1: bool = False, flag2: bool = True):
+    @cli_spec.parse_config_as_cli("boolean1")
+    def flags(
+        self,
+        boolean1: bool = False,
+        boolean2: bool = False,
+        *,
+        flag1: bool = False,
+        flag2: bool = True
+    ):
         """
         print some boolean flags
         :param flag1: a flag which is False by default

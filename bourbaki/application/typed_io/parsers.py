@@ -27,25 +27,30 @@ class TypedIOException(ValueError):
 
 class TypedIOParseError(TypedIOException):
     def __str__(self):
-        return "Could not parse value of type {} from {}".format(self.type_, repr(self.value))
+        return "Could not parse value of type {} from {}".format(
+            self.type_, repr(self.value)
+        )
 
 
 class TypedIOConfigReprError(TypedIOException):
     def __str__(self):
-        return "Could not represent value {} for type {} in config-safe way".format(repr(self.value), self.type_)
+        return "Could not represent value {} for type {} in config-safe way".format(
+            repr(self.value), self.type_
+        )
 
 
-bool_constants = {
-    'true': True,
-    'false': False,
-}
+bool_constants = {"true": True, "false": False}
 
 
 def parse_bool(s, exc_type):
     try:
         return bool_constants[s.lower()]
     except KeyError as e:
-        raise exc_type(bool, s, ValueError("Legal boolean constants are {}".format(tuple(bool_constants))))
+        raise exc_type(
+            bool,
+            s,
+            ValueError("Legal boolean constants are {}".format(tuple(bool_constants))),
+        )
 
 
 def parse_regex(s: str):
@@ -67,12 +72,14 @@ def parse_iso_date(s):
 def parse_iso_datetime(s):
     dt = None
     strptime = datetime.datetime.strptime
-    for fmt in ("%Y-%m-%dT%H:%M:%S.%f+%z",
-                "%Y-%m-%dT%H:%M:%S.%f",
-                "%Y-%m-%dT%H:%M:%S",
-                "%Y-%m-%dT%H:%M",
-                "%Y-%m-%dT%H",
-                "%Y-%m-%d"):
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S.%f+%z",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M",
+        "%Y-%m-%dT%H",
+        "%Y-%m-%d",
+    ):
         try:
             dt = strptime(s, fmt)
         except ValueError:
@@ -84,7 +91,7 @@ def parse_iso_datetime(s):
     return dt
 
 
-range_pat = re.compile(r'(-?[0-9]+)([-:,])(-?[0-9]+)(?:\2(-?[0-9]+))?')
+range_pat = re.compile(r"(-?[0-9]+)([-:,])(-?[0-9]+)(?:\2(-?[0-9]+))?")
 
 
 def parse_range(s):
@@ -103,10 +110,10 @@ class EnumParser:
         self.enum = enum_
 
     def cli_repr(self) -> str:
-        return '{{{}}}'.format('|'.join(e.name for e in self.enum))
+        return "{{{}}}".format("|".join(e.name for e in self.enum))
 
     def config_repr(self) -> str:
-        return '|'.join(e.name for e in self.enum)
+        return "|".join(e.name for e in self.enum)
 
     def _parse(self, arg, exc_type=TypedIOParseError):
         try:
@@ -132,12 +139,14 @@ class FlagParser(EnumParser):
         super().__init__(enum_)
 
     def _parse(self, arg, exc_type=TypedIOParseError):
-        parts = arg.split('|')
+        parts = arg.split("|")
         parse = super(type(self), self)._parse
         es = (parse(e, exc_type) for e in parts)
         return reduce(operator.or_, es)
 
-    def config_decode(self, value: Union[str, Sequence[str], AbstractSet[str]]) -> enum.Flag:
+    def config_decode(
+        self, value: Union[str, Sequence[str], AbstractSet[str]]
+    ) -> enum.Flag:
         if isinstance(value, str):
             return self._parse(value)
         elif not isinstance(value, typing.Collection):
@@ -157,7 +166,7 @@ class FlagParser(EnumParser):
             if b:
                 vals.append(e)
             e *= 2
-        return '|'.join(self.enum(i).name for i in vals)
+        return "|".join(self.enum(i).name for i in vals)
 
 
 EnumParser = lru_cache(None)(EnumParser)
@@ -178,5 +187,9 @@ class TypeCheckImportType(TypeCheckImport):
     def type_check(self, type_):
         if not isinstance_generic(type_, self.type_):
             bound = concretize_typevars(get_generic_args(self.type_)[0])
-            raise self.exc_cls(self.type_, type_, TypeError("{} is not a subclass of {}".format(type_, bound)))
+            raise self.exc_cls(
+                self.type_,
+                type_,
+                TypeError("{} is not a subclass of {}".format(type_, bound)),
+            )
         return type_

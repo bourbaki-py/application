@@ -32,4 +32,9 @@ the constructor as in `argparse.ArgumentParser` (an error is thrown if no `prog`
 
 from .compgen_python_classpaths import COMPLETION_DEBUG_ENV_VAR
 from .completers import install_shell_completion
-from .completers import Complete, RawShellFunctionComplete, FixedShellFunctionComplete, BashCompletion
+from .completers import (
+    Complete,
+    RawShellFunctionComplete,
+    FixedShellFunctionComplete,
+    BashCompletion,
+)
