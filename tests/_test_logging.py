@@ -148,7 +148,7 @@ def test_logged_class_pickle(test_pickle_path):
         ti4 = pickle.load(f)
 
     ti4.logger.info("Still kickin'!")
-    assert ti4.__log_name__ == ti3.__log_name__
+    assert ti4.__logname__ == ti3.__logname__
     assert ti4.logger.name == ti3.logger.name
 
 

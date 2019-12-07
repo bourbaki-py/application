@@ -31,20 +31,24 @@ __doc__ = \
     configure_logging(logconfig, dated_logfiles=False)  # here we specify that log files will not have run times
                                                         # appended to their names
     
-    # now any class that gets a logger as a child of the root logger (e.g. by having LoggedMeta as its metaclass)
+    # now any class that gets a logger as a child of the root logger
     # will have a logger attached that logs to the correct places, e.g.:
     
-    class MyClass(metaclass=LoggedMeta, instance_naming="int"):
+    class MyClass(Logged):
+        __instance_naming__ = 'int'
+        __verbose__ = True  # log constructor errors
+        
         def __init__(self, *args):
-            # at this point, the class __new__ has been called and the instance 'self' has a logger
-            self.logger.debug("initializing a {} with args {}".format(__class__, args))
+            # a DEBUG-level statement is logged prior to entering this function thanks to the __verbose__ flag
+            # and an ERROR-level statement will be logged if it fails
+            self.args = args
     
     my_instance = MyClass(1, 2, 3)
     my_instance.logger.info("hello!")
     
-    will print to the console and/or log file:
+    will print something like this to the console and/or log file:
     
-    MyClass: <line no> <datetime> DEBUG - creating new instance with args (1, 2, 3)
+    MyClass-1: <line no> <datetime> DEBUG - initializing new instance
     MyClass-1: <line no> <datetime> INFO - hello!
     """
 
@@ -65,18 +69,21 @@ def make_log_format(fields, sep=" - "):
     return sep.join('%({}){}'.format(f, log_fields[f]) for f in fields)
 
 
-def configure_default(filename=None, console=True, verbose_format=False,
-                      smtp_credentials=None,
-                      smtp_to_addrs=None,
-                      smtp_mailhost=None,
-                      smtp_tls_credentials=(),
-                      smtp_buffer_capacity=10,
-                      file_level=DEFAULT_FILE_LOG_LEVEL,
-                      console_level=DEFAULT_CONSOLE_LOG_LEVEL,
-                      smtp_level=DEFAULT_SMTP_LOG_LEVEL,
-                      multiprocessing=False,
-                      dated_logfiles=False,
-                      disable_existing_loggers=False):
+def configure_default_logging(
+        filename=None,
+        console=True,
+        verbose_format=False,
+        smtp_credentials=None,
+        smtp_to_addrs=None,
+        smtp_mailhost=None,
+        smtp_tls_credentials=(),
+        smtp_buffer_capacity=10,
+        file_level=DEFAULT_FILE_LOG_LEVEL,
+        console_level=DEFAULT_CONSOLE_LOG_LEVEL,
+        smtp_level=DEFAULT_SMTP_LOG_LEVEL,
+        multiprocessing=False,
+        dated_logfiles=False,
+        disable_existing_loggers=False):
     """
     Batteries-included default configuration in one line.
 
@@ -108,10 +115,8 @@ def configure_default(filename=None, console=True, verbose_format=False,
 
     configure_custom(conf)
 
-configure_default_logging = configure_default
 
-
-def configure_debug(filename=None, dated_logfiles=True, disable_existing_loggers=False):
+def configure_debug_logging(filename=None, dated_logfiles=True, disable_existing_loggers=False):
     """
     Batteries-included debug-level logging configuration in one line.
     All loggers are set to 'DEBUG' log level and log to console as well as a file, if
@@ -129,8 +134,6 @@ def configure_debug(filename=None, dated_logfiles=True, disable_existing_loggers
                           disable_existing_loggers=disable_existing_loggers)
 
     configure_custom(conf)
-
-configure_debug_logging = configure_debug
 
 
 def configure_custom(config: Union[str, Dict[str, Any]],

@@ -27,7 +27,7 @@ from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 # callables.signature is an lru_cache'ed inspect.signature
 from bourbaki.introspection.callables import signature, fully_concrete_signature, funcname, is_method
 from ..completion.completers import CompleteFiles, install_shell_completion
-from ..logging import configure_default_logging, Logged, LoggedMeta, ProgressLogger
+from ..logging import configure_default_logging, Logged, ProgressLogger
 from ..logging.helpers import validate_log_level_int
 from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
@@ -172,7 +172,7 @@ class PicklableArgumentParser(ArgumentParser):
         return subparser.get_nested_subparser(*cmd_path[1:])
 
 
-class CommandLineInterface(PicklableArgumentParser, Logged, metaclass=LoggedMeta):
+class CommandLineInterface(PicklableArgumentParser, Logged):
     """
     Subclass of argparse.ArgumentParser which infers command line interfaces and documentation from functions and
     classes. Type annotations determine parsers for command line args and configuration values, and
@@ -1366,7 +1366,7 @@ class SubCommandFunc(Logged):
         self.func_name = func_name
         self.cmd_prefix = command_prefix
         self.cmd_name = cmd_name
-        self.__log_name__ = ".".join((argparser_cmd_name, *self.cmd_prefix, self.cmd_name))
+        self.__logname__ = ".".join((argparser_cmd_name, *self.cmd_prefix, self.cmd_name))
         self.docs = docs
         self.output_docs = output_docs
         self.func = func

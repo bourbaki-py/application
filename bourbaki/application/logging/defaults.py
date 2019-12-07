@@ -2,11 +2,6 @@
 from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
 # Useful default configurations
 
-VERBOSE_INSTANCE_INITS = False
-VERBOSE_FUNCTION_CALLS = False  # with these true, all logged class inits and logged function
-                                # calls are logged with a full signature including the reprs
-                                # of the args - good for debug but potentially expensive
-
 MAX_REPR_LEN = 24  # the max string len used for representing args in verbose function call
                    # signature logging
 
@@ -15,12 +10,6 @@ DEFAULT_PROGRESS_LOG_LEVEL = "INFO"
 FULL_PATH_LOGGER_NAMING = False  # use the fully qualified class path in the names of class/function
                                  # loggers? Module name is already included in the default log format,
                                  # which makes it an automatically accessible field in a log file parse
-
-DEFAULT_INSTANCE_NAMING = None  # Don't append an instance name to the class logger for new class
-                                # instances. Other options are "int", "hex", "keyword"
-
-DEFAULT_LOG_NAME_KEYWORD = "log_name"  # the kwarg that is added to the __init__ signature for
-                                       # a class when using the metaclass LoggedMeta
 
 DEFAULT_LOG_DATE_FMT = '%y-%m-%d %H:%M:%S'
 
