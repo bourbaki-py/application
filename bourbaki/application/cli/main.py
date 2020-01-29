@@ -1969,7 +1969,7 @@ class SubCommandFunc(Logged):
                 namespace, self.output_signature_spec
             )
         else:
-            output_values, output_missing = (), ()
+            output_values, output_missing = [], []
         main_values, main_missing = self._prepare_raw_values(
             namespace, self.main_signature_spec
         )
