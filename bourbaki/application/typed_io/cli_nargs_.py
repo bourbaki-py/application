@@ -20,8 +20,6 @@ from .exceptions import CLIIOUndefined
 NoneType = type(None)
 
 NestedCollectionTypes = (
-    typing.Collection[NonStrCollection],
-    typing.Tuple[NonStrCollection, ...],
     typing.Mapping[NonStrCollection, typing.Any],
     typing.Mapping[typing.Any, NonStrCollection],
 )
@@ -101,6 +99,14 @@ def nested_collections_cli_error(t, *args):
     raise NestedCollectionsCLIArgError((t, *args))
 
 
+@cli_nargs.register(typing.Collection[NonStrCollection])
+@cli_nargs.register(typing.Tuple[NonStrCollection, ...])
+def nested_option_nargs(t, *types):
+    if len(types) > 1 and not (len(types) == 2 and types[1] is Ellipsis):
+        raise CLIIOUndefined(t, *types)
+    return cli_nargs(types[0])
+
+
 @cli_nargs.register(typing.Tuple)
 def tuple_nargs(t, *types):
     if not types and is_named_tuple_class(t):
@@ -123,19 +129,7 @@ def union_nargs(u, *types):
     return next(iter(all_nargs))
 
 
-cli_option_nargs = GenericTypeLevelSingleDispatch(
-    "cli_option_nargs", isolated_bases=[typing.Union]
-)
-
-cli_option_nargs.funcs.update(cli_nargs.funcs)
-
-
-@cli_option_nargs.register(typing.Collection[NonStrCollection])
-def nested_option_nargs(t, *types):
-    if len(types) > 1:
-        raise CLIIOUndefined(t, *types)
-    return cli_nargs(types[0])
-
+cli_option_nargs = cli_nargs
 
 cli_action = GenericTypeLevelSingleDispatch(
     "cli_action", isolated_bases=[typing.Union, typing.Tuple]

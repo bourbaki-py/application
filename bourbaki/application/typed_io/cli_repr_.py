@@ -113,7 +113,8 @@ def cli_repr_seq(s, t=typing.Any):
 
 
 @cli_repr.register(typing.Collection[NonStrCollection])
-def cli_repr_nested_seq(s, t=typing.Any):
+@cli_repr.register(typing.Tuple[NonStrCollection, ...])
+def cli_repr_nested_seq(s, t=typing.Any, ellipsis=Ellipsis):
     # this allows going down one level of nesting in the case of options where an append mode can parse
     return cli_repr(t)
 

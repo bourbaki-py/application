@@ -1,10 +1,11 @@
 # coding:utf-8
-from typing import Optional, Tuple, Dict, Union
+from typing import Optional, Tuple, Dict, Collection, Union
 import enum
 from inspect import Parameter
 from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
-from bourbaki.introspection.types import deconstruct_generic, is_named_tuple_class
+from bourbaki.introspection.types import get_generic_args, deconstruct_generic, is_named_tuple_class, issubclass_generic
+from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli_parse import cli_parser, cli_option_parser
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_repr_ import cli_repr
@@ -49,7 +50,6 @@ class TypedIO(PicklableWithType):
     @lru_cache(None)
     def __new__(cls, type_, *args):
         new = object.__new__(cls)
-        cls.__init__(new, type_, *args)
         return new
 
     def __repr__(self):
@@ -245,6 +245,14 @@ class TypedIO(PicklableWithType):
         return cli_nargs(self.type_) == OPTIONAL
 
     @cached_property
+    def is_nested_collection(self):
+        return issubclass_generic(self.type_, Collection[NonStrCollection])
+
+    @cached_property
+    def is_collection(self):
+        return issubclass_generic(self.type_, NonStrCollection)
+
+    @cached_property
     def cli_repr(self):
         return cli_repr(self.type_)
 
@@ -295,20 +303,27 @@ class TypedIO(PicklableWithType):
         else:
             has_default = True
 
-        if kind == Parameter.VAR_KEYWORD:
-            variadic = True
-            default = {}
+        if self.is_nested_collection:
+            # nested collections always have to be parsed as options with an append action
+            type_per_option = get_generic_args(self.type_)[0]
             positional = False
-        elif kind == Parameter.VAR_POSITIONAL:
             variadic = True
-            positional = allow_positionals
-        elif kind == Parameter.KEYWORD_ONLY:
-            variadic = False
-            positional = False
         else:
-            # Parameter.POSITIONAL_OR_KEYWORD and Parameter.POSITIONAL_ONLY
-            variadic = self.is_variadic
-            positional = allow_positionals
+            type_per_option = self.type_
+            if kind == Parameter.VAR_KEYWORD:
+                variadic = True
+                default = {}
+                positional = False
+            elif kind == Parameter.VAR_POSITIONAL:
+                variadic = True
+                positional = True
+            elif kind == Parameter.KEYWORD_ONLY:
+                variadic = self.is_collection
+                positional = False
+            else:
+                # Parameter.POSITIONAL_OR_KEYWORD and Parameter.POSITIONAL_ONLY
+                variadic = self.is_variadic
+                positional = allow_positionals
 
         required = not has_default and not has_fallback and not variadic
         doc = to_param_doc(docs, name)
@@ -350,10 +365,10 @@ class TypedIO(PicklableWithType):
                     metavar = "NAME{}{}".format(
                         KEY_VAL_JOIN_CHAR, name.upper().rstrip("S")
                     )
-                elif is_named_tuple_class(self.type_):
+                elif is_named_tuple_class(type_per_option):
                     metavar = tuple(
-                        to_str_cli_repr(k, cli_nargs(v))
-                        for k, v in self.type_.__annotations__.items()
+                        to_str_cli_repr(k.upper(), cli_nargs(v))
+                        for k, v in type_per_option.__annotations__.items()
                     )
                 elif positional:
                     metavar = name.upper()
@@ -407,9 +422,6 @@ class TypedIO(PicklableWithType):
         helpstr = "; ".join(s for s in (type_str, help_, actionstr, defaultstr) if s)
         if helpstr:
             kw["help"] = helpstr
-
-        if kw.get("nargs") == 0:
-            print(name, kw)
 
         return names, kw, positional
 
