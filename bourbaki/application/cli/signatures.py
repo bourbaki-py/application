@@ -98,10 +98,10 @@ class CLISignatureSpec(NamedTuple):
     def overriding(self, *others: "CLISignatureSpec") -> "CLISignatureSpec":
         namespaces = [n.nonnull_attrs for n in chain((self,), others)]
         metavars = ChainMap(*filter(None, (n.get("metavars") for n in namespaces)))
-        result = CLISignatureSpec(**ChainMap({"metavars": metavars}, *namespaces))
-        if result.require_options is None:
-            result.require_options = False
-        return result
+        attrs = ChainMap({"metavars": metavars}, *namespaces)
+        if attrs.get('require_options') is None:
+            attrs['require_options'] = False
+        return CLISignatureSpec(**attrs)
 
     def configure(
         self, sig: Signature, warn_missing: Optional[Callable[[str], None]] = None
