@@ -209,11 +209,11 @@ class cli_attrs:
     """retrieve properties set on functions by cli_spec methods"""
 
     @staticmethod
-    def allow_positional_args(f, default=True):
+    def allow_positional_args(f, default=None):
         return getattr(f, "__allow_positional_args__", default)
 
     @staticmethod
-    def require_options(f, default=False):
+    def require_options(f, default=None):
         if hasattr(f, "__allow_positional_args__"):
             return not cli_attrs.allow_positional_args(f)
         return default
