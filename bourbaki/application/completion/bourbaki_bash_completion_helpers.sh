@@ -37,6 +37,7 @@
 #    _bourbaki_register_completion_from_spec my_awesome_cli "$MY_AWESOME_CLI_SPEC"
 
 [ "${BOURBAKI_COMPLETION_DEBUG+x}" ] || export BOURBAKI_COMPLETION_DEBUG=false
+[ "${BOURBAKI_ALWAYS_COMPLETE_COMMANDS+x}" ] || export BOURBAKI_ALWAYS_COMPLETE_COMMANDS=true
 export BOURBAKI_KEYVAL_SPLIT_CHAR="="
 export BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
 BASH_COMPLETION_FILEDIR="_filedir"
@@ -285,12 +286,15 @@ _bourbaki_complete() {
 
     _bourbaki_debug -r $'\n'"EXIT LOOP: STATE = $state"
 
-    remaining_opts=($(_remaining_opts -r))
-    # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
-    if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
-        _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"
-        complete_cmds=false
-    fi
+    if $BOURBAKI_ALWAYS_COMPLETE_COMMANDS; then
+        complete_cmds=true
+    else:
+        remaining_opts=($(_remaining_opts -r))
+        # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
+        if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
+            _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"
+            complete_cmds=false
+        fi
 
     _bourbaki_debug "complete commands: $complete_cmds; complete options: $complete_opts; complete arg $complete_group"
     $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "option group repetition limits: $(_optcounts limit)" &&\

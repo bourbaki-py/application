@@ -8,14 +8,16 @@ Usage:
     compgen_python_classpaths.py IMPORT_PREFIX --instance [classpath1 [classpath2 [...]]]
 """
 
+from itertools import chain
 import os
 import sys
 import typing
 from typing import Union
 from warnings import warn
 
+scriptname = 'compgen_python_classpaths.py'
+
 Module = type(sys)
-from itertools import chain
 
 issubclass_generic = None
 isinstance_generic = None
@@ -32,7 +34,7 @@ DEBUG = os.environ.get(COMPLETION_DEBUG_ENV_VAR, "").lower().strip()
 if DEBUG == "true" or (DEBUG.isdigit() and DEBUG != "0"):
     warn(
         "Found environment variable {}={}; verbose output will be generated for {}".format(
-            COMPLETION_DEBUG_ENV_VAR, DEBUG, __file__
+            COMPLETION_DEBUG_ENV_VAR, DEBUG, scriptname
         )
     )
     DEBUG = True if not DEBUG.isdigit() else int(DEBUG)
@@ -169,7 +171,7 @@ def _debug(msg: str, **kw):
         ENDC = "\033[0m"
         print(
             "\033[92m{}: {}\033[0m".format(
-                os.path.basename(__file__), msg.format(**kw)
+                scriptname, msg.format(**kw)
             ),
             file=sys.stderr,
         )

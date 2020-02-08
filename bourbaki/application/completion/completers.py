@@ -3,9 +3,10 @@ from typing import IO, List, Tuple, Sequence, Union, Optional as Opt
 from abc import ABC
 import argparse
 from argparse import ArgumentParser, Action, FileType, _SubParsersAction
-from functools import singledispatch, lru_cache, partial
+from functools import singledispatch, lru_cache
 import os
 from pathlib import Path
+import pkgutil
 import re
 from shlex import quote
 import sys
@@ -533,7 +534,7 @@ def _ensure_lines(lines, textfile: str):
 
 
 def _install_shell_completion_helpers(completions_helpers_file):
-    source = os.path.join(os.path.dirname(__file__), BASH_COMPLETION_HELPERS_FILENAME)
+    source = pkgutil.get_data('bourbaki.application.completion', BASH_COMPLETION_HELPERS_FILENAME)
     completions_helpers_file_absolute = os.path.expanduser(completions_helpers_file)
 
     if not os.path.exists(completions_helpers_file_absolute):
@@ -545,7 +546,5 @@ def _install_shell_completion_helpers(completions_helpers_file):
         return
 
     print(msg.format(completions_helpers_file), file=sys.stderr)
-    with open(source, "r") as infile:
-        with open(completions_helpers_file_absolute, "w") as outfile:
-            for line in infile:
-                outfile.write(line)
+    with open(completions_helpers_file_absolute, "wb") as outfile:
+        outfile.write(source)
