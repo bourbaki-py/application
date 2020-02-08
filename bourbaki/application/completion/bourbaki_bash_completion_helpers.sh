@@ -288,13 +288,14 @@ _bourbaki_complete() {
 
     if $BOURBAKI_ALWAYS_COMPLETE_COMMANDS; then
         complete_cmds=true
-    else:
+    else
         remaining_opts=($(_remaining_opts -r))
         # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
         if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
             _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"
             complete_cmds=false
         fi
+    fi
 
     _bourbaki_debug "complete commands: $complete_cmds; complete options: $complete_opts; complete arg $complete_group"
     $BOURBAKI_COMPLETION_DEBUG && _bourbaki_debug "option group repetition limits: $(_optcounts limit)" &&\
