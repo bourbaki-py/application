@@ -537,14 +537,7 @@ def _install_shell_completion_helpers(completions_helpers_file):
     source = pkgutil.get_data('bourbaki.application.completion', BASH_COMPLETION_HELPERS_FILENAME)
     completions_helpers_file_absolute = os.path.expanduser(completions_helpers_file)
 
-    if not os.path.exists(completions_helpers_file_absolute):
-        msg = "INSTALLING APPUTILS COMPLETION HELPERS in {}"
-    elif os.stat(source).st_mtime > os.stat(completions_helpers_file_absolute).st_mtime:
-        # probably a new version; should be updated
-        msg = "REINSTALLING APPUTILS COMPLETION HELPERS in {}"
-    else:
-        return
-
-    print(msg.format(completions_helpers_file), file=sys.stderr)
-    with open(completions_helpers_file_absolute, "wb") as outfile:
-        outfile.write(source)
+    with open(completions_helpers_file_absolute, "wb+") as outfile:
+        if source != outfile.read():
+            outfile.seek(0)
+            outfile.write(source)
