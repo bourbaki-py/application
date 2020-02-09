@@ -286,10 +286,8 @@ _bourbaki_complete() {
 
     _bourbaki_debug -r $'\n'"EXIT LOOP: STATE = $state"
 
-    if $BOURBAKI_ALWAYS_COMPLETE_COMMANDS; then
-        complete_cmds=true
-    else
-        remaining_opts=($(_remaining_opts -r))
+    remaining_opts=($(_remaining_opts -r))
+    if ! $BOURBAKI_ALWAYS_COMPLETE_COMMANDS; then
         # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
         if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
             _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"

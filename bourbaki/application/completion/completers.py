@@ -539,5 +539,6 @@ def _install_shell_completion_helpers(completions_helpers_file):
 
     with open(completions_helpers_file_absolute, "wb+") as outfile:
         if source != outfile.read():
+            print("REINSTALLING BASH COMPLETION HELPERS AT {}".format(completions_helpers_file_absolute), file=sys.stderr)
             outfile.seek(0)
             outfile.write(source)
