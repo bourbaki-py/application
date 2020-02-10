@@ -534,11 +534,13 @@ def _ensure_lines(lines, textfile: str):
 
 
 def _install_shell_completion_helpers(completions_helpers_file):
-    source = pkgutil.get_data('bourbaki.application.completion', BASH_COMPLETION_HELPERS_FILENAME)
+    source = pkgutil.get_data('bourbaki.application.completion', BASH_COMPLETION_HELPERS_FILENAME).strip()
     completions_helpers_file_absolute = os.path.expanduser(completions_helpers_file)
 
-    with open(completions_helpers_file_absolute, "wb+") as outfile:
-        if source != outfile.read():
+    with open(completions_helpers_file_absolute, "rb+") as outfile:
+        old_source = outfile.read().strip()
+        if source != old_source:
             print("REINSTALLING BASH COMPLETION HELPERS AT {}".format(completions_helpers_file_absolute), file=sys.stderr)
             outfile.seek(0)
+            outfile.truncate()
             outfile.write(source)

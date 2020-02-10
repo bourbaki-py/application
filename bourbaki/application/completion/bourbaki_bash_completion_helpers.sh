@@ -288,6 +288,7 @@ _bourbaki_complete() {
 
     remaining_opts=($(_remaining_opts -r))
     if ! $BOURBAKI_ALWAYS_COMPLETE_COMMANDS; then
+        _bourbaki_debug "checking if options or args remain"
         # if we somehow ended up with complete_cmds=true while argument groups remained to be processed, negate this
         if [ "${#remaining_opts[@]}" -gt 0 ] || [ "${#pos_specs[@]}" -gt 0 ]; then
             _bourbaki_debug "${#remaining_opts[@]} --options remain and ${#pos_specs[@]} positionals remain; not completing subcommands"

@@ -8,11 +8,11 @@ from bourbaki.introspection.types import (
     get_constraints,
     get_bound,
     get_generic_args,
-    reconstruct_generic,
+    # reconstruct_generic,
     issubclass_generic,
     is_top_type,
     is_named_tuple_class,
-    get_named_tuple_arg_types,
+    # get_named_tuple_arg_types,
     NonAnyStrCollection,
 )
 from bourbaki.introspection.classes import parameterized_classpath
@@ -35,7 +35,6 @@ from bourbaki.application.completion.completers import (
     NoComplete,
 )
 from .cli_repr_ import cli_repr
-from .cli_nargs_ import cli_nargs
 from .utils import File
 
 NoneType = type(None)
@@ -99,7 +98,7 @@ def completer_for_type(t, supertype=None):
 def completer_for_tuple(t, *contents):
     if not contents:
         if is_named_tuple_class(t):
-            contents = get_named_tuple_arg_types(t)
+            contents = list(t.__annotations__.items())
             return _multi_completer(CompleteTuple, *contents)
         return completer_for_collection(t)
     elif contents[-1] is Ellipsis:
@@ -120,30 +119,35 @@ def completer_for_union(u, *types):
     return _multi_completer(CompleteUnion, *types, remove_no_complete=True)
 
 
-@cli_completer.register(typing.Any)
-def completer_for_any(type_, *args):
-    t = reconstruct_generic((type_, *args))
-    try:
-        repr_ = cli_repr(t)
-    except NotImplementedError:
-        return
-    else:
-        return CompleteChoices(repr_)
+# @cli_completer.register(typing.Any)
+# def completer_for_any(type_, *args):
+#     t = reconstruct_generic((type_, *args))
+#     try:
+#         repr_ = cli_repr(t)
+#     except NotImplementedError:
+#         return
+#     else:
+#         return CompleteChoices(repr_)
 
 
-def _multi_completer(completer_cls, *types, remove_no_complete=False):
+def _multi_completer(completer_cls, *types_or_tups, remove_no_complete=False):
     completers = []
-    for t in types:
+    for t in types_or_tups:
+        if isinstance(t, tuple):
+            name, t = t
+        else:
+            name = None
+
+        nocomplete_types = (type(NoComplete), NoneType)
         try:
             comp = cli_completer(t)
-        except NotImplementedError:
-            comp = None
-
-        if remove_no_complete and (
-            (comp is None) or isinstance(comp, type(NoComplete))
-        ):
-            pass
+        except (NotImplementedError, TypeError):
+            comp = None if name is None else CompleteChoices(name.upper())
         else:
+            if isinstance(comp, nocomplete_types):
+                comp = None if name is None else CompleteChoices(name.upper())
+
+        if not remove_no_complete or not isinstance(comp, nocomplete_types):
             completers.append(comp or NoComplete)
 
     return completer_cls(*completers) if completers else None

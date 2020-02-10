@@ -9,7 +9,7 @@ from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli_parse import cli_parser, cli_option_parser
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_repr_ import cli_repr
-from .cli_complete import cli_completer
+from .cli_complete import cli_completer, CompleteChoices, CompleteTuple
 from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
@@ -459,8 +459,14 @@ class TypedIO(PicklableWithType):
         try:
             completer = self.cli_completer
         except (TypeError, NotImplementedError):
-            pass
-        else:
+            if is_named_tuple_class(param.annotation):
+                completer = CompleteTuple(*(CompleteChoices(attr.upper()) for attr in param.annotation._fields))
+            elif isinstance(kw.get("nargs"), int):
+                completer = CompleteTuple(*map(CompleteChoices, [param.name.upper()] * kw["nargs"]))
+            else:
+                completer = CompleteChoices(param.name.upper())
+
+        if completer is not None:
             action.completer = completer
 
         action.positional = positional
