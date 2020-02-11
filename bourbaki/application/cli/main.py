@@ -1,6 +1,5 @@
 # coding:utf-8
 from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
-from types import FunctionType
 import os
 import sys
 import shlex
@@ -18,7 +17,6 @@ from argparse import (
     Namespace,
     RawDescriptionHelpFormatter,
     ONE_OR_MORE,
-    OPTIONAL,
     ZERO_OR_MORE,
     SUPPRESS,
     _SubParsersAction,
@@ -35,12 +33,10 @@ from bourbaki.introspection.types import (
     is_optional_type,
 )
 from bourbaki.introspection.typechecking import isinstance_generic
-from bourbaki.introspection.imports import LazyImportsCallable
 from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 
 # callables.signature is an lru_cache'ed inspect.signature
 from bourbaki.introspection.callables import (
-    signature,
     fully_concrete_signature,
     funcname,
     is_method,
@@ -81,8 +77,7 @@ from .signatures import CLISignatureSpec, FinalCLISignatureSpec
 # only need to parse docs once for any function
 parse_docstring = lru_cache(None)(parse_docstring)
 
-LOG_LEVELS = sorted(_levelToName, reverse=True)[1:]
-LOG_LEVEL_NAMES = [_levelToName[l] for l in LOG_LEVELS]
+LOG_LEVEL_NAMES = ["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"]
 SUBCOMMAND_ATTR = "subcommand"
 SUBCOMMAND_PATH_ATTR = "subcommand_path"
 CONFIG_FILE_ATTR = "config_file"
@@ -100,12 +95,8 @@ RESERVED_NAMESPACE_ATTRS = (
 OUTPUT_GROUP_NAME = "output control"
 OPTIONAL_ARG_TEMPLATE = "{}??"
 MIN_VERBOSITY = 1
-NoneType = type(None)
-ALLOWED_SUBCOMMAND_TYPES = (FunctionType, LazyImportsCallable)
-PICKLE_CACHE_SUFFIX = "-cached.pkl"
 DEFAULT_EXECUTION_FLAG = "-x"
 INSTALL_SHELL_COMPLETION_FLAG = "--install-bash-completion"
-CLEAR_CACHE_FLAG = "--clear-cache"
 CONFIG_OPTION = "--config"
 VERBOSE_FLAGS = ("-v", "--verbose")
 QUIET_FLAGS = ("--quiet", "-q")
@@ -116,10 +107,6 @@ DEFAULT_LOOKUP_ORDER = (
     ArgSource.CONFIG,
     ArgSource.DEFAULTS,
 )
-
-
-# we call this a lot but not on very many different functions
-signature = lru_cache(None)(signature)
 
 
 # exceptions
@@ -986,9 +973,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         return cmd_path, cmd
 
     def get_app_logger(self, ns):
-        verbosity = getattr(ns, VERBOSITY_ATTR, 0)
+        verbosity = getattr(ns, VERBOSITY_ATTR, MIN_VERBOSITY)
         quiet = getattr(ns, QUIET_ATTR, False)
-        log_level_ix = max(MIN_VERBOSITY, min(verbosity, len(LOG_LEVEL_NAMES) - 1))
+        log_level_ix = min(verbosity, len(LOG_LEVEL_NAMES) - 1)
         log_level = LOG_LEVEL_NAMES[log_level_ix]
 
         logpath = None
