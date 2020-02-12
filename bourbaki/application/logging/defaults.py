@@ -35,7 +35,7 @@ DEFAULT_SMTP_LOG_FLUSH_LEVEL = "CRITICAL"
 METALOG_LEVEL = (
     "METALOG"
 )  # level for CountingLogger to use when writing its own log message counts, set above
-METALOG = 60  # always log metalog messages
+METALOG = NOTSET + (DEBUG - NOTSET) // 2
 PROGRESS_LEVEL = "PROGRESS"  # level above info for reporting long-running job progress
 PROGRESS = 25
 
