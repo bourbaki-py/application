@@ -38,6 +38,7 @@
 
 [ "${BOURBAKI_COMPLETION_DEBUG+x}" ] || export BOURBAKI_COMPLETION_DEBUG=false
 [ "${BOURBAKI_ALWAYS_COMPLETE_COMMANDS+x}" ] || export BOURBAKI_ALWAYS_COMPLETE_COMMANDS=true
+[ "${BOURBAKI_ALWAYS_COMPLETE_OPTIONS+x}" ] || export BOURBAKI_ALWAYS_COMPLETE_OPTIONS=false
 export BOURBAKI_KEYVAL_SPLIT_CHAR="="
 export BOURBAKI_COMPGEN_PYTHON_CLASSPATHS_SCRIPT="compgen_python_classpaths.py"
 BASH_COMPLETION_FILEDIR="_filedir"
@@ -112,8 +113,8 @@ _bourbaki_complete() {
         done
     }
 
-    local pos_specs=() opts=() optgroups=() optcounts=() optlimits=() remaining_opts=() cmd_names=() opt=''
-    readarray pos_specs < <(_positional_argspecs "$tree")
+    local pos_specs=() opts=() optgroups=() optcounts=() optlimits=() remaining_opts=() cmd_names=() opt='' line
+    while IFS= read line; do pos_specs+=("$line"); done < <(_positional_argspecs "$tree")
     opts=($(_options "$tree"))
     optgroups=($(_option_groups "$tree"))
     optcounts=($(for opt in "${optgroups[@]}"; do echo 0; done))
@@ -168,7 +169,7 @@ _bourbaki_complete() {
                     fi
                 else
                     # if we're in READ state at an empty token then we're always completing --options
-                    [ -z "$token" ] && complete_opts=$last
+                    [ -z "$token" ] && $BOURBAKI_ALWAYS_COMPLETE_OPTIONS && complete_opts=$last
 
                     # if all the positional args are processed,
                     if [ "${#pos_specs[@]}" -eq 0 ]; then
