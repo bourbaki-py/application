@@ -74,9 +74,8 @@ class TypedIO(PicklableWithType):
 
         return cls(type_)
 
-    @classmethod
+    @staticmethod
     def register(
-        cls,
         type_,
         *,
         cli_parser_=None,
@@ -88,7 +87,10 @@ class TypedIO(PicklableWithType):
         config_repr_=None,
         config_key_decoder_=None,
         config_key_encoder_=None,
-        as_const=True
+        as_const=True,
+        derive_cli_repr=False,
+        derive_cli_nargs=False,
+        derive_cli_completer=False,
     ):
         """Convenience method to allow registration of all relevant typed I/O functions and constants with one call.
         For purposes of readability and debugging, this is the recommended way, since scattering registrations
@@ -125,6 +127,15 @@ class TypedIO(PicklableWithType):
             If you want _some_ of the things to depend on the type parameters and some not to, you may pass
             `as_const=False` and selectively use the `application.typed_io.const(my_value_that_doesnt_take_type_args)`
             wrapper on those things that don't care about type parameters (usually `cli_nargs_`).
+
+        :param derive_cli_completer: if True, and no cli_completer_ was explicitly passed, derive a CLI completer for
+            type_ from cli_parser_. If True and no cli_parser_ is passed, a ValueError will be raised.
+
+        :param derive_cli_nargs: if True, and no cli_nargs_ was explicitly passed, derive CLI nargs for
+            type_ from cli_parser_. If True and no cli_parser_ is passed, a ValueError will be raised.
+
+        :param derive_cli_repr: if True, and no cli_repr_ was explicitly passed, derive a CLI repr string for
+            type_ from cli_parser_. If True and no cli_parser_ is passed, a ValueError will be raised.
 
         :param cli_parser_: a function with signature `(command_line_value: Union[str, List[str]]) -> parsed_value`,
             where it is up to you to ensure that `parsed_value` is an instance of `type_`.
@@ -202,8 +213,18 @@ class TypedIO(PicklableWithType):
             a function with signature `(base_type, *generic_args) -> config_value_for_type`. (see `as_const` above)
         """
         # cli_parser first, since cli_nargs/repr/completer may be derivable
+        if cli_parser_ is not None:
+            cli_parser.register(
+                type_,
+                as_const=as_const,
+                derive_completer=derive_cli_completer and cli_completer_ is None,
+                derive_nargs=derive_cli_nargs and cli_nargs_ is None,
+                derive_repr=derive_cli_repr and cli_repr_ is None,
+            )
+        else:
+            if derive_cli_completer or derive_cli_repr or derive_cli_nargs:
+                raise ValueError("Can't derive cli completer/repr/nargs when no cli_parser_ is passed")
         for dispatcher, func in [
-            (cli_parser, cli_parser_),
             (cli_nargs, cli_nargs_),
             (cli_repr, cli_repr_),
             (cli_completer, cli_completer_),
