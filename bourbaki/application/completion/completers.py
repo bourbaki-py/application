@@ -109,7 +109,7 @@ def install_shell_completion(
 
     custom_source_command = BASH_SOURCE_TEMPLATE.format(custom_file, custom_file)
     _ensure_lines([custom_source_command], completions_file_abs)
-    print("eval the following in your shell to update completions:")
+    print("eval the following in your shell to update completions:", file=sys.stderr)
     print(custom_source_command, file=sys.stdout)
 
 
