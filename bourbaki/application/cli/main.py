@@ -1261,8 +1261,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                         )
                     )
                 continue
-
-            self.subcommand(name=name, from_method=True, tvar_map=tvar_map)(f)
+            
+            cmd_name = cli_attrs.command_name(f, default=name)
+            self.subcommand(name=cmd_name, from_method=True, tvar_map=tvar_map)(f)
 
         if self.description is None:
             self.description = app_cls.__doc__

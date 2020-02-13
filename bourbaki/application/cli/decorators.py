@@ -25,6 +25,15 @@ class cli_spec:
         """mark a function as not to be processed as a command for a CLI (usually a method in a class def)"""
         f.__noncommand__ = True
         return f
+    
+    @staticmethod
+    def command_name(name):
+        """specify a command name string to override the function name. If a prefix is also specified, this will be 
+        the last token in the command path for the function after the prefix"""
+        def dec(f):
+            f.__command_name__ = name
+            return f
+        return dec
 
     @staticmethod
     def command_prefix(*prefix):
@@ -51,17 +60,6 @@ class cli_spec:
 
         def dec(func):
             func.__command_prefix__ = prefix
-            return func
-
-        return dec
-
-    @staticmethod
-    def helpname(name):
-        """decorator to apply a name to a function so that it prints in help strings on the command line with an
-        appropriate name (usually the name of the return type)"""
-
-        def dec(func):
-            func.__helpname__ = name
             return func
 
         return dec
@@ -223,12 +221,12 @@ class cli_attrs:
         return getattr(f, "__noncommand__", False)
 
     @staticmethod
-    def command_prefix(f, default=()):
-        return getattr(f, "__command_prefix__", default)
+    def command_name(f, default=None):
+        return getattr(f, "__command_name__", default)
 
     @staticmethod
-    def helpname(f):
-        return getattr(f, "__helpname__", funcname(f))
+    def command_prefix(f, default=()):
+        return getattr(f, "__command_prefix__", default)
 
     @staticmethod
     def config_subsections(f, default=None):
