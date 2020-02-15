@@ -58,31 +58,31 @@ class cli_spec:
             This will register `do_something_fast` under the command 'do something-fast'
         """
 
-        def dec(func):
-            func.__command_prefix__ = prefix
-            return func
+        def dec(f):
+            f.__command_prefix__ = prefix
+            return f
 
         return dec
 
     @staticmethod
     def config_subsection(*section):
-        def dec(func):
+        def dec(f):
             section_ = _maybe_bool(section, fallback=tuple)
-            func.__config_subsections__ = (
+            f.__config_subsections__ = (
                 section_ if isinstance(section_, bool) else [section_]
             )
-            return func
+            return f
 
         return dec
 
     @staticmethod
     def config_subsections(*sections):
-        def dec(func):
-            func.__config_subsections__ = [
+        def dec(f):
+            f.__config_subsections__ = [
                 tuple(name) if isinstance(name, (list, tuple)) else (name,)
                 for name in sections
             ]
-            return func
+            return f
 
         return dec
 
@@ -190,6 +190,13 @@ class cli_spec:
         return cli_spec.output_handler(NO_OUTPUT_HANDLER)(func)
 
     @staticmethod
+    def exit_codes(codes):
+        def dec(f):
+            f.__exit_codes__ = codes
+            return f
+        return dec
+
+    @staticmethod
     def named_groups(**name_to_argnames: Collection[str]):
         def dec(f):
             f.__named_groups__ = {
@@ -267,6 +274,10 @@ class cli_attrs:
     @staticmethod
     def output_handler(f, default=None):
         return getattr(f, "__output_handler__", default)
+
+    @staticmethod
+    def exit_codes(f):
+        return getattr(f, "__exit_codes__", None)
 
     @staticmethod
     def named_groups(f, default=None):
