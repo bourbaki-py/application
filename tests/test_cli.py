@@ -214,3 +214,24 @@ def test_cli_result(args, result, config_format, capsys):
         out = capsys.readouterr().out
         parsed = load_config(StringIO(out), ext=config_format)
         assert parsed == result
+
+
+@pytest.mark.parametrize("args,exc", [
+    (['--install-bash-completion'], SystemExit),
+    (['--version'], SystemExit),
+    (["--info"], SystemExit),
+    (['--execute', 'print', 'ns'], None),
+])
+def test_cli_special_actions(args, exc):
+    if exc is None:
+        cli.run(args)
+    else:
+        with pytest.raises(exc):
+            cli.run(args)
+
+
+def test_cli_parses_env(monkeypatch):
+    monkeypatch.setenv('CLI_ARG_B', '"1/2" 34 \'56\'')
+    ns = cli.run(['print', 'ns'])
+    assert ns['b'] == [Fraction(1, 2), 34, 56]
+    monkeypatch.delenv('CLI_ARG_B')
