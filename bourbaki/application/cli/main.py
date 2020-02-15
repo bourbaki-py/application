@@ -1122,6 +1122,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
     def subcommand(
         self,
         command_prefix=None,
+        name=None,
         config_subsections=None,
         implicit_flags=None,
         ignore_on_cmd_line=None,
@@ -1134,7 +1135,6 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         exit_codes=None,
         named_groups=None,
         require_options=None,
-        name=None,
         from_method=False,
         metavars=None,
         tvar_map=None,
@@ -1151,12 +1151,16 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             f,
             command_prefix=command_prefix,
             output_handler=output_handler,
+            exit_codes=exit_codes,
             config_subsections=config_subsections,
         ):
             # args provided here override those specified with decorators on the function, which override this
             # command line interface's global defaults
             if output_handler is None:
                 output_handler = cli_attrs.output_handler(f, None)
+
+            if exit_codes is None:
+                exit_codes = cli_attrs.exit_codes(f)
 
             if output_handler is None:
                 if _main and self.require_subcommand:
