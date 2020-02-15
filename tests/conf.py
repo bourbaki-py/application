@@ -74,7 +74,7 @@
         parse={
             "outfile??": "<text-file>",
             "can_parse_me": ["<str>", "..."],
-            "cant_parse_me??": [[["<str>", "..."], "..."], "OR", None],
+            "cant_parse_me??": [["<str>", "..."], "..."],
             "pretty": False,
             "literal": False,
         }
