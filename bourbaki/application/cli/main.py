@@ -1,5 +1,5 @@
 # coding:utf-8
-from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
+from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Type, Optional as Opt
 import copy
 import os
 import sys
@@ -22,6 +22,7 @@ from argparse import (
     SUPPRESS,
     _SubParsersAction,
 )
+from traceback import print_exception
 from cytoolz import identity, get_in
 from typing_inspect import is_generic_type
 
@@ -76,6 +77,8 @@ from .helpers import (
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
 from .signatures import CLISignatureSpec, FinalCLISignatureSpec
 
+__all__ = ['CommandLineInterface', 'ArgSource', 'DEFAULT_LOOKUP_ORDER']
+
 # only need to parse docs once for any function
 parse_docstring = lru_cache(None)(parse_docstring)
 
@@ -97,6 +100,7 @@ RESERVED_NAMESPACE_ATTRS = (
 OUTPUT_GROUP_NAME = "output control"
 OPTIONAL_ARG_TEMPLATE = "{}??"
 MIN_VERBOSITY = 1
+TRACEBACK_VERBOSITY = 3
 DEFAULT_EXECUTION_FLAG = "-x"
 INSTALL_SHELL_COMPLETION_FLAG = "--install-bash-completion"
 CONFIG_OPTION = "--config"
@@ -158,6 +162,37 @@ class WideHelpFormatter(RawDescriptionHelpFormatter):
             max_help_position=max_help_position,
             width=width,
         )
+
+
+# error handling
+
+
+class CLIErrorHandlingContext:
+    def __init__(self, exit_codes: Mapping[Type[Exception], int] = None, verbose: bool = False):
+        if exit_codes is None:
+            exit_codes = {Exception: 1}
+        self.verbose = verbose
+        self.exit_codes = exit_codes
+
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None or exc_val is None:
+            pass
+        else:
+            traceback = exc_tb if self.verbose else None
+            if exc_type is SystemExit and SystemExit not in self.exit_codes:
+                sys.exit(exc_type.code)
+            else:
+                try:
+                    code = max(code for e_type, code in self.exit_codes.items() if issubclass(exc_type, e_type))
+                except ValueError:
+                    # no matching exceptions; print full traceback
+                    code = 1
+                    traceback = exc_tb
+            print_exception(exc_type, exc_val, traceback, chain=False, file=sys.stderr)
+            sys.exit(code)
 
 
 # The main CLI class and helpers
@@ -283,6 +318,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         ignore_function_defaults: bool = False,
         typecheck: bool = False,
         output_handler: Opt[Callable] = None,
+        # error handling
+        exit_codes: Opt[Mapping[Type[Exception], int]] = None,
         # special features and flags
         use_multiprocessing: bool = False,
         install_bash_completion: bool = False,
@@ -405,9 +442,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         :param use_execution_flag: bool or str. When True or a str, a flag is added to the command line interface which
             is interpreted as specifying that file-system-altering actions may be carried out, with the default behavior
             being to skip these actions, possibly with verbose reporting as in a "dry-run" scenario. Your application
-            code may look up the status of this flag via `from application import cli; if cli.EXECUTE: ...` to determine
-            what action to take. The only effect that is determined by this class is that file logging is suppressed
-            when the flag is passed.
+            code may look up the status of this flag via `from bourbaki.application import cli; if cli.EXECUTE: ...`
+            to determine what action to take. The only effect on the behavior of this class is that file logging is
+            suppressed when the flag is not passed (when this arg is specified).
         :param add_install_bash_completion_flag: bool or str. If True or a str, a flag is added to the command line
             interface which triggers installation of bash completions when it is passed. If a str, that flag is equal to
             this arg, else the default flag is `application.cli.INSTALL_SHELL_COMPLETION_FLAG`. Note that the
@@ -657,6 +694,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         self.parse_config_as_cli = parse_config_as_cli
         self.typecheck = typecheck
         self.output_handler = output_handler
+        self.exit_codes = exit_codes or {Exception: 1}
         self.require_options = bool(require_options)
 
         self.use_multiprocessing = bool(use_multiprocessing)
@@ -712,7 +750,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                 self.init_config_command = tuple(self.init_config.__name__.split("_"))
             else:
                 if isinstance(add_init_config_command, str):
-                    add_init_config_command = (add_init_config_command,)
+                    add_init_config_command = add_init_config_command.strip().split()
 
                 self.init_config_command = tuple(
                     map(to_cmd_line_name, add_init_config_command)
@@ -871,7 +909,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         self,
         args=None,
         namespace=None,
-        report_progress=True,
+        report_progress=False,
         time_units="s",
         log_level=PROGRESS,
         error_level=ERROR,
@@ -893,32 +931,39 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         else:
             main = False
 
-        app_logger = self.get_app_logger(ns)
-        app_logger.debug("command is %r", cmdname)
-        config = self.parse_config(ns, app_logger) if self.use_config else None
-
-        # if self is defined from a class and the command is not a reserved/builtin command,
-        if (
-            (not main)
-            and (self.app_cls is not None)
-            and (cmdname not in self.reserved_command_names)
-        ):
-            # perform any initialization logic; if main == True, this will be done below at func.execute()
-            app_obj = self._main.execute(ns, config, handle_output=False)
+        verbosity = getattr(ns, VERBOSITY_ATTR, MIN_VERBOSITY)
+        if cmdfunc.exit_codes is None:
+            exit_codes = self.exit_codes
         else:
-            app_obj = None
+            exit_codes = ChainMap(cmdfunc.exit_codes, self.exit_codes)
 
-        if not report_progress:
-            result = cmdfunc.execute(ns, config, app_obj)
-        else:
-            with get_task(
-                app_logger,
-                cmdname,
-                log_level=log_level,
-                error_level=error_level,
-                time_units=time_units,
+        with CLIErrorHandlingContext(exit_codes, verbose=verbosity >= TRACEBACK_VERBOSITY):
+            app_logger = self.get_app_logger(ns)
+            app_logger.debug("command is %r", cmdname)
+            config = self.parse_config(ns, app_logger) if self.use_config else None
+
+            # if self is defined from a class and the command is not a reserved/builtin command,
+            if (
+                (not main)
+                and (self.app_cls is not None)
+                and (cmdname not in self.reserved_command_names)
             ):
+                # perform any initialization logic; if main == True, this will be done below at func.execute()
+                app_obj = self._main.execute(ns, config, handle_output=False)
+            else:
+                app_obj = None
+
+            if not report_progress:
                 result = cmdfunc.execute(ns, config, app_obj)
+            else:
+                with get_task(
+                    app_logger,
+                    cmdname,
+                    log_level=log_level,
+                    error_level=error_level,
+                    time_units=time_units,
+                ):
+                    result = cmdfunc.execute(ns, config, app_obj)
 
         return result
 
@@ -1086,6 +1131,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         parse_order=None,
         typecheck=None,
         output_handler=None,
+        exit_codes=None,
         named_groups=None,
         require_options=None,
         name=None,
@@ -1156,6 +1202,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                 command_prefix=command_prefix,
                 config_subsections=config_subsections,
                 output_handler=output_handler,
+                exit_codes=exit_codes,
                 implicit_flags=implicit_flags,
                 lookup_order=self.lookup_order,
                 argparser_cmd_name=self.cmd_name,
@@ -1191,6 +1238,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         parse_order=None,
         typecheck=None,
         output_handler=None,
+        exit_codes=None,
         named_groups=None,
         name=None,
         from_method=False,
@@ -1206,6 +1254,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             parse_config_as_cli=parse_config_as_cli,
             typecheck=typecheck,
             output_handler=output_handler,
+            exit_codes=exit_codes,
             named_groups=named_groups,
             parse_order=parse_order,
             metavars=metavars,
@@ -1558,6 +1607,7 @@ class SubCommandFunc(Logged):
         config_subsections=None,
         output_handler=None,
         implicit_flags=False,
+        exit_codes=None,
         argparser_cmd_name=None,
         suppress_setup_warnings=False,
         tvar_map=None,
@@ -1703,6 +1753,7 @@ class SubCommandFunc(Logged):
         self.output_docs = output_docs
         self.func = func
         self.output_handler = output_handler
+        self.exit_codes = exit_codes
         self.from_method = bool(from_method)
 
         # options
