@@ -1,5 +1,4 @@
 # coding:utf-8
-import json
 from warnings import warn
 from datetime import datetime
 from ..reutils import (
@@ -10,7 +9,7 @@ from ..reutils import (
     named_group,
     re_escaped,
 )
-from .defaults import DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT, METALOG, METALOG_LEVEL
+from .defaults import DEFAULT_LOG_MSG_FMT, DEFAULT_LOG_DATE_FMT
 from .regexes import *
 
 
@@ -133,7 +132,6 @@ def log_file_to_df(
     log_fmt=DEFAULT_LOG_MSG_FMT,
     date_fmt=DEFAULT_LOG_DATE_FMT,
     datetime_index=False,
-    validate=False,
     raise_=False,
 ):
     import pandas
@@ -153,9 +151,6 @@ def log_file_to_df(
         log_file_record_iter(filepath, log_fmt, date_fmt, raise_), columns=fields
     )
 
-    if validate:
-        _validate_dataframe_parse(df, raise_)
-
     if datetime_index:
         df.set_index("asctime", inplace=True)
     if not df.index.is_monotonic:
@@ -170,97 +165,3 @@ def _warn_or_raise(errmsg, exception, raise_):
     else:
         warn(errmsg)
     return
-
-
-def _validate_dataframe_parse(df, raise_):
-    import pandas
-
-    levelfield = None
-    metalevel = None
-    if "levelname" in df.columns:
-        levelfield = "levelname"
-        metalevel = METALOG_LEVEL
-    elif "levelno" in df.columns:
-        levelfield = "levelno"
-        metalevel = METALOG
-
-    def _tryparse(msg):
-        try:
-            return json.loads(msg)
-        except Exception:
-            return None
-
-    stats = None
-    if levelfield and metalevel:
-        stats = df.loc[df[levelfield] == metalevel, ["name", "message"]]
-        stats["stats"] = stats["message"].map(_tryparse)
-
-        nonnull_stats_ix = stats["stats"].notnull()
-        if len(stats.index.unique()) > nonnull_stats_ix.sum():
-            _warn_or_raise(
-                "Not all loggers that issued {}/{}-level messages "
-                "had parseable statistics reports".format(METALOG_LEVEL, METALOG),
-                IOError,
-                raise_,
-            )
-        if len(stats) == 0:
-            errmsg = (
-                "validation is requested but this is only possible if "
-                "messages are logged at the {}/{} level".format(METALOG_LEVEL, METALOG)
-            )
-            _warn_or_raise(errmsg, ValueError, raise_)
-        stats = (
-            stats[nonnull_stats_ix]
-            .drop_duplicates(subset="name", keep="last")
-            .set_index("name")
-        )
-        stats = pandas.DataFrame.from_records(stats["stats"], index=stats.index)
-    else:
-        errmsg = (
-            "validation is requested but this is only possible if "
-            "'levelname' or 'levelno' are fields in the log message format"
-        )
-        _warn_or_raise(errmsg, ValueError, raise_)
-
-    levelcounts = pandas.DataFrame.from_records(stats["levelcounts"], index=stats.index)
-
-    msg_template = (
-        "logger '{name}' reports differing %s from what was parsed;\nreported in log:\n"
-        "{reported}\nparsed:\n{parsed}"
-    )
-    levelcount_msg = msg_template % "level counts"
-    multiline_msg = msg_template % "multiline message count"
-    stacktrace_msg = msg_template % "stacktrace count"
-
-    for name in stats.index:
-        subset = df.loc[df["name"] == name, ["levelname", "message", "stackTrace"]]
-
-        parsed = subset["levelname"].value_counts(dropna=True).sort_index()
-        reported = levelcounts.loc[name].dropna().sort_index().astype(int)
-
-        if not (parsed == reported).all():
-            _warn_or_raise(
-                levelcount_msg.format(name=name, reported=reported, parsed=parsed),
-                IOError,
-                raise_,
-            )
-
-        parsed = subset["message"].str.contains("\n").sum()
-        reported = stats.loc[name, "multiline"]
-
-        if parsed != reported:
-            _warn_or_raise(
-                multiline_msg.format(name=name, reported=reported, parsed=parsed),
-                IOError,
-                raise_,
-            )
-
-        parsed = subset["stackTrace"].notnull().sum()
-        reported = stats.loc[name, "stacktraces"]
-
-        if parsed != reported:
-            _warn_or_raise(
-                multiline_msg.format(name=name, reported=reported, parsed=parsed),
-                IOError,
-                raise_,
-            )

@@ -201,13 +201,9 @@ class TimedTaskContext:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type is SystemExit and exc_val.args[0] == 0:
-            if not self.is_finished:
-                exc_val = SystemExit(1)
-
         if exc_type is not None or exc_val is not None:
             msg = self._error_message()
-            self.error(msg + " Exception is {}".format(exc_val or exc_type))
+            self.error(msg + "; {}".format(exc_val or exc_type))
             raise (exc_val or exc_type)
         else:
             if self.total is not None:

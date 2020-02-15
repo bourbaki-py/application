@@ -1,32 +1,38 @@
 #!/usr/bin/env python
 # coding:utf-8
-from logging import setLoggerClass
-from bourbaki.application.logging.loggers import CountingLogger, SwissArmyLogger
-
-
-class _TestLogger(SwissArmyLogger):
-    def _log(self, level, msg, *a, **kw):
-        msg = " ".join((nextcounter(), msg or ""))
-        super()._log(level, msg, *a, **kw)
-
-
-setLoggerClass(_TestLogger)
-# mpl_logger = getLogger('matplotlib')
-# mpl_logger.disabled = True
-
+import logging
 import os
 import pickle
 from itertools import chain
 from collections import Counter
 from warnings import warn
 import pytest
-from bourbaki.application.logging import LoggedMeta, getLogger, configure_debug_logging
+from bourbaki.application.logging import Logged, InstanceLoggerNamingConvention, configure_debug_logging
 from bourbaki.application.logging.defaults import (
-    METALOG,
     DEFAULT_LOG_MSG_FMT,
     DEFAULT_LOG_DATE_FMT,
 )
 from bourbaki.application.logging.analysis import log_line_regex, log_file_to_df
+from bourbaki.application.logging import CountingLogger, configure_default_logging
+
+class _TestLogger(CountingLogger):
+    def disable(self):
+        self.disabled = True
+
+    def _log(self, level, msg, *a, **kw):
+        msg = " ".join((nextcounter(), msg or ""))
+        super()._log(level, msg, *a, **kw)
+
+
+logging.setLoggerClass(_TestLogger)
+
+configure_default_logging(
+    console_level=0,
+    disable_existing_loggers=True,
+)
+logging.root.getChild('matplotlib').disable()
+logging.root.getChild('pandas').disable()
+
 
 global TestLoggedClass
 MSG_COUNTER = 0
@@ -44,18 +50,10 @@ def get_test_instance(log_name: str):
 
 
 @pytest.fixture(scope="module")
-def logfile():
+def this_logfile():
     path = "/tmp/test.log"
-    return path
-
-
-@pytest.fixture(scope="module")
-def this_logfile(logfile):
-    # paths = get_dated_files(logfile)
-    # path = paths[-1]
-    # yield path
-    # # os.remove(path)
-    return logfile
+    yield path
+    os.remove(path)
 
 
 @pytest.fixture(scope="module")
@@ -74,25 +72,22 @@ def test_pickle_path():
 
 @pytest.fixture
 def logger():
-    logger = getLogger(__name__)
+    logger = logging.getLogger(__name__)
     return logger
 
 
-def test_setup(logfile):
+def test_setup(this_logfile):
     configure_debug_logging(
-        filename=logfile, dated_logfiles=False, disable_existing_loggers=True
+        filename=this_logfile, dated_logfiles=False, disable_existing_loggers=True
     )
 
     global TestLoggedClass, _TestLogger
 
-    class TestLoggedClass(
-        metaclass=LoggedMeta,
-        level="DEBUG",
-        use_full_path=False,
-        verbose=True,
-        logger_cls=_TestLogger,
-        instance_naming="keyword",
-    ):
+    class TestLoggedClass(Logged):
+        __log_level__ = logging.DEBUG
+        __verbose__ = True
+        __instance_naming__ = InstanceLoggerNamingConvention.keyword
+
         def talk(self, *args, **kwargs):
             logger = self.logger
             logger.info(
@@ -122,7 +117,7 @@ def all_message_counts():
             multi += log.multiline
             err += log.stacktraces
             msgtypes += log.levelcounts
-    print(msg, multi, err, msgtypes)
+
     return msg, multi, err, dict(sorted(msgtypes.items()))
 
 
@@ -193,35 +188,12 @@ def test_logfile_dataframe_parse(this_logfile, logger):
     log_all_counts()
     # which should be parsed here
     parsed_log = log_file_to_df(
-        this_logfile, datetime_index=True, validate=True, raise_=False
+        this_logfile, datetime_index=True, raise_=False
     )
 
-    msgid = parsed_log.message[parsed_log.levelno != METALOG].str.slice(0, 4)
-    msgid = msgid[msgid.str.match(r"^[0-9]+$")].astype(int).values
-    assert msgid[0] == 1
-    assert msgid[-1] == MSG_COUNTER
-    # assert np.all(np.diff(msgid) == 1)
     assert_parsed_equals_logged(parsed_message_counts(parsed_log), all_message_counts())
 
     logger.info("parsed dataframe tail:\n{}".format(str(parsed_log.tail(2))))
-
-
-def test_logfile_dataframe_parse_to_pickle(this_logfile, log_pickle_file, logger):
-    log_all_counts()
-    parsed_log = log_file_to_df(
-        this_logfile, datetime_index=True, validate=True, raise_=False
-    )
-    assert_parsed_equals_logged(parsed_message_counts(parsed_log), all_message_counts())
-
-    parsed_log = log_file_to_df(
-        this_logfile, datetime_index=True, validate=True, raise_=False
-    )
-    parsed_log.to_pickle(log_pickle_file)
-
-    logger.info(
-        "You can inspect the parsed log file using pandas.read_pickle('%s')"
-        % log_pickle_file
-    )
 
 
 def assert_parsed_equals_logged(parsed_message_counts, all_message_counts):

@@ -1,9 +1,7 @@
 # coding:utf-8
-from logging import getLogger, setLoggerClass
-
 # Import commonly used things into the top-level namespace for quick import
 from . import config, defaults, interface, timing, loggers, analysis
-from .interface import Logged
+from .interface import Logged, InstanceLoggerNamingConvention
 from .config import (
     configure_default_logging,
     configure_debug_logging,
