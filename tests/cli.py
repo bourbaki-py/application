@@ -9,6 +9,7 @@ from enum import Enum
 from fractions import Fraction
 from numbers import Number
 from pathlib import Path
+import sys
 from urllib.parse import ParseResult as URL
 from uuid import UUID, uuid4
 import ipaddress
@@ -24,7 +25,7 @@ from bourbaki.application.cli import (
 )
 
 toc = time.time()
-print("Import time: {}s".format(round(toc - tic, 3)))
+print("Import time: {}s".format(round(toc - tic, 3)), file=sys.stderr)
 
 Num = TypeVar("Num", bound=Number)
 
@@ -330,5 +331,5 @@ cli.definition(MyCommandLineApp[Union[int, Fraction]])
 
 if __name__ == "__main__":
     tic = time.time()
-    print("Setup time: {}s".format(round(tic - toc, 3)))
+    print("Setup time: {}s".format(round(tic - toc, 3)), file=sys.stderr)
     cli.run()
