@@ -19,7 +19,6 @@ from bourbaki.introspection.callables import (
     has_varargs,
     get_globals,
     get_callable_params,
-    function_classpath,
 )
 from bourbaki.introspection.wrappers import lru_cache_sig_preserving
 from bourbaki.introspection.types import (
@@ -53,13 +52,14 @@ from .parsers import EnumParser
 
 NoneType = type(None)
 
-null_config_repr = "<null>"
+null_config_repr = None
+null_config_repr_str = 'null'
 
 bytes_config_repr = [byte_repr, ellipsis_]
 bool_config_repr = type_spec(bool)
 
 bytes_config_key_repr = "b'\\x{}{}'".format(byte_repr, ellipsis_)
-bool_config_key_repr = "{}|{}".format(repr(True), repr(False))
+bool_config_key_repr = "true|false"
 
 config_repr_values = default_repr_values.copy()
 config_repr_values.update(
@@ -291,7 +291,7 @@ class _ConfigReprUnion(UnionWrapper):
     def reduce(reprs):
         reprs = list(reprs)
         if all(isinstance(r, (str, NoneType)) for r in reprs):
-            return _ConfigKeyReprUnion.reduce(filter(None, reprs))
+            return _ConfigKeyReprUnion.reduce(r or null_config_repr_str for r in reprs)
         return list(chain.from_iterable((r, "OR") for r in reprs))[:-1]
 
 

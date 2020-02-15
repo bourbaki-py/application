@@ -184,5 +184,3 @@ def test_dump_load_class_instances(ext, conf, tmp):
                 attr1 = jsonify(attr1)
 
             assert attr1 == getattr(m2, attr)
-
-    # os.remove(tmp + ext)

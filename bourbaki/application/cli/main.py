@@ -1,5 +1,6 @@
 # coding:utf-8
 from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Optional as Opt
+import copy
 import os
 import sys
 import shlex
@@ -31,6 +32,7 @@ from bourbaki.introspection.types import (
     get_param_dict,
     get_generic_origin,
     is_optional_type,
+    get_generic_args,
 )
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
@@ -2105,12 +2107,35 @@ class SubCommandFunc(Logged):
                     elif not isinstance(val, list):  # tuples
                         val = list(val)
             elif literal_defaults and has_nonnull_default:
+                # encode the value
                 val = tio.config_encoder(param.default)
             else:
-                val = tio.config_repr
+                # represent the type
+                # at this point we either have literal_defaults=False or has_nonnull_default=False
+                # in either case we would want a type repr
+                is_optional = is_optional_type(tio.type_)
+                if is_optional and has_default:
+                    # indicate the key can be ommitted by specially formatting it
+                    name = OPTIONAL_ARG_TEMPLATE.format(name)
+                    if has_nonnull_default:
+                        # include the null option in the type repr to indicate that a null override is possible
+                        val = tio.config_repr
+                    else:
+                        # only repr the non-null type options when there is a default, to simplify
+                        NoneType = type(None)
+                        types = tuple(t for t in get_generic_args(tio.type_) if t is not NoneType)
+                        if len(types) == 1:
+                            val = TypedIO(types[0]).config_repr
+                        else:
+                            val = TypedIO(Union[types]).config_repr
+                else:
+                    # non-option type with a default, or option type with no default;
+                    # in either case we want the plain type repr
+                    val = tio.config_repr
 
-            if is_optional_type(tio.type_) and has_default:
-                name = OPTIONAL_ARG_TEMPLATE.format(name)
+                # deepcopy here prevents config formats with references (e.g. yaml) from using that feature,
+                # which results in confusing output
+                val = copy.deepcopy(val)
 
             conf[name] = val
 

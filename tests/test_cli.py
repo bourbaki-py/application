@@ -12,17 +12,12 @@ import pytest
 from bourbaki.application.config import load_config
 from bourbaki.application.cli.main import OPTIONAL_ARG_TEMPLATE
 from bourbaki.application.typed_io.utils import *
-from bourbaki.application.typed_io.config_repr_ import null_config_repr
 from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr
 from bourbaki.introspection.callables import is_classmethod, is_staticmethod
 
 DIR = Path(__file__).parent.absolute()
 sys.path.insert(0, str(DIR))
 from cli import cli, MyCommandLineApp, FooEnum
-
-
-def nullable(repr_):
-    return repr_ + " OR " + null_config_repr
 
 
 def maybe(key):
@@ -32,7 +27,7 @@ def maybe(key):
 output_args = {
     "pretty": False,
     "literal": False,
-    maybe("outfile"): nullable(text_path_repr),
+    maybe("outfile"): text_path_repr,
 }
 
 fooenum_repr = "|".join(v.name for v in FooEnum)
@@ -42,7 +37,7 @@ today = datetime.date.today().isoformat()
 CONFIG_FILE = str(DIR / "conf.yml")
 
 CONFIG = {
-    "__init__": {"a": 1, "b": [1, 2, 3], maybe("c"): nullable(date_repr)},
+    "__init__": {"a": 1, "b": [1, 2, 3], maybe("c"): date_repr},
     "print": {
         "ns": {**output_args},
         "tuple": {
@@ -71,7 +66,7 @@ CONFIG = {
                 **output_args,
             },
         },
-        "enum": {maybe("foo"): nullable(fooenum_repr), **output_args},
+        "enum": {maybe("foo"): fooenum_repr, **output_args},
         "bytes": {"b": [byte_repr, ellipsis_], **output_args},
         "flags": {
             "boolean1": bool_cli_repr,
@@ -88,13 +83,13 @@ CONFIG = {
             **output_args,
         },
         "numbers": {
-            maybe("x"): nullable(decimal_repr),
-            maybe("y"): nullable(fraction_repr),
-            maybe("z"): nullable(complex_repr),
+            maybe("x"): decimal_repr,
+            maybe("y"): fraction_repr,
+            maybe("z"): complex_repr,
             **output_args,
         },
         "url": {"url": url_repr, **output_args},
-        "uuid": {maybe("uuid"): nullable(uuid_repr), **output_args},
+        "uuid": {maybe("uuid"): uuid_repr, **output_args},
     },
     "args": {"args": [fooenum_repr, ellipsis_], **output_args},
     "args-and-kwargs": {
@@ -115,11 +110,7 @@ CONFIG = {
     },
     "cant": {
         "parse": {
-            maybe("cant_parse_me"): [
-                [[type_spec(str), ellipsis_], ellipsis_],
-                "OR",
-                null_config_repr,
-            ],
+            maybe("cant_parse_me"): [[type_spec(str), ellipsis_], ellipsis_],
             "can_parse_me": [type_spec(str), ellipsis_],
             **output_args,
         }
