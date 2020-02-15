@@ -5,7 +5,6 @@ from functools import lru_cache
 from inspect import Parameter, Signature
 from itertools import chain
 from pathlib import Path
-import sys
 from string import punctuation
 from typing import Dict, List, Set, Tuple, Union, Optional, Mapping, Generic
 
@@ -105,16 +104,6 @@ def update_in(conf, subsection, subconf):
             subconf_[key] = subconf__
         subconf_ = subconf__
     subconf_.update(subconf)
-
-
-def try_or_exit(func, exit, error_status, *args, **kwargs):
-    try:
-        result = func(*args, **kwargs)
-    except Exception as e:
-        print("Execution failed: {}".format(e), file=sys.stderr)
-        exit(error_status)
-    else:
-        return result
 
 
 def _help_kwargs_from_docs(
