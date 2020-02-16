@@ -118,15 +118,11 @@ def completer_for_union(u, *types):
     return _multi_completer(CompleteUnion, *types, remove_no_complete=True)
 
 
-@cli_completer.register(typing.Any)
-def completer_for_any(type_, *args):
-    t = reconstruct_generic((type_, *args))
-    try:
-        repr_ = cli_repr(t)
-    except NotImplementedError:
-        return
-    else:
-        return CompleteChoices(repr_)
+# by default return a no-op completer but don't raise a NotImplementedError; this lets the caller perform a best-effort
+# completion improvement in a principled way, as in a case where a NamedTuple class has no type-based completer
+# available for one of its entries, in which case a name-based completer can be created for that position, which at
+# least supplies the user with an informative string as to the meaning of the value that should be passed there
+cli_completer.register(typing.Any, as_const=True)(NoComplete)
 
 
 def _multi_completer(completer_cls, *types_or_tups, remove_no_complete=False):
@@ -141,12 +137,10 @@ def _multi_completer(completer_cls, *types_or_tups, remove_no_complete=False):
         try:
             comp = cli_completer(t)
         except (NotImplementedError, TypeError):
-            comp = None if name is None else CompleteChoices(name.upper())
-        else:
-            if isinstance(comp, nocomplete_types):
-                comp = None if name is None else CompleteChoices(name.upper())
-            elif name is not None and isinstance(comp, CompleteChoices) and len(comp.args) == 1 and comp.args[0] == cli_repr(t):
-                comp = CompleteChoices(name.upper())
+            comp = NoComplete
+
+        if isinstance(comp, nocomplete_types):
+            comp = NoComplete if name is None else CompleteChoices(name.upper())
 
         if not remove_no_complete or not isinstance(comp, nocomplete_types):
             completers.append(comp or NoComplete)

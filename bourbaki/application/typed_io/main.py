@@ -9,7 +9,8 @@ from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli_parse import cli_parser, cli_option_parser
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_repr_ import cli_repr
-from .cli_complete import cli_completer, CompleteChoices, CompleteTuple
+from .cli_complete import cli_completer
+from ..completion.completers import Complete, CompleteChoices, CompleteTuple, NoComplete
 from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
@@ -41,6 +42,8 @@ class ArgSource(enum.Enum):
 
 
 CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
+
+__all__ = ['ArgSource', 'TypedIO']
 
 
 class TypedIO(PicklableWithType):
@@ -281,6 +284,27 @@ class TypedIO(PicklableWithType):
     def cli_completer(self):
         return cli_completer(self.type_)
 
+    def cli_completer_fallback(self, param_name: str, nargs: Union[int, str], positional: bool) -> Complete:
+        """complete positional args by name, options with a type repr"""
+        if positional:
+            if isinstance(nargs, int):
+                # fixed-length
+                if is_named_tuple_class(self.type_):
+                    pos_names = map(str.upper, self.type_._fields)
+                else:
+                    metavar = param_name.upper()
+                    pos_names = [metavar + '_%d' % i for i in range(1, nargs + 1)]
+                completer = CompleteTuple(*map(CompleteChoices, pos_names))
+            else:
+                completer = CompleteChoices(param_name.upper())
+        else:
+            repr = self.cli_repr
+            if isinstance(repr, str):
+                completer = CompleteChoices(repr)
+            else:
+                completer = CompleteTuple(*map(CompleteChoices, repr))
+        return completer
+
     @cached_property
     def env_parser(self):
         return env_parser(self.type_)
@@ -480,15 +504,11 @@ class TypedIO(PicklableWithType):
         try:
             completer = self.cli_completer
         except (TypeError, NotImplementedError):
-            if is_named_tuple_class(param.annotation):
-                completer = CompleteTuple(*(CompleteChoices(attr.upper()) for attr in param.annotation._fields))
-            elif isinstance(kw.get("nargs"), int):
-                completer = CompleteTuple(*map(CompleteChoices, [param.name.upper()] * kw["nargs"]))
-            else:
-                completer = CompleteChoices(param.name.upper())
+            completer = None
 
-        if completer is not None:
-            action.completer = completer
+        if isinstance(completer, (type(None), type(NoComplete))):
+            completer = self.cli_completer_fallback(param.name, nargs=kw.get('nargs'), positional=positional)
 
+        action.completer = completer
         action.positional = positional
         return action
