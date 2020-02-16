@@ -539,7 +539,7 @@ def _install_shell_completion_helpers(completions_helpers_file):
     source = pkgutil.get_data('bourbaki.application.completion', BASH_COMPLETION_HELPERS_FILENAME).strip()
     completions_helpers_file_absolute = os.path.expanduser(completions_helpers_file)
 
-    if os.path.exists(completions_helpers_file_absolute):
+    if not os.path.exists(completions_helpers_file_absolute):
         with open(completions_helpers_file_absolute, "wb") as outfile:
             print("INSTALLING BASH COMPLETION HELPERS AT {}".format(completions_helpers_file_absolute), file=sys.stderr)
             outfile.write(source)
