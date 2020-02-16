@@ -35,6 +35,7 @@ from bourbaki.introspection.types import (
     is_optional_type,
     get_generic_args,
 )
+from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import parse_docstring, CallableDocs
 
@@ -173,6 +174,8 @@ class CLIErrorHandlingContext:
             exit_codes = {Exception: 1}
         self.verbose = verbose
         self.exit_codes = exit_codes
+        self.exit_code = GenericTypeLevelSingleDispatch('exit_code')
+        self.exit_code.register_from_mapping(exit_codes, as_const=True)
 
     def __enter__(self):
         pass
@@ -183,14 +186,18 @@ class CLIErrorHandlingContext:
         else:
             traceback = exc_tb if self.verbose else None
             if exc_type is SystemExit and SystemExit not in self.exit_codes:
+                # exit with the same code when a SystemExit was raised elsewhere
                 sys.exit(exc_type.code)
             else:
-                try:
-                    code = max(code for e_type, code in self.exit_codes.items() if issubclass(exc_type, e_type))
-                except ValueError:
-                    # no matching exceptions; print full traceback
-                    code = 1
+                handlers = self.exit_code.all_resolved_funcs(exc_type)
+                if not handlers:
+                    # no matching exceptions; print full traceback and exit with the highest code
+                    code = 255
                     traceback = exc_tb
+                else:
+                    # maximum code for the most specific exceptions registered
+                    code = max(handler(exc_type) for handler in handlers)
+
             print_exception(exc_type, exc_val, traceback, chain=False, file=sys.stderr)
             sys.exit(code)
 
@@ -423,6 +430,10 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         :param output_handler: optional callable. Should take the return value of the invoked command/function and
             perform (usually) some IO action on it, such as saving it to disk. The return value is passed as the first
             argument and any further args will be supplied as keyword args parsed from the CLI or config.
+        :param exit_codes: optional mapping from exception classes to exit codes. If your application raises an
+            exception, the exit code will be equal to the highest code among those corresponding to the exception
+            classes matching the raised exception (where 'match' here means that the raised exception is an instance of
+            an exception class key in the exit_codes mapping but no other key is more specific).
         :param use_multiprocessing: bool. If your app uses multiprocessing, then logging will be configured to reflect
             that fact, using appropriate process-safe loggers and handlers. This is passed through to
             `application.logging.config.configure_default_logging` via the `multiprocessing` keyword arg.
