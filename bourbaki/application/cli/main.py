@@ -225,12 +225,17 @@ class _SubparserPathAction(_SubParsersAction):
 class PicklableArgumentParser(ArgumentParser):
     cmd_prefix = ()
 
+    # this shim makes argument parsers picklable (argparse argument parsers are not)
     def __init__(self, *args, **kwargs):
         kwargs["formatter_class"] = WideHelpFormatter
         super().__init__(*args, **kwargs)
         # ArgumentParser won't pickle, we have to override its registry here
         self.register("type", None, identity)
         self.register("action", "parsers", _SubparserPathAction)
+
+    ##############
+    # subparsers #
+    ##############
 
     def add_subparsers(self, *args, **kwargs) -> _SubparserPathAction:
         subparsers = super().add_subparsers(*args, **kwargs)
@@ -251,7 +256,10 @@ class PicklableArgumentParser(ArgumentParser):
         self._subparsers_action = subparsers
         return subparsers
 
-    def get_nested_subparser(self, *cmd_path: str):
+    def get_nested_subparser(
+            self, *cmd_path: str,
+            prefix: Tuple[str, ...] = (),
+            subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None):
         if not cmd_path:
             return self
 
@@ -260,9 +268,18 @@ class PicklableArgumentParser(ArgumentParser):
         if subparsers.choices and cmdname in subparsers.choices:
             subparser = subparsers.choices[cmdname]
         else:
-            subparser = subparsers.add_parser(cmdname)
+            full_path = prefix + cmd_path
+            helpstr = subcommand_help.get(full_path) if subcommand_help else None
+            if helpstr:
+                subparser = subparsers.add_parser(cmdname, help=helpstr)
+            else:
+                subparser = subparsers.add_parser(cmdname)
 
-        return subparser.get_nested_subparser(*cmd_path[1:])
+        return subparser.get_nested_subparser(
+            *cmd_path[1:],
+            prefix=prefix + cmd_path[:1],
+            subcommand_help=subcommand_help,
+        )
 
 
 class CommandLineInterface(PicklableArgumentParser, Logged):
@@ -327,6 +344,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         output_handler: Opt[Callable] = None,
         # error handling
         exit_codes: Opt[Mapping[Type[Exception], int]] = None,
+        # documentation
+        subcommand_help: Opt[Mapping[Union[str, Tuple[str, ...]], str]] = None,
         # special features and flags
         use_multiprocessing: bool = False,
         install_bash_completion: bool = False,
@@ -434,6 +453,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             exception, the exit code will be equal to the highest code among those corresponding to the exception
             classes matching the raised exception (where 'match' here means that the raised exception is an instance of
             an exception class key in the exit_codes mapping but no other key is more specific).
+
+        :param subcommand_help: optional mapping from subcommand path (as space-separated string of, or tuple of,
+         command components) to help string, as would be accepted by argparse's .add_subparser(help=<help string>)
+         method. This allows for documentation of internal subcommands which serve only as parent command groups for
+         funtions or methods.
+
         :param use_multiprocessing: bool. If your app uses multiprocessing, then logging will be configured to reflect
             that fact, using appropriate process-safe loggers and handlers. This is passed through to
             `application.logging.config.configure_default_logging` via the `multiprocessing` keyword arg.
@@ -682,6 +707,19 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             )
             self._add_argument(flag, action=InstallShellCompletionAction)
 
+        if subcommand_help is not None:
+            if not isinstance(subcommand_help, Mapping):
+                raise TypeError(
+                    "subcommand_help must be a mapping from command path to help string; got {}"
+                    .format(type(subcommand_help))
+                )
+            self.subcommand_help = {
+                tuple(k.strip().split() if isinstance(k, str) else k): v
+                for k, v in subcommand_help.items()
+            }
+        else:
+            self.subcommand_help = None
+
         self.version = version
         self.package = package
 
@@ -793,21 +831,19 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                 for a in subcommand.parser._actions
                 if a.dest in ("only_commands", "omit_commands")
             ]
+            all_command_choices = filter(
+                bool,
+                self.all_subcommand_names(
+                    include_prefixes=True,
+                    filter_=lambda cmd: bool(cmd.config_subsections),
+                ),
+            )
+            all_command_choices_str = list(map(" ".join, all_command_choices))
             for arg in commands_args:
                 if arg.choices is None:
                     arg.choices = set()
-                arg.choices.update(
-                    map(
-                        " ".join,
-                        filter(
-                            bool,
-                            self.all_subcommand_names(
-                                include_prefixes=True,
-                                filter_=lambda cmd: bool(cmd.config_subsections),
-                            ),
-                        ),
-                    )
-                )
+
+                arg.choices.update(all_command_choices_str)
                 arg.metavar = "CMD-NAME"
                 choices_str = (
                     "{{{}}}".format(",".join(map(shlex.quote, sorted(arg.choices))))
@@ -865,6 +901,18 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
     @property
     def cmd_name(self):
         return self.prog or os.path.split(sys.argv[0])[-1]
+
+    ##############
+    # subparsers #
+    ##############
+
+    def get_nested_subparser(
+            self, *cmd_path: str,
+            prefix: Tuple[str, ...] = (),
+            subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None):
+        if subcommand_help is None:
+            subcommand_help = self.subcommand_help
+        return super().get_nested_subparser(*cmd_path, prefix=prefix, subcommand_help=subcommand_help)
 
     def all_subcommands(
         self,
