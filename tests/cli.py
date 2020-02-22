@@ -82,6 +82,13 @@ cli = CommandLineInterface(
     arg_lookup_order=(CLI, CONFIG, ENV),
     package_info_keys=("version", "license", "summary", "platforms"),
     suppress_setup_warnings=True,
+    subcommand_help={
+        "print": "print things",
+        "print tuple": "print all kinds of tuples",
+        "leading": "test commands with leading variadic args",
+        "get": "get attributes",
+        "cant": "test things that can't be parsed from the command line, only config",
+    }
 )
 
 
@@ -137,7 +144,7 @@ class MyCommandLineApp(Generic[Num], Logged):
     @cli_spec.command_prefix("print", "tuple")
     def tuple_kwarg(self, *, tup: Tuple[int, Num, float]):
         """
-        print a tuple
+        print a tuple passed as an option
 
         print all the entries in a tuple that was passed
         :param tup: a tuple of three things
@@ -159,7 +166,7 @@ class MyCommandLineApp(Generic[Num], Logged):
     @cli_spec.command_prefix("print", "tuple")
     def tuple_pos(self, tup: Tuple[int, Num, float]):
         """
-        print a tuple
+        print a tuple passed as a positional arg
 
         print all the entries in a tuple that was passed
         :param tup: a tuple of three things

@@ -138,4 +138,5 @@ class SetExecuteFlagAction(Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         from bourbaki.application.cli import main
+
         main.EXECUTE = True

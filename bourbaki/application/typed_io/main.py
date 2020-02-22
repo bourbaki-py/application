@@ -4,7 +4,12 @@ import enum
 from inspect import Parameter
 from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
 from functools import lru_cache
-from bourbaki.introspection.types import get_generic_args, deconstruct_generic, is_named_tuple_class, issubclass_generic
+from bourbaki.introspection.types import (
+    get_generic_args,
+    deconstruct_generic,
+    is_named_tuple_class,
+    issubclass_generic,
+)
 from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli_parse import cli_parser, cli_option_parser
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
@@ -43,7 +48,7 @@ class ArgSource(enum.Enum):
 
 CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
 
-__all__ = ['ArgSource', 'TypedIO']
+__all__ = ["ArgSource", "TypedIO"]
 
 
 class TypedIO(PicklableWithType):
@@ -226,7 +231,9 @@ class TypedIO(PicklableWithType):
             )
         else:
             if derive_cli_completer or derive_cli_repr or derive_cli_nargs:
-                raise ValueError("Can't derive cli completer/repr/nargs when no cli_parser_ is passed")
+                raise ValueError(
+                    "Can't derive cli completer/repr/nargs when no cli_parser_ is passed"
+                )
         for dispatcher, func in [
             (cli_nargs, cli_nargs_),
             (cli_repr, cli_repr_),
@@ -284,7 +291,9 @@ class TypedIO(PicklableWithType):
     def cli_completer(self):
         return cli_completer(self.type_)
 
-    def cli_completer_fallback(self, param_name: str, nargs: Union[int, str], positional: bool) -> Complete:
+    def cli_completer_fallback(
+        self, param_name: str, nargs: Union[int, str], positional: bool
+    ) -> Complete:
         """complete positional args by name, options with a type repr"""
         if positional:
             if isinstance(nargs, int):
@@ -293,7 +302,7 @@ class TypedIO(PicklableWithType):
                     pos_names = map(str.upper, self.type_._fields)
                 else:
                     metavar = param_name.upper()
-                    pos_names = [metavar + '_%d' % i for i in range(1, nargs + 1)]
+                    pos_names = [metavar + "_%d" % i for i in range(1, nargs + 1)]
                 completer = CompleteTuple(*map(CompleteChoices, pos_names))
             else:
                 completer = CompleteChoices(param_name.upper())
@@ -507,7 +516,9 @@ class TypedIO(PicklableWithType):
             completer = None
 
         if isinstance(completer, (type(None), type(NoComplete))):
-            completer = self.cli_completer_fallback(param.name, nargs=kw.get('nargs'), positional=positional)
+            completer = self.cli_completer_fallback(
+                param.name, nargs=kw.get("nargs"), positional=positional
+            )
 
         action.completer = completer
         action.positional = positional
