@@ -26,7 +26,9 @@ LEGAL_CONFIG_EXTENSIONS = {".yml", ".yaml", ".json", ".toml", ".py", ".ini"}
 EMPTY_CONFIG_VALUE = "________"
 # Force indentation for small collections for readability, don't sort keys to preserve method def order in CLIs
 JSON_DUMP_KWARGS = dict(indent=2, sort_keys=False)
-YAML_DUMP_KWARGS = dict(default_flow_style=False, width=MAX_PY_WIDTH, sort_keys=False, indent=2)
+YAML_DUMP_KWARGS = dict(
+    default_flow_style=False, width=MAX_PY_WIDTH, sort_keys=False, indent=2
+)
 
 loaders = {
     ".yml": yaml.safe_load,

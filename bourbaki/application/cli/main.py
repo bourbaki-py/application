@@ -1,5 +1,15 @@
 # coding:utf-8
-from typing import Iterator, Union, Tuple, Mapping, List, Set, Callable, Type, Optional as Opt
+from typing import (
+    Iterator,
+    Union,
+    Tuple,
+    Mapping,
+    List,
+    Set,
+    Callable,
+    Type,
+    Optional as Opt,
+)
 import copy
 import os
 import sys
@@ -78,7 +88,7 @@ from .helpers import (
 from .decorators import cli_attrs, NO_OUTPUT_HANDLER
 from .signatures import CLISignatureSpec, FinalCLISignatureSpec
 
-__all__ = ['CommandLineInterface', 'ArgSource', 'DEFAULT_LOOKUP_ORDER']
+__all__ = ["CommandLineInterface", "ArgSource", "DEFAULT_LOOKUP_ORDER"]
 
 # only need to parse docs once for any function
 parse_docstring = lru_cache(None)(parse_docstring)
@@ -169,12 +179,14 @@ class WideHelpFormatter(RawDescriptionHelpFormatter):
 
 
 class CLIErrorHandlingContext:
-    def __init__(self, exit_codes: Mapping[Type[Exception], int] = None, verbose: bool = False):
+    def __init__(
+        self, exit_codes: Mapping[Type[Exception], int] = None, verbose: bool = False
+    ):
         if exit_codes is None:
             exit_codes = {Exception: 1}
         self.verbose = verbose
         self.exit_codes = exit_codes
-        self.exit_code = GenericTypeLevelSingleDispatch('exit_code')
+        self.exit_code = GenericTypeLevelSingleDispatch("exit_code")
         self.exit_code.register_from_mapping(exit_codes, as_const=True)
 
     def __enter__(self):
@@ -257,9 +269,11 @@ class PicklableArgumentParser(ArgumentParser):
         return subparsers
 
     def get_nested_subparser(
-            self, *cmd_path: str,
-            prefix: Tuple[str, ...] = (),
-            subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None):
+        self,
+        *cmd_path: str,
+        prefix: Tuple[str, ...] = (),
+        subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None,
+    ):
         if not cmd_path:
             return self
 
@@ -276,9 +290,7 @@ class PicklableArgumentParser(ArgumentParser):
                 subparser = subparsers.add_parser(cmdname)
 
         return subparser.get_nested_subparser(
-            *cmd_path[1:],
-            prefix=prefix + cmd_path[:1],
-            subcommand_help=subcommand_help,
+            *cmd_path[1:], prefix=prefix + cmd_path[:1], subcommand_help=subcommand_help
         )
 
 
@@ -710,8 +722,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         if subcommand_help is not None:
             if not isinstance(subcommand_help, Mapping):
                 raise TypeError(
-                    "subcommand_help must be a mapping from command path to help string; got {}"
-                    .format(type(subcommand_help))
+                    "subcommand_help must be a mapping from command path to help string; got {}".format(
+                        type(subcommand_help)
+                    )
                 )
             self.subcommand_help = {
                 tuple(k.strip().split() if isinstance(k, str) else k): v
@@ -907,12 +920,16 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
     ##############
 
     def get_nested_subparser(
-            self, *cmd_path: str,
-            prefix: Tuple[str, ...] = (),
-            subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None):
+        self,
+        *cmd_path: str,
+        prefix: Tuple[str, ...] = (),
+        subcommand_help: Opt[Mapping[Tuple[str, ...], str]] = None,
+    ):
         if subcommand_help is None:
             subcommand_help = self.subcommand_help
-        return super().get_nested_subparser(*cmd_path, prefix=prefix, subcommand_help=subcommand_help)
+        return super().get_nested_subparser(
+            *cmd_path, prefix=prefix, subcommand_help=subcommand_help
+        )
 
     def all_subcommands(
         self,
@@ -996,7 +1013,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         else:
             exit_codes = ChainMap(cmdfunc.exit_codes, self.exit_codes)
 
-        with CLIErrorHandlingContext(exit_codes, verbose=verbosity >= TRACEBACK_VERBOSITY):
+        with CLIErrorHandlingContext(
+            exit_codes, verbose=verbosity >= TRACEBACK_VERBOSITY
+        ):
             app_logger = self.get_app_logger(ns)
             app_logger.debug("command is %r", cmdname)
             config = self.parse_config(ns, app_logger) if self.use_config else None
@@ -1375,7 +1394,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                         )
                     )
                 continue
-            
+
             cmd_name = cli_attrs.command_name(f, default=name)
             self.subcommand(name=cmd_name, from_method=True, tvar_map=tvar_map)(f)
 
@@ -2237,7 +2256,9 @@ class SubCommandFunc(Logged):
                     else:
                         # only repr the non-null type options when there is a default, to simplify
                         NoneType = type(None)
-                        types = tuple(t for t in get_generic_args(tio.type_) if t is not NoneType)
+                        types = tuple(
+                            t for t in get_generic_args(tio.type_) if t is not NoneType
+                        )
                         if len(types) == 1:
                             val = TypedIO(types[0]).config_repr
                         else:

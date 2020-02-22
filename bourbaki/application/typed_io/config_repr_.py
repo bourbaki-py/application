@@ -53,7 +53,7 @@ from .parsers import EnumParser
 NoneType = type(None)
 
 null_config_repr = None
-null_config_repr_str = 'null'
+null_config_repr_str = "null"
 
 bytes_config_repr = [byte_repr, ellipsis_]
 bool_config_repr = type_spec(bool)

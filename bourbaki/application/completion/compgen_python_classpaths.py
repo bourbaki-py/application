@@ -15,7 +15,7 @@ import typing
 from typing import Union
 from warnings import warn
 
-scriptname = 'compgen_python_classpaths.py'
+scriptname = "compgen_python_classpaths.py"
 
 Module = type(sys)
 
@@ -170,9 +170,7 @@ def _debug(msg: str, **kw):
         FAIL = "\033[91m"
         ENDC = "\033[0m"
         print(
-            "\033[92m{}: {}\033[0m".format(
-                scriptname, msg.format(**kw)
-            ),
+            "\033[92m{}: {}\033[0m".format(scriptname, msg.format(**kw)),
             file=sys.stderr,
         )
 

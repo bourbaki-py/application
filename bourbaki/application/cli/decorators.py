@@ -25,14 +25,16 @@ class cli_spec:
         """mark a function as not to be processed as a command for a CLI (usually a method in a class def)"""
         f.__noncommand__ = True
         return f
-    
+
     @staticmethod
     def command_name(name):
         """specify a command name string to override the function name. If a prefix is also specified, this will be 
         the last token in the command path for the function after the prefix"""
+
         def dec(f):
             f.__command_name__ = name
             return f
+
         return dec
 
     @staticmethod
@@ -194,6 +196,7 @@ class cli_spec:
         def dec(f):
             f.__exit_codes__ = codes
             return f
+
         return dec
 
     @staticmethod

@@ -99,8 +99,8 @@ class CLISignatureSpec(NamedTuple):
         namespaces = [n.nonnull_attrs for n in chain((self,), others)]
         metavars = ChainMap(*filter(None, (n.get("metavars") for n in namespaces)))
         attrs = ChainMap({"metavars": metavars}, *namespaces)
-        if attrs.get('require_options') is None:
-            attrs['require_options'] = False
+        if attrs.get("require_options") is None:
+            attrs["require_options"] = False
         return CLISignatureSpec(**attrs)
 
     def configure(
