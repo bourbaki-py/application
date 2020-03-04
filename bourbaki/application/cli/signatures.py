@@ -165,8 +165,8 @@ class CLISignatureSpec(NamedTuple):
                             )
                         )
 
-                memo.update(group)
                 named_groups[name] = group.difference(memo).intersection(all_names)
+                memo.update(group)
 
         if self.parse_order is None:
             parse_order = list(params)

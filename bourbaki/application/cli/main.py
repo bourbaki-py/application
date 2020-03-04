@@ -1424,7 +1424,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
 
             self._set_subcommand(*cmd_path, subcommand=subcmd_func)
         else:
-            parser = self.add_argument_group("main arguments")
+            parser = self
 
             if self.description is None:
                 self.description = subcmd_func.docs.short_desc
