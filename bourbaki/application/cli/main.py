@@ -115,6 +115,8 @@ TRACEBACK_VERBOSITY = 3
 DEFAULT_EXECUTION_FLAG = "-x"
 INSTALL_SHELL_COMPLETION_FLAG = "--install-bash-completion"
 CONFIG_OPTION = "--config"
+VERSION_FLAG = "--version"
+INFO_FLAG = "--info"
 VERBOSE_FLAGS = ("-v", "--verbose")
 QUIET_FLAGS = ("--quiet", "-q")
 EXECUTE = False
@@ -360,13 +362,15 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         subcommand_help: Opt[Mapping[Union[str, Tuple[str, ...]], str]] = None,
         # special features and flags
         use_multiprocessing: bool = False,
-        install_bash_completion: bool = False,
         use_verbose_flag: bool = False,
         use_quiet_flag: bool = False,
         use_execution_flag: Union[bool, str, Tuple[str, ...]] = False,
-        add_install_bash_completion_flag: Union[bool, str] = True,
         add_init_config_command: Union[bool, str, Tuple[str, ...]] = False,
         suppress_setup_warnings: bool = False,
+        # completion
+        install_bash_completion: bool = False,
+        extra_bash_completion_script: Opt[str] = None,
+        add_install_bash_completion_flag: Union[bool, str] = True,
         # source files
         source_file: Opt[str] = None,
         helper_files: Opt[List[str]] = None,
@@ -474,16 +478,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         :param use_multiprocessing: bool. If your app uses multiprocessing, then logging will be configured to reflect
             that fact, using appropriate process-safe loggers and handlers. This is passed through to
             `application.logging.config.configure_default_logging` via the `multiprocessing` keyword arg.
-        :param install_bash_completion: bool. If True, shell completions are installed automatically at the end of
-            interface inference in a `CommandLineInterface.definition` decorator call, if the source file(s) have
-            changed more recently than the completion definition files or the completion definition files don't yet
-            exist. If you are registering individual functions with `CommandLineInterface.main` or
-            `CommandLineInterface.subcommand`, this option has no effect, since it is unknown when the CLI definition
-            is complete. In that case, you can manually call `CommandLineInterface.install_shell_completion` in your
-            script. Also see `add_install_bash_completion_flag`.
         :param use_verbose_flag: bool. If passed, a flag is added to the command line interface using the option strings
             `application.cli.VERBOSE_FLAGS` which may be repeated to increase verbosity. This affects verbosity by
-             decreasing the logging level by 10 for every repetition. At the DEBUG level (usually 4 repetitions),
+             decreasing the logging level by 10 for every repetition. At the DEBUG level (usually 3 repetitions),
              the log format also changes to reflect more information, such as source files and line numbers.
         :param use_quiet_flag: bool. If passed, a flag is added to the command line interface using the option strings
             `application.cli.QUIET_FLAGS` with the effect that when the flag is passed, console logging is suppressed.
@@ -493,16 +490,25 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             code may look up the status of this flag via `from bourbaki.application import cli; if cli.EXECUTE: ...`
             to determine what action to take. The only effect on the behavior of this class is that file logging is
             suppressed when the flag is not passed (when this arg is specified).
-        :param add_install_bash_completion_flag: bool or str. If True or a str, a flag is added to the command line
-            interface which triggers installation of bash completions when it is passed. If a str, that flag is equal to
-            this arg, else the default flag is `application.cli.INSTALL_SHELL_COMPLETION_FLAG`. Note that the
-            'bash-completion' package may need to be installed for your OS for some completions to work; see the
-            documentation for `application.completion` for more details.
         :param add_init_config_command: bool or str. When True or a str, a command is added to the command line
             interface which wraps `application.CommandLineInterface.init_config`. This command writes an empty
             configuration file (or dir) for your command line interface that can then be manually edited and passed
             to the --config option when that option is available. See `application.CommandLineInterface.init_config` for
             more details.
+        :param add_install_bash_completion_flag: bool or str. If True or a str, a flag is added to the command line
+            interface which triggers installation of bash completions when it is passed. If a str, that flag is equal to
+            this arg, else the default flag is `application.cli.INSTALL_SHELL_COMPLETION_FLAG`. Note that the
+            'bash-completion' package may need to be installed for your OS for some completions to work; see the
+            documentation for `application.completion` for more details.
+        :param install_bash_completion: bool. If True, shell completions are installed automatically at the end of
+            interface inference in a `CommandLineInterface.definition` decorator call, if the source file(s) have
+            changed more recently than the completion definition files or the completion definition files don't yet
+            exist. If you are registering individual functions with `CommandLineInterface.main` or
+            `CommandLineInterface.subcommand`, this option has no effect, since it is unknown when the CLI definition
+            is complete. In that case, you can manually call `CommandLineInterface.install_shell_completion` in your
+            script. Also see `add_install_bash_completion_flag`.
+        :param extra_bash_completion_script: str. If given, append this script to the completion script for this CLI.
+            This allows for e.g. injection of user-defined shell functions to be used as completions.
 
         :param suppress_setup_warnings: bool. During processing of these args and inference of the interface from
             annotations and docstrings, some warnings may arise. To suppress these, pass True.
@@ -684,18 +690,18 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                     "both package and version were passed explicitly; the given version will be used rather "
                     "than the version parsed from package info"
                 )
-                self.add_argument("--version", action="version", version=version)
+                self.add_argument(VERSION_FLAG, action="version", version=version)
             elif version or version is None:
                 if version is None:
                     version = True
                 self.add_argument(
-                    "--version",
+                    VERSION_FLAG,
                     action=PackageVersionAction,
                     package=package,
                     version=version,
                 )
             self.add_argument(
-                "--info",
+                INFO_FLAG,
                 action=InfoAction,
                 package=package,
                 version=version,
@@ -709,7 +715,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                     )
                 )
             else:
-                self.add_argument("--version", action="version", version=version)
+                self.add_argument(VERSION_FLAG, action="version", version=version)
 
         if add_install_bash_completion_flag:
             flag = (
@@ -774,6 +780,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         else:
             self.source_dir = None
         self.helper_files = helper_files
+        self.extra_bash_completion_script = extra_bash_completion_script
         self._bash_completion = bool(install_bash_completion)
         self.use_init_config_command = bool(add_init_config_command)
         self.subcommands = {}
@@ -1506,7 +1513,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             names = (self.prog, os.path.basename(self.source_file))
 
         self.logger.debug("Installing bash completion for command `{}`".format(names))
-        install_shell_completion(self, *names, last_edit_time=self.last_edit_time())
+        install_shell_completion(
+            self,
+            *names,
+            extra_completion_script=self.extra_bash_completion_script,
+            last_edit_time=self.last_edit_time(),
+        )
 
     ##################
     # pickle methods #
