@@ -603,6 +603,12 @@ _bourbaki_no_complete() {
     return 0
 }
 
+_bourbaki_complete_from_stdout() {
+    local cur line
+    $BASH_COMPLETION_CUR_WORD cur
+    COMPREPLY=("${COMPREPLY[@]}" $("$@" 2>/dev/null | while read line; do [ "${line#$cur}" != "$line" ] && echo "$line"; done;))
+}
+
 _eval_completer() {
     local completer="$1" pos="$2"
     if ! _is_numeric "$pos"; then

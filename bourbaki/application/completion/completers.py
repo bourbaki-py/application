@@ -163,6 +163,11 @@ class FixedShellFunctionComplete(Complete):
         self.args = args
 
 
+class CompleteFromStdout(FixedShellFunctionComplete):
+    """Complete from a shell command that prints lines to stdout"""
+    _shell_func_name = '_bourbaki_complete_from_stdout'
+
+
 class _BashCompletionCompleters:
     """Constuct completers from the `bash_completion` bash module, which are highly developed and heavily tested.
     This uses simple .attribute access using '_'-stripped bash_completion shell function names."""

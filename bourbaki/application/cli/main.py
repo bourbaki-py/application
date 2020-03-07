@@ -34,7 +34,7 @@ from argparse import (
 )
 from traceback import print_exception
 from cytoolz import identity, get_in
-from typing_inspect import is_generic_type
+from typing_inspect import is_generic_type, get_generic_type
 
 from bourbaki.introspection.classes import classpath, most_specific_constructor
 from bourbaki.introspection.types import (
@@ -1227,10 +1227,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
 
         def dec(
             f,
+            # have to pass these in so we can rebind locals if needed below
             command_prefix=command_prefix,
             output_handler=output_handler,
             exit_codes=exit_codes,
             config_subsections=config_subsections,
+            tvar_map=tvar_map,
         ):
             # args provided here override those specified with decorators on the function, which override this
             # command line interface's global defaults
@@ -1239,6 +1241,13 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
 
             if exit_codes is None:
                 exit_codes = cli_attrs.exit_codes(f)
+
+            if tvar_map is None:
+                try:
+                    # for callable instances of generic classes
+                    tvar_map = get_param_dict(get_generic_type(f))
+                except (AttributeError, TypeError):
+                    pass
 
             if output_handler is None:
                 if _main and self.require_subcommand:
