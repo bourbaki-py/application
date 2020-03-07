@@ -87,6 +87,7 @@ def shellquote(s: str):
 def install_shell_completion(
     parser: ArgumentParser,
     *commands: str,
+    extra_completion_script: Opt[str] = None,
     completion_options: Sequence[str] = DEFAULT_BASH_COMPLETE_OPTIONS,
     last_edit_time: Opt[Union[float, str, Path]] = None
 ):
@@ -105,6 +106,7 @@ def install_shell_completion(
                 outfile,
                 commands=commands,
                 completion_options=completion_options,
+                extra_completion_script=extra_completion_script,
             )
 
     custom_source_command = BASH_SOURCE_TEMPLATE.format(custom_file, custom_file)
@@ -161,6 +163,11 @@ class RawShellFunctionComplete(Complete):
 class FixedShellFunctionComplete(Complete):
     def __init__(self, *args: str):
         self.args = args
+
+
+class CompleteFromStdout(FixedShellFunctionComplete):
+    """Complete from a shell command that prints lines to stdout"""
+    _shell_func_name = '_bourbaki_complete_from_stdout'
 
 
 class _BashCompletionCompleters:
@@ -331,6 +338,7 @@ def write_bash_completion_for_parser(
     file: IO[str],
     commands: Sequence[str],
     completion_options: Opt[Union[str, Sequence[str]]] = None,
+    extra_completion_script: Opt[str] = None,
     shebang: Opt[str] = BASH_SHEBANG,
 ):
     if isinstance(commands, str):
@@ -367,6 +375,10 @@ def write_bash_completion_for_parser(
     for cmd in commands:
         line = "complete {}-F {} {}".format(optionstr, completion_funcname, cmd)
         print_(line)
+
+    if extra_completion_script:
+        print_()
+        print_(extra_completion_script)
 
     print_()
 
