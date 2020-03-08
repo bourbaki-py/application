@@ -28,7 +28,6 @@ from bourbaki.application.typed_io.inflation import CLASSPATH_KEY, ARGS_KEY, KWA
 from bourbaki.application.typed_io.cli_parse import cli_parser, cli_nargs, cli_repr
 
 undefined = object()
-skip = object()
 
 
 def equal_contents(coll1, coll2):
@@ -37,6 +36,13 @@ def equal_contents(coll1, coll2):
     if len(coll1) != len(coll2):
         return False
     return set(coll1) == set(coll2)
+
+
+def equal_contents_nested(coll1, coll2):
+    print(coll1, coll2)
+    if type(coll1) is not type(coll2):
+        return False
+    return all(map(equal_contents, coll1, coll2))
 
 
 def equal_types(val1, val2):
@@ -55,6 +61,8 @@ class _TestCase:
         test_val=undefined,
         cli_test_val=undefined,
         config_test_val=undefined,
+        cli_action=None,
+        *,
         encoded_eq=equal_types,
         multi_test=False,
     ):
@@ -62,6 +70,7 @@ class _TestCase:
         self.type_ = type_
         self.cli_nargs = cli_nargs
         self.cli_repr = cli_repr
+        self.cli_action = cli_action
         self.cli_test_val = cli_test_val
         self.config_repr = config_repr
         self.config_test_val = config_test_val
@@ -84,8 +93,6 @@ class _TestCase:
         selfattr = getattr(self, attr_)
         if selfattr is undefined:
             return False
-        elif selfattr is skip:
-            return None
         return True
 
     def _test_attr(self, attr):
@@ -131,6 +138,9 @@ class _TestCase:
 
     def test_cli_nargs(self):
         self._test_attr("cli_nargs")
+
+    def test_cli_action(self):
+        self._test_attr("cli_action")
 
     def test_cli_repr(self):
         self._test_attr("cli_repr")
@@ -465,7 +475,7 @@ test_cases = [
         "FALSE",
         False,
     ),
-    # collections
+    # Collections
     _TestCase(
         bytes,
         ZERO_OR_MORE,
@@ -501,7 +511,7 @@ test_cases = [
         set_str,
         list_str,
         list_str,
-        equal_contents,
+        encoded_eq=equal_contents,
     ),
     _TestCase(
         frozenset,
@@ -511,7 +521,7 @@ test_cases = [
         frozenset_str,
         list_str,
         list_str,
-        equal_contents,
+        encoded_eq=equal_contents,
     ),
     _TestCase(
         list,
@@ -595,7 +605,7 @@ test_cases = [
         set_int,
         list_int_as_str,
         list_int,
-        equal_contents,
+        encoded_eq=equal_contents,
     ),
     _TestCase(
         FrozenSet[int],
@@ -605,7 +615,7 @@ test_cases = [
         frozenset_int,
         list_int_as_str,
         list_int,
-        equal_contents,
+        encoded_eq=equal_contents,
     ),
     _TestCase(
         Tuple[int, ...],
@@ -654,6 +664,41 @@ test_cases = [
         [["1", 2]],
         [{"foo": 1, "bar": "2"}, [1, "2"]],
         multi_test=True,
+    ),
+    # Nested collections
+    _TestCase(
+        List[FooTup],
+        2,
+        (type_spec(int), type_spec(str)),
+        [{"foo": type_spec(int), "bar": type_spec(str)}, '...'],
+        [FooTup(1, "2"), FooTup(3, "4")],
+        [[["1", 2], ["3", "4"]]],
+        [[{"foo": 1, "bar": "2"}, {"foo": 3, "bar": "4"}], [[1, "2"], [3, "4"]]],
+        cli_action="append",
+        multi_test=True,
+    ),
+    _TestCase(
+        Tuple[FooTup, ...],
+        2,
+        (type_spec(int), type_spec(str)),
+        [{"foo": type_spec(int), "bar": type_spec(str)}, '...'],
+        (FooTup(1, "2"), FooTup(3, "4")),
+        [[["1", 2], ["3", "4"]]],
+        [[{"foo": 1, "bar": "2"}, {"foo": 3, "bar": "4"}], [[1, "2"], [3, "4"]]],
+        cli_action="append",
+        multi_test=True,
+    ),
+    _TestCase(
+        List[Set[bool_float_or_str]],
+        '*',
+        bool_float_or_str_cli_repr,
+        [[bool_float_or_str_config_repr, '...'], '...'],
+        [{True, 2.0, 'foo'}, {3.0, False}],
+        [["true", "2", "foo"], ["3", "false"]],
+        [[True, 2, "foo"], [3, False]],
+        cli_action="append",
+        encoded_eq=equal_contents_nested,
+        multi_test=False,
     ),
     # Lazy types
     # type_spec here rather than the usual cli_repr because we don't want to load the type to print CLI help
@@ -743,6 +788,11 @@ test_cases = [
 @pytest.mark.parametrize("test_case", test_cases)
 def test_cli_nargs(test_case: _TestCase):
     test_case.test_cli_nargs()
+
+
+@pytest.mark.parametrize("test_case", test_cases)
+def test_cli_action(test_case: _TestCase):
+    test_case.test_cli_action()
 
 
 @pytest.mark.parametrize("test_case", test_cases)

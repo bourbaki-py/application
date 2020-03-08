@@ -149,15 +149,6 @@ RANDOM_COMMANDS = [set(choices(COMMANDS, k=3)) for _ in range(10)]
 fmts = ["py", "yaml", "json"]
 
 
-# currently can't run this because lookup of classes defined in cli.py fails
-# @pytest.fixture(scope='module')
-# def cli_pickle_reloaded():
-#     f = io.BytesIO()
-#     pickle.dump(cli, f)
-#     f.seek(0)
-#     return pickle.load(f)
-
-
 def test_command_names():
     fns = (
         getattr(v, "__command_prefix__", (n.replace("_", "-"),))[0]
