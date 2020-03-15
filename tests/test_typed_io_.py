@@ -17,7 +17,7 @@ from bourbaki.application.typed_io import TypedIO
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.exceptions import *
 from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr, KEY_VAL_JOIN_CHAR
-from bourbaki.application.typed_io.utils import byte_repr, READ_MODES, WRITE_MODES
+from bourbaki.application.typed_io.utils import byte_repr, complex_repr, READ_MODES, WRITE_MODES
 from bourbaki.application.typed_io.config_repr_ import (
     config_repr,
     bool_config_repr,
@@ -664,6 +664,16 @@ test_cases = [
         [["1", 2]],
         [{"foo": 1, "bar": "2"}, [1, "2"]],
         multi_test=True,
+    ),
+    _TestCase(
+        Tuple[FooTup, complex],
+        3,
+        (type_spec(int), type_spec(str), complex_repr),
+        [{"foo": type_spec(int), "bar": type_spec(str)}, complex_repr],
+        (FooTup(1, "2"), 1+2j),
+        ['1', '2', '1+2j'],
+        [{"foo": 1, "bar": "2"}, "(1+2j)"],
+        multi_test=False,
     ),
     # Nested collections
     _TestCase(

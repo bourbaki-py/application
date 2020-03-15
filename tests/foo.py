@@ -1,9 +1,11 @@
 #!/usr/bin/env python
-from bourbaki.application.cli import CommandLineInterface, ArgSource
+import sys
 from typing import *
 
+from bourbaki.application.cli import CommandLineInterface, ArgSource, cli_spec
+
 cli = CommandLineInterface(
-    prog="foo.py", arg_lookup_order=(ArgSource.CLI, ArgSource.DEFAULTS)
+    prog="foo.py", arg_lookup_order=(ArgSource.CLI, ArgSource.STDIN, ArgSource.DEFAULTS)
 )
 
 
@@ -20,19 +22,20 @@ class Foo:
         """
         self.x = x
         self.y = y
-
-    def wut(
+    
+    @cli_spec.parse_stdin('opt')
+    @cli_spec.stdin_parser('.py')
+    def nested(
         self,
-        tup: Tuple[Tuple[int, int], str, Tuple[complex, ...]],
+        tup: Tuple[Tuple[int, int], str, complex],
         opt: Optional[List[Set[int]]] = None,
     ):
-        """
-        wut to the wut
+        """read and print nested types
         :param tup: crazy nested tuple
-        :param opt: nested lists
+        :param opt: nested list of sets
         :return:
         """
-        print(tup)
+        print(tup, file=sys.stderr)
         print(opt)
 
 
