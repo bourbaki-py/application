@@ -67,6 +67,7 @@ from ..typed_io.utils import (
     ellipsis_,
     text_path_repr,
 )
+from ..typed_io.stdin_parse import to_stdin_parser
 from ..typed_io import TypedIO, ArgSource
 from .actions import (
     InfoAction,
@@ -122,6 +123,7 @@ QUIET_FLAGS = ("--quiet", "-q")
 EXECUTE = False
 DEFAULT_LOOKUP_ORDER = (
     ArgSource.CLI,
+    ArgSource.STDIN,
     ArgSource.ENV,
     ArgSource.CONFIG,
     ArgSource.DEFAULTS,
@@ -452,11 +454,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
 
         :param arg_lookup_order: tuple of application.cli.ArgSource enums specifying where args to the executed command
             should be looked up, with earlier entries having higher precedence. Allows the namespace of a configuration
-            file or os.environ to populate the args. Default is (CLI, ENV, CONFIG). If CLI is not in the tuple it will
-            be inserted as the first entry.
+            file or os.environ to populate the args. Default is (CLI, STDIN, ENV, CONFIG, DEFAULTS). If DEFAULTS is not
+            in the tuple it will be inserted as the last entry, unless ignore_function_defaults=True.
         :param ignore_function_defaults: should function defaults be used as a fallback when values aren't found in any
-            input sources (CLI, environment, config)? Default is False, in which case arg_lookup_order will have
-            ArgSource.DEFAULTS appended before being set to the .lookup_order attribute in case it isn't present already.
+            input sources (e.g. command line, stdin, environment, config)? Default is False, in which case
+            arg_lookup_order will have ArgSource.DEFAULTS appended before being set to the .lookup_order attribute (in
+            case it isn't present already).
 
         :param typecheck: bool. Should all parsed args be type-checked before the registered command function is called
             with them? Default is False. Specific args can be typchecked selectively by using the
@@ -1214,6 +1217,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         ignore_in_config=None,
         parse_config_as_cli=None,
         parse_env=None,
+        parse_stdin=None,
+        stdin_parser=None,
         parse_order=None,
         typecheck=None,
         output_handler=None,
@@ -1237,6 +1242,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             # have to pass these in so we can rebind locals if needed below
             command_prefix=command_prefix,
             output_handler=output_handler,
+            stdin_parser=stdin_parser,
             exit_codes=exit_codes,
             config_subsections=config_subsections,
             tvar_map=tvar_map,
@@ -1245,6 +1251,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             # command line interface's global defaults
             if output_handler is None:
                 output_handler = cli_attrs.output_handler(f, None)
+
+            if stdin_parser is not None:
+                stdin_parser = to_stdin_parser(stdin_parser)
 
             if exit_codes is None:
                 exit_codes = cli_attrs.exit_codes(f)
@@ -1284,6 +1293,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
                 ignore_on_cmd_line=ignore_on_cmd_line,
                 ignore_in_config=ignore_in_config,
                 parse_config_as_cli=parse_config_as_cli,
+                parse_stdin=parse_stdin,
+                stdin_parser=stdin_parser,
                 typecheck=typecheck,
                 metavars=metavars,
                 named_groups=named_groups,
@@ -1333,6 +1344,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         ignore_on_cmd_line=None,
         ignore_in_config=None,
         parse_config_as_cli=None,
+        parse_stdin=None,
+        stdin_parser=None,
         parse_order=None,
         typecheck=None,
         output_handler=None,
@@ -1350,6 +1363,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             ignore_on_cmd_line=ignore_on_cmd_line,
             ignore_in_config=ignore_in_config,
             parse_config_as_cli=parse_config_as_cli,
+            parse_stdin=parse_stdin,
+            stdin_parser=stdin_parser,
             typecheck=typecheck,
             output_handler=output_handler,
             exit_codes=exit_codes,
@@ -1785,6 +1800,17 @@ class SubCommandFunc(Logged):
 
             final_output_spec = output_signature_spec.configure(output_sig)
 
+            if final_spec.parse_stdin and final_output_spec.parse_stdin:
+                raise ValueError(
+                    "At most one arg may be parsed from stdin; the function {} specifies args {} and its output "
+                    "handler {} specifies args {}".format(
+                        func,
+                        ', '.join(final_spec.parse_stdin),
+                        output_handler,
+                        ', '.join(final_output_spec.parse_stdin),
+                    )
+                )
+
             overlap = final_output_spec.parsed.intersection(final_spec.parsed)
             if overlap:
                 raise NameError(
@@ -1942,6 +1968,12 @@ class SubCommandFunc(Logged):
         )
 
     @property
+    def parse_stdin(self):
+        if self.output_signature_spec is None:
+            return self.main_signature_spec.parse_stdin
+        return self.output_signature_spec.parse_stdin
+
+    @property
     def parse_env(self):
         if self.output_signature_spec is None:
             return self.main_signature_spec.parse_env
@@ -1953,6 +1985,7 @@ class SubCommandFunc(Logged):
     def parse_order(self):
         if self.output_signature_spec is None:
             return self.main_signature_spec.parse_order
+        # otherwise parse output args first; these are usually simple types like booleans and file paths
         return (
             self.output_signature_spec.parse_order
             + self.main_signature_spec.parse_order
@@ -2058,6 +2091,15 @@ class SubCommandFunc(Logged):
             if env_name in os.environ
         }
 
+    def get_stdin(self):
+        if sys.stdin.isatty():
+            # only parse from programmatic input, not user input
+            return None
+        parse_stdin = self.parse_stdin
+        if not parse_stdin:
+            return None
+        return {name: sys.stdin for name in parse_stdin}
+
     def execute(self, namespace, config, instance=None, handle_output=True):
         args, kwargs, output_args, output_kwargs = self.prepare_args_kwargs(
             namespace, config, handle_output=handle_output
@@ -2084,9 +2126,11 @@ class SubCommandFunc(Logged):
             else argparse_namespace
         )
         cli = {name: value for name, value in cli.items() if not Missing.missing(value)}
+        stdin = self.get_stdin()
 
         lookup = {
             ArgSource.CLI: cli,
+            ArgSource.STDIN: stdin,
             ArgSource.ENV: env,
             ArgSource.CONFIG: conf,
             ArgSource.DEFAULTS: self.defaults,
@@ -2166,6 +2210,8 @@ class SubCommandFunc(Logged):
 
             if source == ArgSource.CONFIG and name in parse_config_as_cli:
                 parser = tio.parser_for_source(ArgSource.CLI)
+            elif source == ArgSource.STDIN and spec.stdin_parser is not None:
+                parser = spec.stdin_parser
             else:
                 parser = tio.parser_for_source(source)
 
