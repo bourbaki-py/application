@@ -56,7 +56,8 @@ dumper_kw = {
 
 
 class ConfigFormat(Enum):
-    yaml = yml = ".yml"
+    yml = ".yml"
+    yaml = ".yaml"
     toml = ".toml"
     json = ".json"
     ini = ".ini"
