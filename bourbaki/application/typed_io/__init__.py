@@ -1,5 +1,5 @@
 # coding:utf-8
-from .main import TypedIO, ArgSource, CLI, CONFIG, ENV
+from .main import TypedIO, ArgSource, CLI, CONFIG, ENV, STDIN
 from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
 from .cli_complete import cli_completer
 from .cli_repr_ import cli_repr
@@ -10,4 +10,5 @@ from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
+from .stdin_parse import stdin_parser
 from .utils import File

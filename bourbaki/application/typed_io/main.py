@@ -1,5 +1,6 @@
 # coding:utf-8
-from typing import Optional, Tuple, Dict, Collection, Union
+from itertools import chain
+from typing import Optional, Tuple, Dict, Union
 import enum
 from inspect import Parameter
 from argparse import ArgumentParser, OPTIONAL, ONE_OR_MORE, ZERO_OR_MORE
@@ -12,7 +13,8 @@ from bourbaki.introspection.types import (
 )
 from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli_parse import cli_parser, cli_option_parser
-from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action
+from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action, is_nested_collection_for_cli
+from .cli_metavar import cli_metavar
 from .cli_repr_ import cli_repr
 from .cli_complete import cli_completer
 from ..completion.completers import Complete, CompleteChoices, CompleteTuple, NoComplete
@@ -20,19 +22,15 @@ from .config_encode import config_encoder, config_key_encoder
 from .config_decode import config_decoder, config_key_decoder
 from .config_repr_ import config_repr
 from .env_parse import env_parser
+from .stdin_parse import stdin_parser
 from .utils import (
     Empty,
     Doc,
     to_param_doc,
     cmd_line_arg_names,
     CLI_PREFIX_CHAR,
-    KEY_VAL_JOIN_CHAR,
-    to_str_cli_repr,
-)
-from .utils import (
     cached_property,
     PicklableWithType,
-    PositionalMetavarFormatter,
     Missing,
     identity,
     repr_value,
@@ -44,9 +42,10 @@ class ArgSource(enum.Enum):
     CONFIG = "configuration file"
     ENV = "environment variables"
     DEFAULTS = "function defaults"
+    STDIN = "standard input"
 
 
-CLI, CONFIG, ENV = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV
+CLI, CONFIG, ENV, STDIN = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV, ArgSource.STDIN
 
 __all__ = ["ArgSource", "TypedIO"]
 
@@ -265,7 +264,7 @@ class TypedIO(PicklableWithType):
 
     @cached_property
     def cli_action(self):
-        return cli_action(self.type_)
+        return "append" if self.is_nested_collection else None
 
     @cached_property
     def is_variadic(self):
@@ -277,7 +276,7 @@ class TypedIO(PicklableWithType):
 
     @cached_property
     def is_nested_collection(self):
-        return issubclass_generic(self.type_, Collection[NonStrCollection])
+        return is_nested_collection_for_cli(self.type_)
 
     @cached_property
     def is_collection(self):
@@ -317,6 +316,10 @@ class TypedIO(PicklableWithType):
     @cached_property
     def env_parser(self):
         return env_parser(self.type_)
+    
+    @cached_property
+    def stdin_parser(self):
+        return stdin_parser(self.type_)
 
     @cached_property
     def config_encoder(self):
@@ -337,6 +340,8 @@ class TypedIO(PicklableWithType):
             return self.config_decoder
         elif source == ENV:
             return self.env_parser
+        elif source == STDIN:
+            return self.stdin_parser
         # function defaults
         return identity
 
@@ -413,33 +418,7 @@ class TypedIO(PicklableWithType):
                 metavar = metavar.get(name)
 
             type_str = self.cli_repr
-
-            if metavar is None:
-                if kind == Parameter.VAR_KEYWORD:
-                    metavar = "NAME{}{}".format(
-                        KEY_VAL_JOIN_CHAR, name.upper().rstrip("S")
-                    )
-                elif is_named_tuple_class(type_per_option):
-                    metavar = tuple(
-                        to_str_cli_repr(k.upper(), cli_nargs(v))
-                        for k, v in type_per_option.__annotations__.items()
-                    )
-                elif positional:
-                    metavar = name.upper()
-                else:
-                    metavar = type_str
-                    type_str = None
-
-            if not isinstance(type_str, (str, type(None))):
-                # tuple types
-                type_str = " ".join(type_str)
-
-            if positional and not isinstance(metavar, (str, type(None))):
-                # hack to deal with the fact that argparse handles fixed-length positionals differently than
-                # fixed-length options when formatting help strings
-                metavar = PositionalMetavarFormatter(
-                    *(metavar or ()), name=name.upper()
-                )
+            metavar = cli_metavar(param, self.type_, metavar, positional=positional)
 
             # don't pass the parser here; we handle parsing as a postprocessing step
             kw = dict(metavar=metavar)
