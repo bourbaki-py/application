@@ -1,9 +1,10 @@
 # coding:utf-8
 # decorators for functions defined in a class def context to override default behaviors for how they are configured
 # as subcommands
-from typing import Collection
-from bourbaki.introspection.callables import funcname
+from typing import Collection, Tuple, Callable, TextIO, Optional, Union, Any
 from .helpers import _maybe_bool, _validate_parse_order
+from ..config import ConfigFormat
+from ..typed_io.stdin_parse import to_stdin_parser
 
 NO_OUTPUT_HANDLER = object()
 
@@ -27,7 +28,7 @@ class cli_spec:
         return f
 
     @staticmethod
-    def command_name(name):
+    def command_name(name: str):
         """specify a command name string to override the function name. If a prefix is also specified, this will be 
         the last token in the command path for the function after the prefix"""
 
@@ -38,7 +39,7 @@ class cli_spec:
         return dec
 
     @staticmethod
-    def command_prefix(*prefix):
+    def command_prefix(*prefix: str):
         """map a function to a nested command. The function name is tokenized, and any tokens from the _tail_ of the
         specified prefix that match those at the _head_ of the function name are only present once in the command path.
         Any remaining (tail) tokens in the function name are also present in the command path.
@@ -67,7 +68,7 @@ class cli_spec:
         return dec
 
     @staticmethod
-    def config_subsection(*section):
+    def config_subsection(*section: str):
         def dec(f):
             section_ = _maybe_bool(section, fallback=tuple)
             f.__config_subsections__ = (
@@ -78,7 +79,7 @@ class cli_spec:
         return dec
 
     @staticmethod
-    def config_subsections(*sections):
+    def config_subsections(*sections: Union[str, Tuple[str, ...]]):
         def dec(f):
             f.__config_subsections__ = [
                 tuple(name) if isinstance(name, (list, tuple)) else (name,)
@@ -94,7 +95,7 @@ class cli_spec:
         return cli_spec.config_subsection()(func)
 
     @staticmethod
-    def ignore_in_config(*names):
+    def ignore_in_config(*names: str):
         """mark argument names to be ignored in configuration files for the decorated function"""
         if len(names) == 1 and callable(names[0]):
             # bare decorator
@@ -108,7 +109,7 @@ class cli_spec:
         return dec
 
     @staticmethod
-    def parse_config_as_cli(*names):
+    def parse_config_as_cli(*names: str):
         """mark argument names to be parsed from configuration files using the parsers applied on the command line"""
 
         def dec(f):
@@ -133,6 +134,27 @@ class cli_spec:
 
         def dec(f):
             f.__parse_env__ = argname_to_envname
+            return f
+
+        return dec
+
+    @staticmethod
+    def parse_stdin(name: str):
+        """mark an argument to be read from stdin."""
+
+        def dec(f):
+            f.__parse_stdin__ = name
+            return f
+
+        return dec
+
+    @staticmethod
+    def stdin_parser(parser_or_format: Union[ConfigFormat, Callable[[TextIO], Any]]):
+        """specify how stdin should be parsed, either as a bourbaki.applicaiton.confgi.ConfigFormat or a callable
+        accepting the stdin file handle and returning a parsed value"""
+
+        def dec(f):
+            f.__stdin_parser__ = to_stdin_parser(parser_or_format)
             return f
 
         return dec
@@ -261,6 +283,14 @@ class cli_attrs:
     @staticmethod
     def parse_env(f, default=None):
         return getattr(f, "__parse_env__", default)
+
+    @staticmethod
+    def parse_stdin(f):
+        return getattr(f, "__parse_stdin__", None)
+
+    @staticmethod
+    def stdin_parser(f):
+        return getattr(f, "__stdin_parser__", None)
 
     @staticmethod
     def parse_order(f):
