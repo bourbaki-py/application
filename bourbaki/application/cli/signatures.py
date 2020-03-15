@@ -4,13 +4,13 @@ from typing import (
     Dict,
     Set,
     List,
+    Tuple,
     Mapping,
     NamedTuple,
     Pattern,
     Iterable,
     Optional,
     Union,
-    Any,
 )
 from collections import ChainMap
 from functools import singledispatch
@@ -25,6 +25,7 @@ from bourbaki.introspection.callables import (
 )
 from .decorators import cli_attrs
 from .helpers import _validate_parse_order, _type
+from ..typed_io.stdin_parse import StdinParser, to_stdin_parser
 
 
 class ArgKind(Enum):
@@ -60,6 +61,8 @@ class CLISignatureSpec(NamedTuple):
     parse_config_as_cli: Optional[AnyArgNameSpec] = None
     typecheck: Optional[AnyArgNameSpec] = None
     parse_env: Optional[Dict[str, str]] = None
+    parse_stdin: Optional[str] = None
+    stdin_parser: Optional[StdinParser] = None
     metavars: Optional[Dict[str, str]] = None
     named_groups: Optional[Dict[str, Collection[str]]] = None
     parse_order: Optional[List[Union[str, type(Ellipsis)]]] = None
@@ -78,6 +81,8 @@ class CLISignatureSpec(NamedTuple):
             parse_config_as_cli=cli_attrs.parse_config_as_cli(func),
             typecheck=cli_attrs.typecheck(func),
             parse_env=cli_attrs.parse_env(func),
+            parse_stdin=cli_attrs.parse_stdin(func),
+            stdin_parser=cli_attrs.stdin_parser(func),
             metavars=cli_attrs.metavars(func),
             named_groups=cli_attrs.named_groups(func),
             parse_order=cli_attrs.parse_order(func),
@@ -123,6 +128,11 @@ class CLISignatureSpec(NamedTuple):
                         tuple(name for name in parse_env if name not in all_names), sig
                     )
                 )
+
+        if self.parse_stdin is None:
+            parse_stdin = ()
+        else:
+            parse_stdin = (self.parse_stdin,)
 
         if self.metavars is None:
             metavars = {}
@@ -185,6 +195,8 @@ class CLISignatureSpec(NamedTuple):
             parse_config_as_cli=param_names("parse_config_as_cli", invert=False),
             typecheck=param_names("typecheck", invert=False),
             parse_env=parse_env,
+            parse_stdin=parse_stdin,
+            stdin_parser=self.stdin_parser,
             parse_order=parse_order,
             metavars=metavars,
             named_groups=named_groups,
@@ -199,6 +211,8 @@ class FinalCLISignatureSpec(NamedTuple):
     parse_config: Set[str]
     parse_config_as_cli: Set[str]
     parse_env: Mapping[str, str]
+    parse_stdin: Union[Tuple[str], Tuple]
+    stdin_parser: Optional[StdinParser]
     parse_order: List[str]
     typecheck: Set[str]
     metavars: Mapping[str, str]
@@ -209,11 +223,11 @@ class FinalCLISignatureSpec(NamedTuple):
 
     @property
     def parsed(self) -> Set[str]:
-        return self.parse_cmd_line.union(self.parse_config).union(self.parse_env)
+        return self.parse_cmd_line.union(self.parse_config).union(self.parse_env).union(self.parse_stdin)
 
     @property
     def have_fallback(self) -> Set[str]:
-        return self.parse_config.union(self.parse_env)
+        return self.parse_config.union(self.parse_env).union(self.parse_stdin)
 
 
 class UnknownArgSpecifier(TypeError):
