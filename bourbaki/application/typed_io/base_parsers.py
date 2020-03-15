@@ -1,11 +1,11 @@
 # coding:utf-8
-from typing import IO, TextIO, BinaryIO, Sequence, AbstractSet, Union
+from typing import Sequence, AbstractSet, Union
 import typing
 import datetime
 import enum
 import operator
-import pathlib
 import re
+import sys
 from functools import reduce, lru_cache
 from inspect import Parameter
 from argparse import ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL
@@ -13,39 +13,30 @@ from bourbaki.introspection.types import get_generic_args, concretize_typevars
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.imports import import_type
 from .utils import TypeCheckImport
+from .exceptions import ConfigTypedOutputError, ConfigTypedInputError, CLITypedInputError
 
 Empty = Parameter.empty
 
 NARGS_OPTIONS = (None, ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL)
 
-
-class TypedIOException(ValueError):
-    def __init__(self, type_, value):
-        self.type_ = type_
-        self.value = value
-
-
-class TypedIOParseError(TypedIOException):
-    def __str__(self):
-        return "Could not parse value of type {} from {}".format(
-            self.type_, repr(self.value)
-        )
-
-
-class TypedIOConfigReprError(TypedIOException):
-    def __str__(self):
-        return "Could not represent value {} for type {} in config-safe way".format(
-            repr(self.value), self.type_
-        )
-
-
 bool_constants = {"true": True, "false": False}
+
+
+class parse_directly_with_type:
+    """parser for types whose constructors may be called unambiguously on a single atomic value
+    (str for command line or environment variable args, str/int/float/bool for config values)"""
+
+    def __init__(self, type_: typing.Type):
+        self.type_ = type_
+
+    def __call__(self, value):
+        return self.type_(value)
 
 
 def parse_bool(s, exc_type):
     try:
         return bool_constants[s.lower()]
-    except KeyError as e:
+    except KeyError:
         raise exc_type(
             bool,
             s,
@@ -61,34 +52,33 @@ def parse_regex_bytes(s: str):
     return re.compile(s.encode())
 
 
-def parse_path(s: str):
-    return pathlib.Path(s)
+if sys.version_info >= (3, 7):
+    parse_iso_date = datetime.date.fromisoformat
+    parse_iso_datetime = datetime.datetime.fromisoformat
+else:
+    def parse_iso_date(s):
+        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
 
-
-def parse_iso_date(s):
-    return datetime.datetime.strptime(s, "%Y-%m-%d").date()
-
-
-def parse_iso_datetime(s):
-    dt = None
-    strptime = datetime.datetime.strptime
-    for fmt in (
-        "%Y-%m-%dT%H:%M:%S.%f+%z",
-        "%Y-%m-%dT%H:%M:%S.%f",
-        "%Y-%m-%dT%H:%M:%S",
-        "%Y-%m-%dT%H:%M",
-        "%Y-%m-%dT%H",
-        "%Y-%m-%d",
-    ):
-        try:
-            dt = strptime(s, fmt)
-        except ValueError:
-            continue
-        else:
-            break
-    if dt is None:
-        raise ValueError("could not parse datetime from {}".format(s))
-    return dt
+    def parse_iso_datetime(s):
+        dt = None
+        strptime = datetime.datetime.strptime
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S.%f+%z",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M",
+            "%Y-%m-%dT%H",
+            "%Y-%m-%d",
+        ):
+            try:
+                dt = strptime(s, fmt)
+            except ValueError:
+                continue
+            else:
+                break
+        if dt is None:
+            raise ValueError("could not parse datetime from {}".format(s))
+        return dt
 
 
 range_pat = re.compile(r"(-?[0-9]+)([-:,])(-?[0-9]+)(?:\2(-?[0-9]+))?")
@@ -105,8 +95,11 @@ def parse_range(s):
     return range(*args)
 
 
+E = typing.TypeVar("E", bound=enum.Enum)
+
+
 class EnumParser:
-    def __init__(self, enum_: enum.EnumMeta):
+    def __init__(self, enum_: typing.Type[E]):
         self.enum = enum_
 
     def cli_repr(self) -> str:
@@ -115,30 +108,32 @@ class EnumParser:
     def config_repr(self) -> str:
         return "|".join(e.name for e in self.enum)
 
-    def _parse(self, arg, exc_type=TypedIOParseError):
+    def _parse(self, arg, exc_type: typing.Type[Exception]):
         try:
             e = getattr(self.enum, arg)
         except AttributeError:
             raise exc_type(self.enum, arg)
         return e
 
-    def cli_parse(self, args: str) -> enum.Enum:
-        return self._parse(args)
+    def cli_parse(self, args: str) -> E:
+        return self._parse(args, CLITypedInputError)
 
-    def config_decode(self, value: str) -> enum.Enum:
-        return self._parse(value)
+    def config_decode(self, value: str) -> E:
+        return self._parse(value, ConfigTypedInputError)
 
     def config_encode(self, value: enum.Enum) -> str:
         if not isinstance(value, self.enum):
-            raise TypedIOConfigReprError(self.enum, value)
+            raise ConfigTypedOutputError(
+                self.enum, value, TypeError("Expected {}; got {}".format(self.enum, type(value)))
+            )
         return value.name
 
 
 class FlagParser(EnumParser):
-    def __init__(self, enum_: enum.EnumMeta):
+    def __init__(self, enum_):
         super().__init__(enum_)
 
-    def _parse(self, arg, exc_type=TypedIOParseError):
+    def _parse(self, arg, exc_type: typing.Type[Exception]):
         parts = arg.split("|")
         parse = super(type(self), self)._parse
         es = (parse(e, exc_type) for e in parts)
@@ -146,18 +141,22 @@ class FlagParser(EnumParser):
 
     def config_decode(
         self, value: Union[str, Sequence[str], AbstractSet[str]]
-    ) -> enum.Flag:
+    ) -> E:
         if isinstance(value, str):
-            return self._parse(value)
+            return self._parse(value, ConfigTypedInputError)
         elif not isinstance(value, typing.Collection):
-            raise TypedIOParseError(self.enum, value)
+            raise ConfigTypedInputError(
+                self.enum, value, TypeError("Expected str or collection of str; got {}".format(type(value))),
+            )
         else:
             config_decode = super(type(self), self).config_decode
             return reduce(operator.or_, (config_decode(e) for e in value))
 
     def config_encode(self, value: enum.Flag) -> str:
         if not isinstance(value, self.enum):
-            raise TypedIOConfigReprError(self.enum, value)
+            raise ConfigTypedOutputError(
+                self.enum, value, TypeError("Expected {}; got {}".format(self.enum, type(value)))
+            )
         a = value.value
         e = 1
         vals = []
@@ -186,6 +185,7 @@ class TypeCheckImportType(TypeCheckImport):
 
     def type_check(self, type_):
         if not isinstance_generic(type_, self.type_):
+            # extract the bound; first arg to Type[]
             bound = concretize_typevars(get_generic_args(self.type_)[0])
             raise self.exc_cls(
                 self.type_,
