@@ -3,92 +3,137 @@ from inspect import signature
 from bourbaki.introspection.types import eval_type_tree, concretize_typevars
 
 
-class TypedIOTypeError(TypeError):
-    def __init__(self, type_, *args):
-        super().__init__(type_, *args)
-        self.type_ = concretize_typevars(eval_type_tree(type_))
+class BourbakiTypedIOException(Exception):
+    """Base exception class of all bourbaki typed I/O exceptions.
+    repr method formats as `ExceptionName('message')`"""
+    _type = None
 
+    @property
+    def type_(self):
+        return concretize_typevars(eval_type_tree(self._type))
 
-class TypedIOValueError(ValueError):
-    def __init__(self, type_, value, exc=None):
-        super().__init__(type_, value)
-        self.type_ = concretize_typevars(eval_type_tree(type_))
-        self.value = value
-        self.exc = exc
-
-
-class ExceptionReprMixin:
     def __repr__(self):
         return "{}({})".format(type(self).__name__, repr(str(self)))
 
 
-class IOUndefinedForType(TypedIOTypeError, ExceptionReprMixin):
+class TypedIOTypeError(TypeError, BourbakiTypedIOException):
+    """Base type error class for all 'compile-time' bourbaki typed I/O exceptions;
+    e.g. for unparseable types"""
+
+    def __init__(self, type_):
+        super().__init__(type_)
+        self._type = type_
+
+
+class TypedIOValueError(ValueError, BourbakiTypedIOException):
+    """Base type error class for all 'runtime' bourbaki typed I/O exceptions;
+    e.g. parse errors for specific input values"""
+
+    def __init__(self, type_, value, exc=None):
+        super().__init__(type_, value)
+        self._type = type_
+        self.value = value
+        self.exc = exc
+
+
+###############################################
+# 'compile-time' errors for unparseable types #
+###############################################
+
+
+class IOUndefinedForType(TypedIOTypeError):
     source = None
-    msg = "{}I/O is not defined for type {}"
+    values = "values"
+    msg = "{source} I/O is not defined for {values} of type {type}; use {methods} to register custom {functions}"
+    addendum = ""
+    methods = []
+    functions = []
 
     def __str__(self):
-        source = "{} ".format(self.source.title()) if self.source else ""
-        msg = self.msg.format(source, self.type_)
-        if self.args:
-            msg = msg + "; {}".format(self.args)
-        return msg
+        methods = '/'.join(self.methods) + '.register'
+        functions = '/'.join(self.functions)
+        return (self.msg + ' ' + self.addendum).format(
+            source=self.source, type=self.type_, methods=methods, functions=functions,
+        )
 
 
-class TypedInputError(TypedIOValueError, ExceptionReprMixin):
+class ConfigIOUndefinedForType(IOUndefinedForType):
+    source = 'configuration file'
+    methods = ['config_encoder', 'config_decoder', 'config_repr']
+    functions = ['encoder', 'decoder', 'type-representer (for generating config templates)']
+    addendum = "for parsing and encoding values of type {type} to configuration values (JSON-like)"
+
+
+class ConfigIOUndefinedForKeyType(ConfigIOUndefinedForType):
+    values = 'mapping keys'
+    methods = ['config_key_encoder', 'config_key_decoder', 'config_key_repr']
+    addendum = "for parsing and encoding mapping keys of type {type} to configuration keys (generally, strings)"
+
+
+class CLIIOUndefinedForType(IOUndefinedForType):
+    source = 'command line'
+    methods = ['cli_parser', 'cli_repr', 'cli_completer']
+    functions = [
+        'parser',
+        'type-representer (for generating help strings)',
+        'completer (see bourbaki.application.completion for completers)'
+    ]
+    addendum = "for parsing and completing user input for values of type {type}"
+
+
+class EnvIOUndefinedForType(IOUndefinedForType):
+    source = 'environment variable'
+    methods = ['env_parser']
+    functions = ['parser']
+    addendum = "for parsing environment variables to values of type {type}"
+
+
+class StdinIOUndefinedForType(IOUndefinedForType):
+    source = 'stdin'
+    methods = ['stdin_parser']
+    functions = ['parser']
+    addendum = "for parsing standard input to values of type {type}"
+
+
+#############################################################
+# 'runtime' errors, i.e. unparseable/unrepresentable values #
+#############################################################
+
+
+class TypedInputError(TypedIOValueError):
     source = None
+    method = None
+    msg = "can't parse value of type {type} from {source} value {value!r} using {method}({type})"
 
     def __str__(self):
-        source = "{} ".format(self.source) if self.source else ""
-        msg = "Cannot parse type {} from {}value {}".format(
-            self.type_, source, repr(self.value)
+        msg = self.msg.format(type=self.type_, source=self.source, value=self.value)
+        if self.exc is None:
+            return msg
+        return msg + "; raised {}".format(self.exc)
+
+
+class TypedOutputError(TypedIOValueError):
+    source = None
+    method = None
+    msg = "can't encode value {value!r} of type {value_type} to {source} using {method}({type})"
+
+    def __str__(self):
+        msg = self.msg.format(
+            type=self.type_,
+            source=self.source,
+            value=self.value,
+            value_type=type(self.value),
         )
         if self.exc is None:
             return msg
         return msg + "; raised {}".format(self.exc)
 
 
-class TypedOutputError(TypedIOValueError, ExceptionReprMixin):
-    source = None
-
-    def __str__(self):
-        source = "{} ".format(self.source) if self.source else ""
-        msg = "Cannot write value {} to {}with target type {}".format(
-            repr(self.value), source, self.type_
-        )
-        if self.exc is None:
-            return msg
-        return msg + "; raised {}".format(self.exc)
-
-
-class ConfigIOUndefined(IOUndefinedForType):
-    source = "configuration"
-
-
-class ConfigIOUndefinedForKeyType(ConfigIOUndefined):
-    msg = (
-        "{}I/O is undefined for Mapping types with keys of type {}; "
-        "use config_key_encoder.register to define a custom method"
-    )
-
-
-class ConfigCollectionKeysNotAllowed(ConfigIOUndefinedForKeyType):
-    msg = "{}I/O is undefined for Mapping types with Collection-typed keys: {}"
-
-
-class CLIIOUndefined(IOUndefinedForType):
-    source = "command line"
-
-
-class CLINestedCollectionsNotAllowed(CLIIOUndefined):
-    msg = "{}I/O is undefined for nested collection types: {}"
-
-
-class EnvIOUndefined(IOUndefinedForType):
-    source = "configuration"
-
+# Config
 
 class ConfigTypedInputError(TypedInputError):
-    source = "configuration"
+    source = "configuration file"
+    method = "config_decoder"
 
 
 class ConfigUnionInputError(ConfigTypedInputError):
@@ -103,28 +148,43 @@ class ConfigCallableInputError(ConfigTypedInputError):
         except ValueError:
             return msg
         else:
-            return msg + "; signature is {}".format(sig)
+            return msg + "; signature of parsed input is {}".format(sig)
 
 
 class ConfigTypedOutputError(TypedOutputError):
-    source = "configuration"
+    source = "configuration file"
+    method = "config_encoder"
 
 
 class ConfigTypedKeyOutputError(ConfigTypedOutputError):
     source = "configuration mapping key"
+    method = "config_key_encoder"
 
 
 class ConfigUnionOutputError(ConfigTypedOutputError):
     pass
 
 
+# CLI
+
 class CLITypedInputError(TypedInputError):
     source = "command line"
+    method = "cli_parser"
 
 
 class CLIUnionInputError(CLITypedInputError):
     pass
 
 
+# Env
+
 class EnvTypedInputError(TypedInputError):
     source = "environment variable"
+    method = "env_parser"
+
+
+# Stdin
+
+class StdinTypedInputError(TypedInputError):
+    source = "stdin"
+    method = "stdin_parser"
