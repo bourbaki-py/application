@@ -10,27 +10,12 @@ import sys
 from functools import reduce, lru_cache
 from inspect import Parameter
 from argparse import ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL
-from bourbaki.introspection.types import get_generic_args, concretize_typevars
-from bourbaki.introspection.typechecking import isinstance_generic
-from bourbaki.introspection.imports import import_type
-from .utils import TypeCheckImport
 
 Empty = Parameter.empty
 
 NARGS_OPTIONS = (None, ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL)
 
 bool_constants = {"true": True, "false": False}
-
-
-class parse_directly_with_type:
-    """parser for types whose constructors may be called unambiguously on a single atomic value
-    (str for command line or environment variable args, str/int/float/bool for config values)"""
-
-    def __init__(self, type_: typing.Type):
-        self.type_ = type_
-
-    def __call__(self, value):
-        return self.type_(value)
 
 
 def parse_bool(s):
@@ -196,26 +181,3 @@ class FlagParser(EnumParser):
 
 EnumParser = lru_cache(None)(EnumParser)
 FlagParser = lru_cache(None)(FlagParser)
-
-
-class TypeCheckImportFunc(TypeCheckImport):
-    # only check that the imported object is callable; don't demand that it be a specific function type
-    def type_check(self, value):
-        if not callable(value):
-            raise self.exc_cls(self.type_, value)
-        return value
-
-
-class TypeCheckImportType(TypeCheckImport):
-    decode = staticmethod(import_type)
-
-    def type_check(self, type_):
-        if not isinstance_generic(type_, self.type_):
-            # extract the bound; first arg to Type[]
-            bound = concretize_typevars(get_generic_args(self.type_)[0])
-            raise self.exc_cls(
-                self.type_,
-                type_,
-                TypeError("{} is not a subclass of {}".format(type_, bound)),
-            )
-        return type_
