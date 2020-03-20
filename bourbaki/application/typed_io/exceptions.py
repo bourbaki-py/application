@@ -106,10 +106,10 @@ class TypedInputError(TypedIOValueError):
     msg = "can't parse value of type {type} from {source} value {value!r} using {method}({type})"
 
     def __str__(self):
-        msg = self.msg.format(type=self.type_, source=self.source, value=self.value)
+        msg = self.msg.format(type=self.type_, source=self.source, value=self.value, method=self.method)
         if self.exc is None:
             return msg
-        return msg + "; raised {}".format(self.exc)
+        return msg + "; raised: {}".format(self.exc)
 
 
 class TypedOutputError(TypedIOValueError):
@@ -122,11 +122,12 @@ class TypedOutputError(TypedIOValueError):
             type=self.type_,
             source=self.source,
             value=self.value,
+            method=self.method,
             value_type=type(self.value),
         )
         if self.exc is None:
             return msg
-        return msg + "; raised {}".format(self.exc)
+        return msg + "; raised: {}".format(self.exc)
 
 
 # Config
