@@ -64,11 +64,14 @@ from ..typed_io.utils import (
     to_cmd_line_name,
     get_dest_name,
     Missing,
-    ellipsis_,
-    text_path_repr,
 )
-from ..typed_io.stdin_parse import to_stdin_parser
-from ..typed_io import TypedIO, ArgSource
+from ..typed_io.base_reprs import ellipsis_, text_path_repr
+from ..typed_io.exceptions import (
+    TypedInputError,
+    IOUndefinedForType,
+)
+from ..typed_io.stdin.stdin_parse import to_stdin_parser
+from ..typed_io.main import TypedIO, ArgSource
 from .actions import (
     InfoAction,
     PackageVersionAction,
@@ -129,8 +132,15 @@ DEFAULT_LOOKUP_ORDER = (
     ArgSource.DEFAULTS,
 )
 
-
 # exceptions
+
+ExitCodeSpec = Mapping[Type[Exception], Union[int, Callable[[Exception], int]]]
+
+DEFAULT_EXIT_CODES = {
+    Exception: 1,
+    TypedInputError: 2,
+    IOUndefinedForType: 3,
+}
 
 
 class ReservedNameError(AttributeError):
@@ -150,10 +160,6 @@ class RepeatedCLIKeywordArgs(ValueError):
         return "Got multiple values for keyword args {}; repeated values came from variadic option '{}'".format(
             self.args[0], self.args[1]
         )
-
-
-class AmbiguousSignature(TypeError):
-    pass
 
 
 class CLIDefinitionWarning(UserWarning):
@@ -184,14 +190,19 @@ class WideHelpFormatter(RawDescriptionHelpFormatter):
 
 class CLIErrorHandlingContext:
     def __init__(
-        self, exit_codes: Mapping[Type[Exception], int] = None, verbose: bool = False
+        self,
+        exit_codes: Opt[ExitCodeSpec] = None,
+        verbose: bool = False,
     ):
         if exit_codes is None:
             exit_codes = {Exception: 1}
         self.verbose = verbose
         self.exit_codes = exit_codes
         self.exit_code = GenericTypeLevelSingleDispatch("exit_code")
-        self.exit_code.register_from_mapping(exit_codes, as_const=True)
+
+        for exc_class, code_or_func in exit_codes.items():
+            as_const = isinstance(code_or_func, int)
+            self.exit_code.register(exc_class, as_const=as_const)(code_or_func)
 
     def __enter__(self):
         pass
@@ -205,6 +216,8 @@ class CLIErrorHandlingContext:
                 # exit with the same code when a SystemExit was raised elsewhere
                 sys.exit(exc_type.code)
             else:
+                # usually this will be just one handler but we don't care about unique resolution
+                # so we don't call resolve, which could raise an exception on ambiguous resolution
                 handlers = self.exit_code.all_resolved_funcs(exc_type)
                 if not handlers:
                     # no matching exceptions; print full traceback and exit with the highest code
@@ -359,7 +372,7 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         typecheck: bool = False,
         output_handler: Opt[Callable] = None,
         # error handling
-        exit_codes: Opt[Mapping[Type[Exception], int]] = None,
+        exit_codes: Opt[ExitCodeSpec] = DEFAULT_EXIT_CODES,
         # documentation
         subcommand_help: Opt[Mapping[Union[str, Tuple[str, ...]], str]] = None,
         # special features and flags
@@ -765,7 +778,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         self.parse_config_as_cli = parse_config_as_cli
         self.typecheck = typecheck
         self.output_handler = output_handler
-        self.exit_codes = exit_codes or {Exception: 1}
+        if exit_codes is None:
+            exit_codes = {Exception: 1}
+        self.exit_codes = exit_codes
         self.require_options = bool(require_options)
 
         self.use_multiprocessing = bool(use_multiprocessing)
@@ -2209,8 +2224,9 @@ class SubCommandFunc(Logged):
             param = params[name]
 
             if source == ArgSource.CONFIG and name in parse_config_as_cli:
-                parser = tio.parser_for_source(ArgSource.CLI)
-            elif source == ArgSource.STDIN and spec.stdin_parser is not None:
+                source = ArgSource.CLI
+
+            if source == ArgSource.STDIN and spec.stdin_parser is not None:
                 parser = spec.stdin_parser
             else:
                 parser = tio.parser_for_source(source)
