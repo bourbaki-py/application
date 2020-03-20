@@ -195,10 +195,7 @@ def parse_or_fail(func: Callable, type_: Type[T], exc_class: Type[TypedIOValueEr
     try:
         return func(value)
     except Exception as e:
-        if isinstance(e, exc_class):
-            raise e
-        else:
-            raise exc_class(type_, value, e)
+        raise exc_class(type_, value, e)
 
 
 class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
