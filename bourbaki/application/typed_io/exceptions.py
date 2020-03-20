@@ -109,7 +109,7 @@ class TypedInputError(TypedIOValueError):
         msg = self.msg.format(type=self.type_, source=self.source, value=self.value, method=self.method)
         if self.exc is None:
             return msg
-        return msg + "; raised: {}".format(self.exc)
+        return msg + "; raised: {!r}".format(self.exc)
 
 
 class TypedOutputError(TypedIOValueError):
@@ -127,7 +127,7 @@ class TypedOutputError(TypedIOValueError):
         )
         if self.exc is None:
             return msg
-        return msg + "; raised: {}".format(self.exc)
+        return msg + "; raised: {!r}".format(self.exc)
 
 
 # Config
