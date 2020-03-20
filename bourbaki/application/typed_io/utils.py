@@ -208,7 +208,8 @@ class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
 
     def __init__(
         self,
-        name: str, isolated_bases: Optional[List[Type]] = None,
+        name: str,
+        isolated_bases: Optional[List[Type]] = None,
         resolve_exc_class: Type[IOUndefinedForType] = IOUndefinedForType,
         call_exc_class: Optional[Type[TypedIOValueError]] = TypedIOValueError,
     ):
@@ -256,6 +257,7 @@ class TypeCheckInput(PicklableWithType):
 
 
 TypeCheckImport = partial(TypeCheckInput, decoder=import_object)
+TypeCheckImportType = partial(TypeCheckInput, decoder=import_type)
 
 
 class TypeCheckOutput(PicklableWithType):
@@ -276,9 +278,7 @@ class TypeCheckOutput(PicklableWithType):
         return self.encode(value)
 
 
-class TypeCheckOutputFunc(TypeCheckOutput):
-    encode = staticmethod(function_classpath)
-
+class TypeCheckExport(TypeCheckOutput):
     def __call__(self, value):
         path = super().__call__(value)
         if import_object(path) is not value:
@@ -290,15 +290,5 @@ class TypeCheckOutputFunc(TypeCheckOutput):
         return path
 
 
-class TypeCheckOutputType(TypeCheckOutput):
-    encode = staticmethod(parameterized_classpath)
-
-    def __call__(self, value):
-        path = super().__call__(value)
-        if import_type(path) is not value:
-            raise ValueError(
-                "classpath {} does not refer to the same object as {}".format(
-                    path, value
-                )
-            )
-        return path
+TypeCheckExport = partial(TypeCheckExport, encoder=function_classpath)
+TypeCheckExportType = partial(TypeCheckExport, encoder=parameterized_classpath)
