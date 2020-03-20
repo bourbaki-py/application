@@ -150,10 +150,13 @@ def cached_property(method):
     """compute the getter once and store the result in the instance dict under the same name,
     so it isn't computed again"""
     attr = method.__name__
+    sentinel = object()
 
     def newmethod(self):
-        value = method(self)
-        self.__dict__[attr] = value
+        value = self.__dict__.get(attr, sentinel)
+        if value is sentinel:
+            value = method(self)
+            self.__dict__[attr] = value
         return value
 
     return property(newmethod)
