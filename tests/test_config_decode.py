@@ -16,7 +16,7 @@ from typing import (
 )
 import collections as cl
 from enum import Enum, Flag
-from bourbaki.application.typed_io.config_decode import config_decoder
+from bourbaki.application.typed_io.config.config_decode import config_decoder
 
 
 class SomeEnum(Enum):
