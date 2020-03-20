@@ -7,6 +7,7 @@ from pathlib import Path
 from functools import partial
 from logging import getLogger
 from collections import ChainMap
+from types import SimpleNamespace
 import yaml
 import toml
 import ujson as json
@@ -252,7 +253,7 @@ def load_config(
 
 
 def dump_config(
-    conf: Union[Mapping, Sequence, argparse.Namespace],
+    conf: Union[Mapping, Sequence, SimpleNamespace, argparse.Namespace],
     config_file: Union[str, Path, IO],
     ext: Opt[Union[ConfigFormat, str]] = None,
     disambiguate: bool = False,
@@ -260,6 +261,9 @@ def dump_config(
     allow_dir: bool = False,
     **dump_kw
 ):
+    if isinstance(conf, (SimpleNamespace, argparse.Namespace)):
+        conf = conf.__dict__
+
     if not isinstance(conf, (Mapping, Sequence)):
         raise ConfigNotSerializable(
             "conf must be a Mapping or Sequence type; got {}".format(type(conf))
