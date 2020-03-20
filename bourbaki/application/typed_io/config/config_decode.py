@@ -13,16 +13,11 @@ import uuid
 from urllib.parse import ParseResult as URL, urlparse
 from functools import partial
 from bourbaki.introspection.callables import UnStarred
-from bourbaki.introspection.imports import import_object, import_type
-from bourbaki.introspection.generic_dispatch import (
-    GenericTypeLevelSingleDispatch,
-    UnknownSignature,
-)
+from bourbaki.introspection.imports import import_object
+from bourbaki.introspection.generic_dispatch import UnknownSignature
 from bourbaki.introspection.types import (
-    issubclass_generic,
     get_constructor_for,
     NamedTupleABC,
-    NonStrCollection,
     NonAnyStrCollection,
     LazyType,
 )
@@ -46,13 +41,6 @@ from ..base_parsers import (
     parse_bytes,
     EnumParser,
     FlagParser,
-)
-from ..exceptions import (
-    ConfigTypedInputError,
-    ConfigIOUndefinedForType,
-    ConfigUnionInputError,
-    ConfigIOUndefinedForKeyType,
-    ConfigCallableInputError,
 )
 from ..utils import (
     identity,
@@ -104,9 +92,10 @@ for _funcname, _types in [
     ('to_file', (str,)),
     ('to_str', (str,)),
 ]:
-    globals()[_funcname] = dispatcher = singledispatch(partial(cant_decode_to, input_types=_types))
+    globals()[_funcname] = _dispatcher = singledispatch(partial(cant_decode_to, input_types=_types))
+    _dispatcher.__name__ = _funcname
     for type_ in _types:
-        dispatcher.register(type_)(to_instance_of)
+        _dispatcher.register(type_)(to_instance_of)
 
 
 @to_fraction.register(list)
@@ -192,7 +181,7 @@ class basic_decoder:
         self.func = func
 
     def __call__(self, type_, *args):
-        return partial(self.func, type_=type_)
+        return partial(self.func, type_=get_constructor_for(type_))
 
 
 # All the simple parsers
@@ -226,6 +215,7 @@ for type_, decoder in [
     (URL, urlparse),
 ]:
     config_decoder.register(type_, as_const=True)(decoder)
+
 
 # enums
 
@@ -391,7 +381,6 @@ class UnionConfigDecoder(GenericConfigDecoderMixin, UnionWrapper):
     tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature)
     reduce = staticmethod(next)
     helper_cls = UnionWrapper
-    exc_class = ConfigUnionInputError
 
 
 @config_decoder.register(LazyType)
