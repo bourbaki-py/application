@@ -1,6 +1,7 @@
 # coding:utf-8
-from typing import Sequence, AbstractSet, Union
+from typing import Collection, Union
 import typing
+import ast
 import datetime
 import enum
 import operator
@@ -13,7 +14,6 @@ from bourbaki.introspection.types import get_generic_args, concretize_typevars
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.imports import import_type
 from .utils import TypeCheckImport
-from .exceptions import ConfigTypedOutputError, ConfigTypedInputError, CLITypedInputError
 
 Empty = Parameter.empty
 
@@ -33,15 +33,37 @@ class parse_directly_with_type:
         return self.type_(value)
 
 
-def parse_bool(s, exc_type):
+def parse_bool(s):
     try:
         return bool_constants[s.lower()]
     except KeyError:
-        raise exc_type(
-            bool,
-            s,
-            ValueError("Legal boolean constants are {}".format(tuple(bool_constants))),
+        raise ValueError("Legal boolean string constants are %r; got %r" % (tuple(bool_constants), s))
+
+
+def parse_bytes(s, type_=bytes):
+    """Parse a bytes object from a string. This requires the explicit python literal "b''" format to avoid ambiguities
+    with escape sequences in case a user specified a string e.g. in a config file without knowing it would be
+    parsed to bytes"""
+    raise_ = False
+    try:
+        b = ast.literal_eval(s)
+    except SyntaxError:
+        raise_ = True
+        b = None
+    else:
+        if not isinstance(b, bytes):
+            raise_ = True
+
+        if type_ is not bytes:
+            b = type_(b)
+
+    if raise_:
+        ValueError(
+            "{} is not a legal bytes string expression; use format \"b'ascii-string'\" "
+            "with '\\x<hex-code>' escapes for non-ascii chars".format(repr(s))
         )
+
+    return b
 
 
 def parse_regex(s: str):
@@ -53,15 +75,19 @@ def parse_regex_bytes(s: str):
 
 
 if sys.version_info >= (3, 7):
-    parse_iso_date = datetime.date.fromisoformat
-    parse_iso_datetime = datetime.datetime.fromisoformat
-else:
-    def parse_iso_date(s):
-        return datetime.datetime.strptime(s, "%Y-%m-%d").date()
+    def parse_iso_date(s, type_=datetime.date):
+        return type_.fromisoformat(s)
 
-    def parse_iso_datetime(s):
+    def parse_iso_datetime(s, type_=datetime.datetime):
+        return type_.fromisoformat(s)
+else:
+    def parse_iso_date(s, type_=datetime.date):
+        dt = datetime.datetime.strptime(s, "%Y-%m-%d")
+        return type_(dt.year, dt.month, dt.day)
+
+    def parse_iso_datetime(s, type_=datetime.datetime):
         dt = None
-        strptime = datetime.datetime.strptime
+        strptime = type_.strptime
         for fmt in (
             "%Y-%m-%dT%H:%M:%S.%f+%z",
             "%Y-%m-%dT%H:%M:%S.%f",
@@ -108,24 +134,27 @@ class EnumParser:
     def config_repr(self) -> str:
         return "|".join(e.name for e in self.enum)
 
-    def _parse(self, arg, exc_type: typing.Type[Exception]):
+    def _parse(self, arg):
         try:
             e = getattr(self.enum, arg)
         except AttributeError:
-            raise exc_type(self.enum, arg)
-        return e
+            raise ValueError(
+                "couldn't convert {!r} to type {!s}; valid choices are {!r}".format(
+                    arg, self.enum, [en.name for en in self.enum]
+                )
+            )
+        else:
+            return e
 
     def cli_parse(self, args: str) -> E:
-        return self._parse(args, CLITypedInputError)
+        return self._parse(args)
 
     def config_decode(self, value: str) -> E:
-        return self._parse(value, ConfigTypedInputError)
+        return self._parse(value)
 
     def config_encode(self, value: enum.Enum) -> str:
         if not isinstance(value, self.enum):
-            raise ConfigTypedOutputError(
-                self.enum, value, TypeError("Expected {}; got {}".format(self.enum, type(value)))
-            )
+            raise TypeError("Expected {}; got {}".format(self.enum, type(value)))
         return value.name
 
 
@@ -133,30 +162,27 @@ class FlagParser(EnumParser):
     def __init__(self, enum_):
         super().__init__(enum_)
 
-    def _parse(self, arg, exc_type: typing.Type[Exception]):
+    def _parse(self, arg):
         parts = arg.split("|")
         parse = super(type(self), self)._parse
-        es = (parse(e, exc_type) for e in parts)
+        es = (parse(e) for e in parts)
         return reduce(operator.or_, es)
 
     def config_decode(
-        self, value: Union[str, Sequence[str], AbstractSet[str]]
+        self, value: Union[str, Collection[str]]
     ) -> E:
         if isinstance(value, str):
-            return self._parse(value, ConfigTypedInputError)
+            return super().config_decode(value)
         elif not isinstance(value, typing.Collection):
-            raise ConfigTypedInputError(
-                self.enum, value, TypeError("Expected str or collection of str; got {}".format(type(value))),
-            )
+            raise TypeError("Expected str or collection of str; got {}".format(type(value)))
         else:
             config_decode = super(type(self), self).config_decode
             return reduce(operator.or_, (config_decode(e) for e in value))
 
     def config_encode(self, value: enum.Flag) -> str:
         if not isinstance(value, self.enum):
-            raise ConfigTypedOutputError(
-                self.enum, value, TypeError("Expected {}; got {}".format(self.enum, type(value)))
-            )
+            TypeError("Expected {}; got {}".format(self.enum, type(value)))
+
         a = value.value
         e = 1
         vals = []
