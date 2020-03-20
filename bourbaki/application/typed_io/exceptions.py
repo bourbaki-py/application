@@ -137,10 +137,6 @@ class ConfigTypedInputError(TypedInputError):
     method = "config_decoder"
 
 
-class ConfigUnionInputError(ConfigTypedInputError):
-    pass
-
-
 class ConfigCallableInputError(ConfigTypedInputError):
     def __str__(self):
         msg = super().__str__()
@@ -162,19 +158,11 @@ class ConfigTypedKeyOutputError(ConfigTypedOutputError):
     method = "config_key_encoder"
 
 
-class ConfigUnionOutputError(ConfigTypedOutputError):
-    pass
-
-
 # CLI
 
 class CLITypedInputError(TypedInputError):
     source = "command line"
     method = "cli_parser"
-
-
-class CLIUnionInputError(CLITypedInputError):
-    pass
 
 
 # Env
