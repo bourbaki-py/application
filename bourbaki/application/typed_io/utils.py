@@ -5,14 +5,14 @@ from functools import partial, singledispatch
 from inspect import Parameter
 from bourbaki.introspection.typechecking import isinstance_generic
 from bourbaki.introspection.docstrings import CallableDocs, ParamDocs, ParamDoc
-from bourbaki.introspection.imports import import_object
+from bourbaki.introspection.imports import import_object, import_type
 from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import (
     GenericTypeLevelSingleDispatch, UnknownSignature, AmbiguousResolutionError,
 )
 from bourbaki.introspection.generic_dispatch_helpers import PicklableWithType
-from .exceptions import IOUndefinedForType, TypedInputError, TypedOutputError, TypedIOValueError
+from .exceptions import IOUndefinedForType, TypedIOValueError
 
 T = TypeVar("T")
 Empty = Parameter.empty
@@ -238,79 +238,67 @@ class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
 #####################################
 
 
-class TypeCheckPicklableWithType(PicklableWithType):
-    def type_check(self, value):
-        if not isinstance_generic(value, self.type_):
-            raise self.exc_cls(self.type_, value)
-        return value
-
-
-class TypeCheckInput(TypeCheckPicklableWithType):
-    exc_cls = TypedInputError
+class TypeCheckInput(PicklableWithType):
     decode = staticmethod(identity)
 
-    def __call__(self, value):
-        try:
-            parsed = self.decode(value)
-        except Exception as e:
-            raise self.exc_cls(self.type_, value, e)
-        else:
-            return self.type_check(parsed)
-
-
-class TypeCheckImport(TypeCheckInput):
-    decode = staticmethod(import_object)
+    def __init__(self, type_, *args, decoder: Optional[Callable] = None):
+        super().__init__(type_, *args)
+        if decoder is not None:
+            self.decode = decoder
 
     def __call__(self, value):
-        if isinstance(value, str):
-            return super().__call__(value)
-        else:
-            return self.type_check(value)
+        parsed = self.decode(value)
+        if not isinstance_generic(parsed, self.type_):
+            raise TypeError(
+                "Parsed value {!r} is not an instance of {!s}".format(parsed, self.type_)
+            )
+        return parsed
 
 
-class TypeCheckOutput(TypeCheckPicklableWithType):
-    exc_cls = TypedOutputError
+TypeCheckImport = partial(TypeCheckInput, decoder=import_object)
+
+
+class TypeCheckOutput(PicklableWithType):
     encode = staticmethod(identity)
 
-    def __init__(self, type_, *args, encoder=None):
-        super().__init__((type_, *args))
+    def __init__(self, type_, *args, encoder: Optional[Callable] = None):
+        super().__init__(type_, *args)
         if encoder is not None:
             self.encode = encoder
 
     def __call__(self, value):
-        value = self.type_check(value)
-        try:
-            out = self.encode(value)
-        except Exception as e:
-            raise self.exc_cls(self.type_, value, e)
-        else:
-            return out
+        if not isinstance_generic(value, self.type_):
+            raise TypeError(
+                "Expected to encode value of type {!s}; got {!s}".format(
+                    self.type_, type(value),
+                )
+            )
+        return self.encode(value)
 
 
 class TypeCheckOutputFunc(TypeCheckOutput):
     encode = staticmethod(function_classpath)
 
-    def type_check(self, value):
-        if not callable(value):
-            raise self.exc_cls(
-                self.type_, value, TypeError("{} is not callable".format(value))
-            )
-        return value
-
     def __call__(self, value):
         path = super().__call__(value)
         if import_object(path) is not value:
-            raise self.exc_cls(
-                self.type_,
-                value,
-                ValueError(
-                    "classpath {} does not refer to the same object as {}".format(
-                        path, value
-                    )
-                ),
+            raise ValueError(
+                "classpath {} does not refer to the same object as {}".format(
+                    path, value
+                )
             )
         return path
 
 
 class TypeCheckOutputType(TypeCheckOutput):
     encode = staticmethod(parameterized_classpath)
+
+    def __call__(self, value):
+        path = super().__call__(value)
+        if import_type(path) is not value:
+            raise ValueError(
+                "classpath {} does not refer to the same object as {}".format(
+                    path, value
+                )
+            )
+        return path
