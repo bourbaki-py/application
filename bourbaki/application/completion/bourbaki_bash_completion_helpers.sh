@@ -659,7 +659,7 @@ _bourbaki_complete_keyval() {
         ((COMP_CWORD += 1))
         _array_insert COMP_WORDS "$COMP_CWORD" ''
         _bourbaki_debug "EVAL: ${@:$((keyval_cmd_ix+1))}"
-        ${@:keyval_cmd_ix+1}
+        ${@:$((keyval_cmd_ix+1))}
     elif [ "$last" == "$BOURBAKI_KEYVAL_SPLIT_CHAR" ]; then
         # begun typing value
         _bourbaki_debug "COMPLETING VALUE: '$cur'"
@@ -672,22 +672,13 @@ _bourbaki_complete_keyval() {
     fi
 }
 
-_complete_with_prefix() {
-    local prefix="$1" compreply_len=${#COMPREPLY[@]} old_compreply=("${COMPREPLY[@]}")
-    shift
-    _bourbaki_debug "COMPLETE WITH PREFIX '$prefix'"
-    "$@"
-    local tail="${COMPREPLY[@]:$compreply_len:${#COMPREPLY[@]}}"
-    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_prefix "$prefix" "${tail[@]}"))
-}
-
 _complete_with_suffix() {
     local suffix="$1" compreply_len="${#COMPREPLY[@]}" old_compreply=("${COMPREPLY[@]}")
     shift
     _bourbaki_debug "COMPLETE WITH SUFFIX '$suffix' USING COMMAND: $@"
     "$@"
     local tail="${COMPREPLY[@]:$compreply_len}"
-    COMPREPLY=("${old_compreply[@]}" $(_compgen_with_suffix "$suffix" ${tail[@]}))
+    COMPREPLY=("${old_compreply[@]}" $(compgen -o nospace -W "${tail[@]}" -S "$suffix"))
     _bourbaki_debug "COMPREPLY HAS ${#COMPREPLY[@]} TOKENS"
 }
 
@@ -785,16 +776,6 @@ _isfloat() {
 _trailing_decimals() {
     local i
     for ((i=0; i<10; i++)); do echo "$1$i"; done
-}
-
-_compgen_with_prefix() {
-    local prefix="$1" s; shift
-    for s in "$@"; do printf "$prefix%s\n" "$s"; done
-}
-
-_compgen_with_suffix() {
-    local suffix="$1" s; shift
-    for s in "$@"; do printf "%s$suffix\n" "$s"; done
 }
 
 _compgen_ints() {
