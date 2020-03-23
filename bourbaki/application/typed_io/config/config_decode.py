@@ -51,7 +51,9 @@ from ..utils import (
     GenericIOTypeLevelSingleDispatch,
 )
 from ..file_types import File
-from ..exceptions import ConfigTypedInputError, ConfigIOUndefinedForType
+from ..exceptions import (
+    ConfigTypedInputError, ConfigIOUndefinedForType, AllFailed, RaisedDisallowedExceptions,
+)
 
 NoneType = type(None)
 
@@ -88,7 +90,7 @@ for _funcname, _types in [
     ('to_bytearray', (bytearray, bytes, list, tuple)),
     ('to_uuid', (str,)),
     ('to_ipaddress', (str,)),
-    ('to_path', (str,)),
+    ('to_path', (pathlib.Path, str,)),
     ('to_file', (str,)),
     ('to_str', (str,)),
 ]:
@@ -290,7 +292,7 @@ class GenericConfigDecoderMixin(PicklableWithType):
         if self.legal_container_types is None:
             return conf
         if not isinstance(conf, self.legal_container_types):
-            TypeError(
+            raise TypeError(
                 "Expected an instance of {}; got {}".format(
                     self.legal_container_types, type(conf)
                 )
@@ -316,7 +318,7 @@ class SequenceConfigDecoder(CollectionConfigDecoder):
 
 @config_decoder.register(typing.Mapping)
 class MappingConfigDecoder(GenericConfigDecoderMixin, MappingWrapper):
-    legal_container_types = (collections.abc.Mapping, NonAnyStrCollection)
+    legal_container_types = (collections.abc.Mapping,)
     helper_cls = MappingWrapper
 
     def __init__(self, coll_type, key_type=typing.Any, val_type=Empty):
@@ -380,6 +382,8 @@ class NamedTupleConfigDecoder(GenericConfigDecoderMixin, NamedTupleWrapper):
 class UnionConfigDecoder(GenericConfigDecoderMixin, UnionWrapper):
     tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature)
     reduce = staticmethod(next)
+    exc_class_bad_exception = RaisedDisallowedExceptions
+    exc_class_no_success = AllFailed
     helper_cls = UnionWrapper
 
 

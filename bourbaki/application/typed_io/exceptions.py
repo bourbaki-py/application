@@ -1,5 +1,6 @@
 # coding:utf-8
 from inspect import signature
+from textwrap import indent
 from bourbaki.introspection.types import eval_type_tree, concretize_typevars
 
 
@@ -109,7 +110,7 @@ class TypedInputError(TypedIOValueError):
         msg = self.msg.format(type=self.type_, source=self.source, value=self.value, method=self.method)
         if self.exc is None:
             return msg
-        return msg + "; raised: {!r}".format(self.exc)
+        return msg + ";\nraised:\n{!s}".format(indent(str(self.exc), '    '))
 
 
 class TypedOutputError(TypedIOValueError):
@@ -127,7 +128,19 @@ class TypedOutputError(TypedIOValueError):
         )
         if self.exc is None:
             return msg
-        return msg + "; raised: {!r}".format(self.exc)
+        return msg + ";\nraised:\n{!s}".format(indent(str(self.exc), '    '))
+
+
+# For Union parser/encoders
+
+class AllFailed(ValueError):
+    def __str__(self):
+        return '\n\n'.join(map(str, self.args))
+
+
+class RaisedDisallowedExceptions(ValueError):
+    def __str__(self):
+        return '\n\n'.join(map(str, self.args))
 
 
 # Config
