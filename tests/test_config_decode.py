@@ -1,8 +1,13 @@
 # coding:utf-8
 import pytest
 import re
-from pathlib import Path
+from itertools import chain, product, repeat
+from pathlib import PosixPath, Path
 from datetime import date, datetime
+from fractions import Fraction
+from decimal import Decimal
+from uuid import UUID, uuid4
+from ipaddress import IPv4Address, IPv6Address
 from typing import (
     Mapping,
     List,
@@ -18,6 +23,8 @@ import collections as cl
 from enum import Enum, Flag
 from bourbaki.application.typed_io.config.config_decode import config_decoder
 
+some_uuid = uuid4()
+
 
 class SomeEnum(Enum):
     foo = 1
@@ -26,6 +33,34 @@ class SomeEnum(Enum):
 
 
 SomeFlag = Flag("SomeFlag", names="foo bar baz".split())
+
+
+class _myint(int):
+    pass
+
+
+class _myfloat(float):
+    pass
+
+
+class _mycomplex(complex):
+    pass
+
+
+class _mybytes(bytes):
+    pass
+
+
+class _mybytearray(bytearray):
+    pass
+
+
+class _myUUID(UUID):
+    pass
+
+
+class _myPath(PosixPath):
+    pass
 
 
 def same_value(a, b):
@@ -48,11 +83,45 @@ def same_keyvals(d, e):
         same_value(d[k], e[l])
 
 
+def custom_subclasses(cls):
+    return (sub for sub in cls.__subclasses__() if sub.__name__.startswith("_my"))
+
+
+def to_instance_of(value, type_):
+    if type(value) is type_:
+        return value
+    try:
+        return type_(value)
+    except:
+        # UUID(UUID('uuid-string')) doesn't work for instance
+        return type_(str(value))
+
+
+basic_type_val_tups = [
+    (int, 123, [123, '123']),
+    (float, 123.0, [123.0, 123, '123e0']),
+    (float, 1.23, [1.23, '1.23']),
+    (complex, 123+0j, [123, 123.0, '123.0', '123+0j']),
+    (complex, 1+23j, [1+23j, '1+23j']),
+    (bytes, b'\x01\x02\x03', [b'\x01\x02\x03', bytearray([1,2,3]), [1,2,3], (1,2,3)]),
+    (bytearray, bytearray(b'\x01\x02\x03'), [b'\x01\x02\x03', bytearray([1,2,3]), [1,2,3], (1,2,3)]),
+    (UUID, some_uuid, [str(some_uuid)]),
+    (IPv4Address, IPv4Address("1.2.3.4"), ['1.2.3.4']),
+    (IPv6Address, IPv6Address("1:2::3:4"), ['1:2::3:4', '1:2:0::0:3:4']),
+    (PosixPath, PosixPath("foo/bar/baz/"), ["foo/bar/baz/", "foo/bar/baz"]),
+    (str, "1 2 3", ["1 2 3"]),
+]
+
+
+basic_testcases = list(chain.from_iterable(
+    ((t, i, to_instance_of(ovalue, t), same_value) for t, i in product(chain((type_,), custom_subclasses(type_)), ivalues))
+    for (type_, ovalue, ivalues) in basic_type_val_tups
+))
+
+
 @pytest.mark.parametrize(
     "type_,value,expected,cmp",
-    [
-        (int, 1, 1, same_value),
-        (str, "foo", "foo", same_value),
+    basic_testcases + [
         (type, "collections.OrderedDict", cl.OrderedDict, same_value),
         (range, "1:2:3", range(1, 2, 3), same_value),
         (range, [1, 2, 3], range(1, 2, 3), same_value),
@@ -74,7 +143,6 @@ def same_keyvals(d, e):
         (datetime, "2018-01-01T12:00:00.000", datetime(2018, 1, 1, 12), same_value),
         (bytes, [1, 2, 3], b"\x01\x02\x03", same_value),
         (ByteString, "b'foo'", b"foo", same_value),
-        (Path, "foo/bar", Path("foo") / "bar", same_value),
         (List[bytes], ["b'foo'", [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
         (
             MutableSet[bytes],
@@ -103,7 +171,7 @@ def same_keyvals(d, e):
         ),
         (
             Union[Mapping[date, tuple], List[Tuple[date, ...]]],
-            [["2018-01-01", [1, True]], ["2019-01-01", [False, 2]]],
+            dict([["2018-01-01", [1, True]], ["2019-01-01", [False, 2]]]),
             dict([(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (False, 2))]),
             same_contents,
         ),
@@ -123,6 +191,8 @@ def same_keyvals(d, e):
     ],
 )
 def test_postproc(type_, value, expected, cmp):
+    """We have to use a custom comparison here to assert that types are the same as well as
+    values; e.g. 1.0 compares equal to 1 but we want a stricter test than that."""
     postproc = config_decoder(type_)
     out = postproc(value)
     cmp(expected, out)
