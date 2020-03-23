@@ -169,6 +169,16 @@ class CompleteFromStdout(FixedShellFunctionComplete):
     """Complete from a shell command that prints lines to stdout"""
     _shell_func_name = '_bourbaki_complete_from_stdout'
 
+    def __init__(self, *args):
+        if len(args) > 1:
+            raise ValueError(
+                "For reasons of shell quoting confusion with complex commands, specify a command to "
+                "CompleteFromStdout with a single string representing the command rather than a sequence "
+                "of tokens. This allows e.g. unambiguous inclusion of the pipe operator, quoted whitespace "
+                "tokens or other special shell characters in your command."
+            )
+        super().__init__(*args)
+
 
 class _BashCompletionCompleters:
     """Constuct completers from the `bash_completion` bash module, which are highly developed and heavily tested.
