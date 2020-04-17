@@ -12,7 +12,6 @@ import yaml
 import toml
 import ujson as json
 from bourbaki.introspection.prettyprint import has_identifier_keys
-from ..namespace import namespace_recursive
 from ..paths import get_file, ensure_dir, path_with_ext
 from .python import load_python, dump_python, MAX_PY_WIDTH
 from .ini import load_ini, dump_ini
@@ -204,7 +203,6 @@ def load_config(
     config_file: Union[str, Path, IO],
     ext: Opt[str] = None,
     disambiguate: bool = False,
-    namespace: bool = False,
     **load_kw
 ):
     # try to get a name for the file to dispatch on
@@ -212,8 +210,6 @@ def load_config(
         if os.path.isdir(config_file) and disambiguate:
             # load config for each file in the dir
             conf = _load_config_dir(config_file, ext=ext)
-            if namespace:
-                conf = namespace_recursive(conf)
             return conf
         else:
             # try to load later for a single path
@@ -245,9 +241,6 @@ def load_config(
             conf = _load_config(file, ext, load_kw)
     else:
         conf = _load_config(file, ext, load_kw)
-
-    if namespace:
-        conf = namespace_recursive(conf)
 
     return conf
 
