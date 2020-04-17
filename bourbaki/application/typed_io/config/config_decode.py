@@ -102,14 +102,14 @@ for _funcname, _types in [
 
 @to_fraction.register(list)
 @to_fraction.register(tuple)
-def numerator_denominator_to_fraction(tup):
+def numerator_denominator_to_fraction(tup, type_):
     if len(tup) != 2:
         raise ValueError(
-            "If instantiated from a tuple, Fraction requires a 2-tuple; got {}".format(
-                tup
+            "If instantiated from a tuple, {} requires a 2-tuple; got {}".format(
+                type_.__name__, tup
             )
         )
-    return fractions.Fraction(*tup)
+    return type_(*tup)
 
 
 to_bytes.register(str)(parse_bytes)
@@ -196,7 +196,6 @@ for type_, decoder in [
     (decimal.Decimal, to_decimal),
     (bytes, to_bytes),
     (bytearray, to_bytearray),
-    (typing.ByteString, to_bytes),
     (datetime.date, to_date),
     (datetime.datetime, to_datetime),
     (uuid.UUID, to_uuid),
@@ -215,6 +214,8 @@ for type_, decoder in [
     (typing.Pattern[str], parse_regex),
     (typing.Pattern[bytes], parse_regex_bytes),
     (URL, urlparse),
+    # ByteString is not a constructor - defer to bytes as default
+    (typing.ByteString, config_decoder(bytes)),
 ]:
     config_decoder.register(type_, as_const=True)(decoder)
 

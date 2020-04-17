@@ -12,6 +12,7 @@ from bourbaki.introspection.types import (
     typetypes,
     concretize_typevars,
     get_generic_origin,
+    get_generic_args,
     get_param_dict,
     reparameterized_bases,
     fully_concretize_type,
@@ -64,10 +65,7 @@ def _is_inflatable_config(obj):
 
 def inflate_config(conf, target_type=None):
     if _is_inflatable_config(conf):
-        try:
-            return instance_from(**conf, target_type=target_type)
-        except Exception as e:
-            raise ConfigTypedInputError(target_type, conf, e)
+        return instance_from(**conf, target_type=target_type)
     return conf
 
 
@@ -111,7 +109,19 @@ def instance_from(
         # don't waste time on the construction if the specified __classpath__ is incorrect
         if target_type is not None:
             target_type_ = concretize_typevars(target_type)
-            if not issubclass_generic(cls, target_type_):
+            if not get_generic_args(cls):
+                # no generic arguments to the class in the classpath; only check that it is a subclass
+                # of the target type's origin
+                target_org = get_generic_origin(target_type_)
+                logger.info("Performing subclass check: %s <: %s", cls, target_org)
+                if not issubclass_generic(cls, target_org):
+                    raise TypeError(
+                        "classpath {} does not specify a generic subclass of the target type {}".format(
+                            __classpath__, target_org
+                        )
+                    )
+            elif not issubclass_generic(cls, target_type_):
+                logger.info("Performing generic subclass check: %s <: %s", cls, target_type_)
                 raise TypeError(
                     "classpath {} does not specify a generic subclass of the target type {}".format(
                         __classpath__, target_type
@@ -133,6 +143,7 @@ def instance_from(
 
     if __constructor__ is not None:
         constructor = import_object(__constructor__)
+        logger.info("__constructor__ %s will be used inflate instance")
         if not callable(constructor):
             raise TypeError(
                 "constructor {} does not specify a callable; got {}".format(
@@ -145,7 +156,7 @@ def instance_from(
         constructor = cls
 
     wrapper = typed_config_callable(constructor)
-
+    logger.info("Attempting to construct instance with constructor %s", constructor)
     if __kwargs__ is None and __args__ is None:
         obj = wrapper()
     elif __kwargs__ is None:
@@ -155,12 +166,14 @@ def instance_from(
     else:
         obj = wrapper(*__args__, **__kwargs__)
 
-    if instance_check and not isinstance_generic(obj, target_type_):
-        raise TypeError(
-            "Inflation using constructor {} resulted in a {} instance; expected {}".format(
-                constructor, type(obj), cls
+    if instance_check:
+        logger.info("Checking that inflated instance is instance of %s", target_type_)
+        if not isinstance_generic(obj, target_type_):
+            raise TypeError(
+                "Inflation using constructor {} resulted in a {} instance; expected {}".format(
+                    constructor, type(obj), cls
+                )
             )
-        )
 
     logger.info(
         "Instantiated {} instance successfully{}".format(

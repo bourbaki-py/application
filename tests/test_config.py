@@ -1,5 +1,5 @@
 # coding:utf-8
-from typing import Mapping, Any
+from typing import Mapping
 import os
 import functools
 import io
@@ -12,11 +12,10 @@ from multipledispatch import dispatch
 from bourbaki.application.config import (
     load_config,
     dump_config,
-    allow_unsafe_yaml,
     LEGAL_CONFIG_EXTENSIONS,
 )
-from bourbaki.application.typed_io.inflation import CLASSPATH_KEY, KWARGS_KEY
-from bourbaki.application.typed_io.config_decode import config_decoder
+from bourbaki.application.typed_io.config.inflation import CLASSPATH_KEY, KWARGS_KEY
+from bourbaki.application.typed_io.config.config_decode import config_decoder
 
 # remove duplicate .yaml -> .yml
 LEGAL_CONFIG_EXTENSIONS = tuple(e for e in LEGAL_CONFIG_EXTENSIONS if e != ".yaml")
