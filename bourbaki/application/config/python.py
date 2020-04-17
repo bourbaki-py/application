@@ -75,6 +75,7 @@ legal_python_config_exprs = (
     ast.NameConstant,
     ast.Assign,
     ast.Call,
+    ast.cmpop,
 )
 
 # safe python builtin functions for configuration
@@ -252,7 +253,8 @@ def load_python(file):
         return locals if execmode else conf
 
     conf = exec_(code, mode, {})
-    conf.pop("__builtins__", None)
+    if mode == 'exec':
+        conf.pop("__builtins__", None)
     return conf
 
 
