@@ -324,26 +324,12 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
     app_cls = None
     reserved_attrs = frozenset(RESERVED_NAMESPACE_ATTRS)
     _builtin_commands_added = False
-    _unsafe_pickle_attrs = frozenset(
-        (
-            "source_file",
-            "helper_files",
-            "default_logfile",
-            "default_configfile",
-            "_pickle_load_path",
-            "_pickle_dump_path",
-            "_last_edit_time",
-            "_source_files",
-        )
-    )
     reserved_command_names = None
     _subparsers_action = None
     _main = None
     parsed = None
     _source_files = None
     _last_edit_time = Missing
-    _pickle_load_path = None
-    _pickle_dump_path = None
 
     def __init__(
         self,
@@ -453,8 +439,8 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
         :param use_logfile: bool or str. If True, a --logfile option will be added to the CLI with no default. If a str,
             a --logfile option will be added to the CLI with this as the default.
             (see `default_paths_relative_to_source` for path resolution semantics)
-        :param log_msg_fmt: pass-through to `application.logging.config.configure_default_logging`. The format of logging
-            output as understood by the standard library `logging` module.
+        :param log_msg_fmt: pass-through to `application.logging.config.configure_default_logging`. The format of
+            logging output as understood by the standard library `logging` module.
         :param dated_logfiles: pass-through to `application.logging.config.configure_default_logging`. Should the
             ISO-formatted current datetime be appended to the log file name?
         :param logger_cls: The class to use for all logging. The default is `application.logging.ProgressLogger`.
@@ -487,9 +473,9 @@ class CommandLineInterface(PicklableArgumentParser, Logged):
             an exception class key in the exit_codes mapping but no other key is more specific).
 
         :param subcommand_help: optional mapping from subcommand path (as space-separated string of, or tuple of,
-         command components) to help string, as would be accepted by argparse's .add_subparser(help=<help string>)
-         method. This allows for documentation of internal subcommands which serve only as parent command groups for
-         funtions or methods.
+            command components) to help string, as would be accepted by argparse's .add_subparser(help=<help string>)
+            method. This allows for documentation of internal subcommands which serve only as parent command groups for
+            functions or methods.
 
         :param use_multiprocessing: bool. If your app uses multiprocessing, then logging will be configured to reflect
             that fact, using appropriate process-safe loggers and handlers. This is passed through to
