@@ -100,6 +100,17 @@ for _funcname, _types in [
         _dispatcher.register(type_)(to_instance_of)
 
 
+@to_int.register(float)
+def float_to_int(num: float, type_):
+    if num.is_integer():
+        return type_(num)
+    raise ValueError(
+        "Can't decode integer type {} from non-integer floating point value {}".format(
+            type_.__name__, num
+        )
+    )
+
+
 @to_fraction.register(list)
 @to_fraction.register(tuple)
 def numerator_denominator_to_fraction(tup, type_):

@@ -13,6 +13,7 @@ from bourbaki.introspection.types import (
     concretize_typevars,
     get_generic_origin,
     get_generic_args,
+    get_generic_params,
     get_param_dict,
     reparameterized_bases,
     fully_concretize_type,
@@ -109,7 +110,7 @@ def instance_from(
         # don't waste time on the construction if the specified __classpath__ is incorrect
         if target_type is not None:
             target_type_ = concretize_typevars(target_type)
-            if not get_generic_args(cls):
+            if get_generic_params(cls) and not get_generic_args(cls):
                 # no generic arguments to the class in the classpath; only check that it is a subclass
                 # of the target type's origin
                 target_org = get_generic_origin(target_type_)

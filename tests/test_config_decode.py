@@ -105,6 +105,21 @@ class SomeNamedTuple(NamedTuple):
         return same_value(self.x, other.x) and same_contents(self.y, other.y)
 
 
+T = TypeVar("T", covariant=True)
+
+
+class MyList(Generic[T]):
+    def __init__(self, *values: T):
+        self.coll = list(values)
+
+    def __eq__(self, other):
+        return same_contents(self.coll, other.coll)
+
+
+class SubList(MyList[_myint]):
+    pass
+
+
 T_ = TypeVar("T_", bound=datetime)
 
 
@@ -311,6 +326,15 @@ basic_testcases = list(chain.from_iterable(
             {sorted: (int, str), ord: (_myint, _mystr)},
             same_keyvals,
         ),
+        (
+            MyList[int],
+            {
+                '__classpath__': 'test_config_decode.SubList',
+                '__args__': [True, 2, 3.0],
+            },
+            SubList(1, 2, 3),
+            same_value,
+        )
     ],
 )
 def test_postproc(type_, input_, expected, cmp):
