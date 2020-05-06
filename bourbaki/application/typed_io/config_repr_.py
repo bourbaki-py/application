@@ -46,6 +46,7 @@ from .utils import (
     ellipsis_,
     repr_type,
     Empty,
+    unq,
 )
 from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
 from .parsers import EnumParser
@@ -367,7 +368,9 @@ class _ConfigKeyReprUnion(UnionWrapper):
     tolerate_errors_call = ()
     exc_class = ConfigIOUndefinedForKeyType
     getter = config_key_repr
-    reduce = staticmethod(" OR ".join)
+
+    def reduce(self, reprs):
+        return ' OR '.join(unq(reprs))
 
     @staticmethod
     def getter(t):

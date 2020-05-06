@@ -565,17 +565,16 @@ test_cases = [
         config_test_val=[{"int": date_.isoformat(), "complex": date_epoch.isoformat()}],
     ),
     _TestCase(
-        Counter[types.FunctionType],
+        Counter[Union[types.FunctionType, types.BuiltinFunctionType]],
         ZERO_OR_MORE,
         cli_repr=mapping_cli_repr_str(classpath_function_repr, type_spec(int)),
         config_repr={classpath_function_repr: type_spec(int), ellipsis_: ellipsis_},
-        test_val={int: 1, len: 2, __import__: -1234567890},
+        test_val={len: 2, __import__: -1234567890},
         cli_test_val=[
-            "{}={}".format("int", 1),
             "{}={}".format("len", 2),
             "{}={}".format("__import__", -1234567890),
         ],
-        config_test_val={"int": 1, "len": 2, "__import__": -1234567890},
+        config_test_val={"len": 2, "__import__": -1234567890},
     ),
     # parameterized collections
     _TestCase(
