@@ -33,12 +33,11 @@ from bourbaki.introspection.types import (
     LazyType,
     NamedTupleABC,
 )
-from .exceptions import (
-    ConfigIOUndefined,
+from ..exceptions import (
+    ConfigIOUndefinedForType,
     ConfigIOUndefinedForKeyType,
-    ConfigCollectionKeysNotAllowed,
 )
-from .utils import (
+from ..base_reprs import (
     type_spec,
     default_repr_values,
     byte_repr,
@@ -48,7 +47,7 @@ from .utils import (
     Empty,
 )
 from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
-from .parsers import EnumParser
+from ..base_parsers import EnumParser
 
 NoneType = type(None)
 
@@ -80,7 +79,6 @@ config_key_repr_values.update(
         (NoneType, null_config_repr),
     ]
 )
-
 
 ONLY_REQUIRED_ARGS = False
 LITERAL_DEFAULTS = True
@@ -279,9 +277,9 @@ def config_repr_any(t, *types, **kw):
 
 
 class _ConfigReprUnion(UnionWrapper):
-    tolerate_errors = (ConfigIOUndefined, UnknownSignature)
+    tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature)
     tolerate_errors_call = ()
-    exc_class = ConfigIOUndefined
+    exc_class = ConfigIOUndefinedForType
 
     @staticmethod
     def getter(t):
@@ -324,7 +322,7 @@ def config_repr_namedtuple(t, *types):
 def config_repr_mapping(m, k=object, v=object):
     # have to check this here because the key type param is invariant; we can't resolve from a base class
     if issubclass_generic(k, NonStrCollection):
-        raise ConfigCollectionKeysNotAllowed((m, k, v))
+        raise ConfigIOUndefinedForKeyType((m, k, v))
     try:
         key_repr = config_key_repr(k)
     except UnknownSignature:
@@ -363,7 +361,7 @@ def config_repr_enum(enum_):
 
 
 class _ConfigKeyReprUnion(UnionWrapper):
-    tolerate_errors = (ConfigIOUndefined, UnknownSignature)
+    tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature)
     tolerate_errors_call = ()
     exc_class = ConfigIOUndefinedForKeyType
     getter = config_key_repr

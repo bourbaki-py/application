@@ -34,9 +34,9 @@ from bourbaki.introspection.generic_dispatch_helpers import (
     LazyWrapper,
 )
 from .cli_complete import cli_completer
-from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs
+from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs, cli_action
 from .cli_repr_ import cli_repr
-from .exceptions import (
+from ..exceptions import (
     CLITypedInputError,
     CLIIOUndefined,
     CLIUnionInputError,
@@ -49,7 +49,6 @@ from .parsers import (
     parse_regex,
     parse_regex_bytes,
     parse_bool,
-    parse_path,
     EnumParser,
     FlagParser,
     TypeCheckImportType,
@@ -72,7 +71,7 @@ class InvalidCLIParser(TypeError):
 
 def cli_split_keyval(s: str):
     i = s.index(KEY_VAL_JOIN_CHAR)
-    return s[:i], s[i + 1 :]
+    return s[:i], s[i + 1:]
 
 
 def cli_parse_bytes(seq: typing.Sequence[str]):
@@ -90,26 +89,30 @@ def cli_parse_bool(s: typing.Union[str, bool]):
     return parse_bool(s, exc_type=CLITypedInputError)
 
 
+cli_parse_by_constructor = {
+    int,
+    float,
+    str,
+    complex,
+    decimal.Decimal,
+    fractions.Fraction,
+    pathlib.Path,
+    ipaddress.IPv4Address,
+    ipaddress.IPv6Address,
+    uuid.UUID,
+    File,
+}
+
 cli_parse_methods = {
-    int: int,
     bool: cli_parse_bool,
-    float: float,
-    str: str,
-    complex: complex,
-    decimal.Decimal: decimal.Decimal,
-    fractions.Fraction: fractions.Fraction,
     bytes: cli_parse_bytes,
     bytearray: cli_parse_bytearray,
     range: parse_range,
     datetime.date: parse_iso_date,
     datetime.datetime: parse_iso_datetime,
-    pathlib.Path: parse_path,
     typing.Pattern: parse_regex,
     typing.Pattern[bytes]: parse_regex_bytes,
-    uuid.UUID: uuid.UUID,
     URL: urlparse,
-    ipaddress.IPv4Address: ipaddress.IPv4Address,
-    ipaddress.IPv6Address: ipaddress.IPv6Address,
     Empty: identity,
 }
 
@@ -234,14 +237,9 @@ class GenericCLIParserMixin:
 @cli_parser.register(typing.Collection)
 class CollectionCLIParser(GenericCLIParserMixin, CollectionWrapper):
     def __init__(self, coll_type, val_type=object):
-        if issubclass_generic(val_type, NonStrCollection):
+        if cli_action(val_type) is not None:
+            # nested collections with append action
             raise CLINestedCollectionsNotAllowed((coll_type, val_type))
-        super().__init__(coll_type, val_type)
-
-
-@cli_parser.register(typing.Collection[NonStrCollection])
-class NestedCollectionCLIParser(GenericCLIParserMixin, CollectionWrapper):
-    def __init__(self, coll_type, val_type=object):
         super().__init__(coll_type, val_type)
 
 
@@ -250,9 +248,7 @@ class MappingCLIParser(GenericCLIParserMixin, MappingWrapper):
     constructor_allows_iterable = True
 
     def __init__(self, coll_type, key_type=object, val_type=object):
-        if issubclass_generic(key_type, NonStrCollection) or issubclass_generic(
-            val_type, NonStrCollection
-        ):
+        if (cli_nargs(key_type) is not None) or (cli_nargs(val_type) is not None):
             raise CLINestedCollectionsNotAllowed((coll_type, key_type, val_type))
         super().__init__(coll_type, key_type, val_type)
         coll_type = self.reduce
@@ -333,11 +329,11 @@ def cli_flag_parser(enum_):
     return FlagParser(enum_).cli_parse
 
 
-# File subclasses are their own parsers
-cli_parser.register(File)(identity)
-
-
 cli_parser.register_from_mapping(cli_parse_methods, as_const=True)
+
+
+# these types are all their own parsers
+cli_parser.register_all(*cli_parse_by_constructor)(identity)
 
 
 cli_option_parser = GenericTypeLevelSingleDispatch(

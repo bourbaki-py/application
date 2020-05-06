@@ -8,21 +8,18 @@ from bourbaki.introspection.types import (
     NonStrCollection,
     is_named_tuple_class,
     get_named_tuple_arg_types,
+    get_generic_origin,
+    get_generic_args,
 )
 from bourbaki.introspection.generic_dispatch import (
     GenericTypeLevelSingleDispatch,
     UnknownSignature,
 )
-from .utils import maybe_map
-from .exceptions import CLIIOUndefined
+from ..utils import maybe_map, is_nested_collection
+from ..exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
 
 
 NoneType = type(None)
-
-NestedCollectionTypes = (
-    typing.Mapping[NonStrCollection, typing.Any],
-    typing.Mapping[typing.Any, NonStrCollection],
-)
 
 
 class AmbiguousUnionNargs(CLIIOUndefined):
@@ -32,12 +29,54 @@ class AmbiguousUnionNargs(CLIIOUndefined):
         )
 
 
-class NestedCollectionsCLIArgError(CLIIOUndefined):
+class NestedTupleCLINargsError(CLINestedCollectionsNotAllowed):
     def __str__(self):
         return (
-            "Some type parameters of sequence type {} require more than one command line arg; can't parse "
-            "unambiguously".format(self.type_)
+            "Some type parameters of type {} require a variable number of command line args; can't parse "
+            "unambiguously. Tuple types may have variadic type parameters only in the last position".format(self.type_)
         )
+
+
+class NestedMappingNargsError(CLINestedCollectionsNotAllowed):
+    def __str__(self):
+        return (
+            "Mapping types with keys or values requiring more than one command line arg can't be parsed: {}".format(
+                self.type_
+            )
+        )
+
+
+is_nested_collection_for_cli = GenericTypeLevelSingleDispatch(
+    "is_nested_collection_for_cli", isolated_bases=[typing.Union],
+)
+
+
+@is_nested_collection_for_cli.register(typing.Any)
+def is_nested_collection_for_cli_any(org: typing.Type, *args: typing.Type):
+    if cli_nargs(org) in (ONE_OR_MORE, ZERO_OR_MORE):
+        if args:
+            inner_nargs = cli_nargs(args[0])
+            return inner_nargs is not None
+        return False
+    else:
+        return False
+
+
+@is_nested_collection_for_cli.register(typing.Union)
+def is_nested_collection_for_cli_union(t: typing.Type, *args: typing.Type):
+     nesteds = set(is_nested_collection_for_cli(a) for a in args)
+     if len(nesteds) != 1:
+         raise CLIIOUndefined((t, *args))
+     return next(iter(nesteds))
+
+
+@is_nested_collection_for_cli.register(typing.Tuple)
+def is_nested_collection_for_cli_tuple(u: typing.Type, *args: typing.Type):
+    if Ellipsis in args:
+        inner_nargs = cli_nargs(args[0])
+        return inner_nargs is not None
+    else:
+        return False
 
 
 def check_union_nargs(*types):
@@ -53,10 +92,14 @@ def check_union_nargs(*types):
 def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
     if Ellipsis in types:
         types = [typing.List[types[0]]]
+
     all_nargs = tuple(cli_nargs(t) for t in types)
     head_nargs = all_nargs[:-1] if allow_tail_collection else all_nargs
     if any(((a is not None) and (not isinstance(a, int))) for a in head_nargs):
-        raise NestedCollectionsCLIArgError((tup_type, *types))
+        raise NestedTupleCLINargsError((tup_type, *types))
+
+    if types and is_nested_collection(types[-1]):
+        raise NestedTupleCLINargsError((tup_type, *types))
 
     if not all_nargs:
         total_nargs = 0
@@ -93,10 +136,12 @@ def seq_nargs(*types):
     return ZERO_OR_MORE
 
 
-@cli_nargs.register_all(NestedCollectionTypes)
-def nested_collections_cli_error(t, *args):
-    # collections of collections
-    raise NestedCollectionsCLIArgError((t, *args))
+@cli_nargs.register(typing.Mapping)
+def mapping_nargs(t, k=typing.Any, v=typing.Any):
+    # mappings with multi-arg keys/values
+    if (cli_nargs(k) is not None) or (cli_nargs(v) is not None):
+        raise NestedMappingNargsError((t, k, v))
+    return seq_nargs(t, k, v)
 
 
 @cli_nargs.register(typing.Collection[NonStrCollection])
@@ -115,10 +160,8 @@ def tuple_nargs(t, *types):
         return cli_nargs(typing.List[types[0]])
     elif not types:
         return ZERO_OR_MORE
-    else:
-        _, nargs = check_tuple_nargs(t, *types)
-        return nargs
 
+    # namedtuple and other fixed-length tuples
     _, nargs = check_tuple_nargs(t, *types)
     return nargs
 
@@ -130,19 +173,3 @@ def union_nargs(u, *types):
 
 
 cli_option_nargs = cli_nargs
-
-cli_action = GenericTypeLevelSingleDispatch(
-    "cli_action", isolated_bases=[typing.Union, typing.Tuple]
-)
-
-
-@cli_action.register(typing.Union)
-def cli_action_any(u, *ts):
-    actions = set(map(cli_action, (t for t in ts if t is not NoneType)))
-    if len(actions) > 1:
-        raise CLIIOUndefined(u, *ts)
-    return next(iter(actions))
-
-
-cli_action.register(typing.Any, as_const=True)(None)
-cli_action.register(typing.Collection[NonStrCollection], as_const=True)("append")

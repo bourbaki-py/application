@@ -1,5 +1,4 @@
 # coding:utf-8
-from itertools import chain
 from typing import Optional, Tuple, Dict, Union
 import enum
 from inspect import Parameter
@@ -12,17 +11,17 @@ from bourbaki.introspection.types import (
     issubclass_generic,
 )
 from bourbaki.introspection.types.abcs import NonStrCollection
-from .cli_parse import cli_parser, cli_option_parser
-from .cli_nargs_ import cli_nargs, cli_option_nargs, cli_action, is_nested_collection_for_cli
-from .cli_metavar import cli_metavar
-from .cli_repr_ import cli_repr
-from .cli_complete import cli_completer
+from .cli.cli_parse import cli_parser, cli_option_parser
+from .cli.cli_nargs_ import cli_nargs, cli_option_nargs, cli_action, is_nested_collection_for_cli
+from .cli.cli_metavar import cli_metavar
+from .cli.cli_repr_ import cli_repr
+from .cli.cli_complete import cli_completer
 from ..completion.completers import Complete, CompleteChoices, CompleteTuple, NoComplete
-from .config_encode import config_encoder, config_key_encoder
-from .config_decode import config_decoder, config_key_decoder
-from .config_repr_ import config_repr
-from .env_parse import env_parser
-from .stdin_parse import stdin_parser
+from .config.config_encode import config_encoder, config_key_encoder
+from .config.config_decode import config_decoder, config_key_decoder
+from .config.config_repr_ import config_repr
+from .env.env_parse import env_parser
+from .stdin.stdin_parse import stdin_parser
 from .utils import (
     Empty,
     Doc,

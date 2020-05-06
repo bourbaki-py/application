@@ -36,14 +36,14 @@ from .exceptions import (
     ConfigTypedKeyOutputError,
     ConfigUnionOutputError,
 )
-from .utils import (
+from ..utils import (
     Empty,
     identity,
     File,
     IODispatch,
     TypeCheckOutput,
-    TypeCheckOutputFunc,
-    TypeCheckOutputType,
+    TypeCheckExportFunc,
+    TypeCheckExportType,
 )
 
 
@@ -192,13 +192,13 @@ config_encoder = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing
 
 @config_encoder.register_all(types.FunctionType, types.BuiltinFunctionType)
 @config_key_encoder.register_all(types.FunctionType, types.BuiltinFunctionType)
-class TypeCheckConfigEncodeFunc(TypeCheckOutputFunc):
+class TypeCheckConfigEncodeFunc(TypeCheckExportFunc):
     exc_cls = ConfigTypedOutputError
 
 
 @config_encoder.register(typing.Type)
 @config_key_encoder.register(typing.Type)
-class TypeCheckConfigEncodeType(TypeCheckOutputType):
+class TypeCheckConfigEncodeType(TypeCheckExportType):
     exc_cls = ConfigTypedOutputError
 
 
@@ -311,12 +311,16 @@ for t, enc in config_encoder_methods.items():
 
 
 # don't need to typecheck these; they're dispatched selectively
-for t, (enc, key_enc) in {
-    int: (to_int_config, int_to_str),
-    float: (to_float_config, float_to_str),
-    bool: (to_bool_config, bool_to_str),
-    typing.ByteString: (to_bytes_config, bytes_to_str),
-}.items():
+for t, enc, key_enc in [
+    (int, to_int_config, int_to_str),
+    (float, to_float_config, float_to_str),
+    (bool, to_bool_config, bool_to_str),
+    (typing.ByteString, to_bytes_config, bytes_to_str),
+    # str-encoded numerics
+    (complex, to_complex_config, to_complex_config),
+    (fractions.Fraction, to_fraction_config, to_fraction_config),
+    (decimal.Decimal, to_decimal_config, to_decimal_config),
+]:
     config_encoder.register(t, as_const=True)(enc)
     config_key_encoder.register(t, as_const=True)(key_enc)
 

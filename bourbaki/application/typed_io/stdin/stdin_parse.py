@@ -1,11 +1,10 @@
 # coding:utf-8
 from functools import partial
 from typing import AnyStr, Callable, TextIO, Union, Any
-from .cli_parse import cli_parser
-from .cli_nargs_ import cli_nargs
-from .env_parse import lex_env_var
-from .utils import is_nested_collection
-from ..config import ConfigFormat, load_config
+from ..cli.cli_parse import cli_parser
+from ..cli.cli_nargs_ import cli_nargs
+from ..env.env_parse import lex_env_var
+from ...config import ConfigFormat, load_config
 
 StdinParser = Callable[[TextIO], Any]
 
