@@ -43,6 +43,14 @@ CLI_PREFIX_CHAR = "-"
 KEY_VAL_JOIN_CHAR = "="
 
 
+def unq(it):
+    cache = set()
+    for i in it:
+        if i not in cache:
+            cache.add(i)
+            yield i
+
+
 class _FileHandleConstructor(PseudoGenericMeta):
     @lru_cache(None)
     def __getitem__(cls, mode_enc) -> type:

@@ -51,6 +51,7 @@ def default_cli_repr(type_, *args):
 @cli_repr.register(typing.Union)
 def cli_repr_union(u, *types):
     def inner(types_):
+        cache = set()
         for t in types_:
             if t is NoneType or t is None:
                 continue
@@ -59,7 +60,9 @@ def cli_repr_union(u, *types):
             except CLIIOUndefined:
                 continue
             else:
-                yield repr_
+                if repr_ not in cache:
+                    cache.add(repr_)
+                    yield repr_
 
     reprs = list(inner(types))
     if not reprs:

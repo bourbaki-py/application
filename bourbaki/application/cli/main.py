@@ -33,7 +33,6 @@ from argparse import (
     _SubParsersAction,
 )
 from traceback import print_exception
-from cytoolz import identity, get_in
 from typing_inspect import is_generic_type, get_generic_type
 
 from bourbaki.introspection.classes import classpath, most_specific_constructor
@@ -79,9 +78,11 @@ from .helpers import (
     _combined_cli_sig,
     _type,
     _validate_lookup_order,
+    identity,
     get_task,
     NamedChainMap,
     strip_command_prefix,
+    get_in,
     update_in,
     VARIADIC_NARGS,
 )
