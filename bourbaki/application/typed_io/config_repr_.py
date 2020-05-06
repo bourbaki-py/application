@@ -369,7 +369,8 @@ class _ConfigKeyReprUnion(UnionWrapper):
     exc_class = ConfigIOUndefinedForKeyType
     getter = config_key_repr
 
-    def reduce(self, reprs):
+    @staticmethod
+    def reduce(reprs):
         return ' OR '.join(unq(reprs))
 
     @staticmethod
