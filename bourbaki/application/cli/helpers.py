@@ -1,9 +1,10 @@
 # coding:utf-8
 from argparse import ONE_OR_MORE, OPTIONAL, ZERO_OR_MORE
 from collections import ChainMap, Counter
-from functools import lru_cache
+from functools import lru_cache, reduce
 from inspect import Parameter, Signature
 from itertools import chain
+import operator
 from pathlib import Path
 from string import punctuation
 from typing import Dict, List, Set, Tuple, Union, Optional, Mapping, Generic
@@ -59,6 +60,10 @@ class OutputHandlerSignatureError(TypeError):
     pass
 
 
+def identity(x):
+    return x
+
+
 def strip_command_prefix(prefix: Union[str, Tuple[str, ...]], funcname: str) -> str:
     if isinstance(prefix, str):
         prefix = (prefix,)
@@ -90,6 +95,15 @@ def get_task(logger, name, log_level=PROGRESS, error_level=ERROR, time_units="s"
         level=log_level,
         error_level=error_level,
     )
+
+
+def get_in(subsection, conf, default=_sentinel):
+    try:
+        return reduce(operator.getitem, subsection, conf)
+    except (KeyError, IndexError, TypeError) as e:
+        if default is _sentinel:
+            raise e
+        return default
 
 
 def update_in(conf, subsection, subconf):
