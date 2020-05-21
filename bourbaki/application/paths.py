@@ -1,18 +1,11 @@
 # coding:utf-8
 import os
-import re
 from pathlib import Path
 from io import StringIO, BytesIO, IOBase
 from typing import Union
-from functools import partial
-from cytoolz import valmap
-from .namespace import Namespace
 
 FileTypes = (IOBase,)
 FileType = Union[FileTypes]
-_path_checkers = dict(
-    f=os.path.isfile, d=os.path.isdir, dir=os.path.isdir, file=os.path.isfile
-)
 
 DEFAULT_FILENAME_DATE_FMT = (
     "%Y-%m-%d_%H:%M:%S"
@@ -99,10 +92,6 @@ def is_newer(file1, file2):
     return mtime1 > mtime2
 
 
-def abspath_expanduser(path):
-    return os.path.abspath(os.path.expanduser(path))
-
-
 def dir_prefix_and_ext(prefix, ext=None):
     dir_ = os.path.dirname(prefix)
     if ext is None:
@@ -165,40 +154,3 @@ def disambiguate_path(file_path):
         )
     p = os.path.join(dir_ or "", paths[0])
     return p
-
-
-def prepend_dir(base_dir, paths, namespace=True):
-    join = partial(os.path.join, base_dir)
-
-    if isinstance(paths, Namespace):
-        paths = paths.__dict__
-        namespace = True
-
-    if isinstance(paths, dict):
-        paths = valmap(join, paths)
-        if namespace:
-            paths = Namespace(**paths)
-    else:
-        paths = list(map(join, paths))
-
-    return paths
-
-
-def matching_dirs_in(path, pat=None):
-    """return a list of dirs in path (a dir) whose name match regex pattern pat"""
-    return _matching_paths_in(path, "d", pat)
-
-
-def matching_files_in(path, pat=None):
-    """return a list of files in path (a dir) whose name match regex pattern pat"""
-    return _matching_paths_in(path, "f", pat)
-
-
-def _matching_paths_in(path, type_, pat=None):
-    pat = re.compile(pat) if isinstance(pat, str) else pat
-    ix = [None, "d", "f"].index(type_)
-    fs = next(os.walk(path))[ix]
-    gen = (os.path.join(path, f) for f in fs)
-    if pat is not None:
-        gen = filter(pat.search, gen)
-    return list(gen)
