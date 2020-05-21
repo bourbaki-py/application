@@ -6,7 +6,6 @@ from functools import update_wrapper
 from inspect import signature, Parameter
 from itertools import chain
 from logging import getLogger
-from cytoolz import valmap
 from bourbaki.introspection.imports import import_object, import_type
 from bourbaki.introspection.types import (
     typetypes,
@@ -251,7 +250,8 @@ class TypedConfigCallable:
                     if param.kind in NON_VARIADIC_KINDS:
                         bound_args[name] = decoders[name](arg)
                     elif param.kind is Parameter.VAR_KEYWORD:
-                        bound_args[name] = valmap(decoders[name], arg)
+                        decoder = decoders[name]
+                        bound_args[name] = {k: decoder(v) for k, v in arg.items()}
                     elif param.kind is Parameter.VAR_POSITIONAL:
                         bound_args[name] = tuple(map(decoders[name], arg))
                 except Exception as e:
