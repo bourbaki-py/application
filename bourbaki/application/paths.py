@@ -1,18 +1,11 @@
 # coding:utf-8
 import os
-import re
 from pathlib import Path
 from io import StringIO, BytesIO, IOBase
 from typing import Union
-from functools import partial
-from cytoolz import valmap
-from .namespace import Namespace
 
 FileTypes = (IOBase,)
 FileType = Union[FileTypes]
-_path_checkers = dict(
-    f=os.path.isfile, d=os.path.isdir, dir=os.path.isdir, file=os.path.isfile
-)
 
 DEFAULT_FILENAME_DATE_FMT = (
     "%Y-%m-%d_%H:%M:%S"
