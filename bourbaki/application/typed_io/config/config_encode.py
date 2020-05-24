@@ -166,7 +166,7 @@ def flag_enum_config_encoder(enum_type):
 # providing a default for an arg with a typing.Callable annotation, one chooses an importable function;
 # we will raise a type Error here if something else was provided.
 # in that case, one may @to_config_callable.register(<custom-callable-type>)
-@config_encoder.register(typing.Callable)
+@config_encoder.register(typing.Callable, as_const=True)
 @singledispatch
 def to_config_callable(f: typing.Callable):
     raise TypeError(

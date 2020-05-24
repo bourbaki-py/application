@@ -34,6 +34,7 @@ from typing import (
 import collections as cl
 from enum import Enum, Flag
 from bourbaki.application.typed_io.config.config_decode import config_decoder
+from bourbaki.application.typed_io.config.config_encode import config_encoder
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr)
 
@@ -49,52 +50,56 @@ class SomeEnum(Enum):
 SomeFlag = Flag("SomeFlag", names="foo bar baz".split())
 
 
+def __repr__(self):
+    return "{}({})".format(self.__class__.__name__, super(type(self), self).__repr__())
+
+
 class _myint(int):
-    pass
+    __repr__ = __repr__
 
 
 class _myfloat(float):
-    pass
+    __repr__ = __repr__
 
 
 class _mycomplex(complex):
-    pass
+    __repr__ = __repr__
 
 
 class _mybytes(bytes):
-    pass
+    __repr__ = __repr__
 
 
 class _mybytearray(bytearray):
-    pass
+    __repr__ = __repr__
 
 
 class _myUUID(UUID):
-    pass
+    __repr__ = __repr__
 
 
 class _myPath(PosixPath):
-    pass
+    __repr__ = __repr__
 
 
 class _myDecimal(Decimal):
-    pass
+    __repr__ = __repr__
 
 
 class _myFraction(Fraction):
-    pass
+    pass  # repr uses class name already
 
 
 class _mydate(date):
-    pass
+    __repr__ = __repr__
 
 
 class _mydatetime(datetime):
-    pass
+    __repr__ = __repr__
 
 
 class _mystr(str):
-    pass
+    __repr__ = __repr__
 
 
 class SomeNamedTuple(NamedTuple):
@@ -113,11 +118,19 @@ class MyList(Generic[T]):
         self.coll = list(values)
 
     def __eq__(self, other):
-        return same_contents(self.coll, other.coll)
+        try:
+            same_contents(self.coll, other.coll)
+        except AssertionError:
+            return False
+        return True
+
+    def __str__(self):
+        return "{}({})".format(self.__class__.__name__, ", ".join(map(repr, self.coll)))
 
 
 class SubList(MyList[_myint]):
-    pass
+    def __init__(self, *values: _myint):
+        self.coll = list(map(_myint, values))
 
 
 T_ = TypeVar("T_", bound=datetime)
@@ -215,127 +228,132 @@ basic_testcases = list(chain.from_iterable(
     for (type_, ovalue, ivalues) in basic_type_val_tups
 ))
 
+complex_test_cases = [
+    (type, "collections.OrderedDict", cl.OrderedDict, same_value),
+    (range, "1:2:3", range(1, 2, 3), same_value),
+    (range, [1, 2, 3], range(1, 2, 3), same_value),
+    (SomeEnum, "foo", SomeEnum.foo, same_value),
+    (SomeFlag, ["foo", "bar"], SomeFlag.foo | SomeFlag.bar, same_value),
+    (SomeFlag, "foo|bar", SomeFlag.foo | SomeFlag.bar, same_value),
+    (Callable, "itertools.chain", chain, same_value),
+    (
+        Counter[str],
+        {"foo": 1, "bar": 2},
+        cl.Counter(["foo", "bar", "bar"]),
+        same_keyvals,
+    ),
+    (
+        Counter[int],
+        [("1", 1), ("2", "2"), ("3", "3")],
+        cl.Counter({1: 1, 2: 2, 3: 3}),
+        same_keyvals,
+    ),
+    (date, "2018-01-01", date(2018, 1, 1), same_value),
+    (datetime, "2018-01-01T12:00:00.000", datetime(2018, 1, 1, 12), same_value),
+    (bytes, [1, 2, 3], b"\x01\x02\x03", same_value),
+    (ByteString, "b'foo'", b"foo", same_value),
+    (List[bytes], ["b'foo'", [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
+    (
+        MutableSet[bytes],
+        ["b'foo'", [1, 2, 3]],
+        {b"foo", b"\x01\x02\x03"},
+        same_contents,
+    ),
+    (
+        Tuple[float, date, List[Path]],
+        [1, "2018-01-01", ("foo", "bar")],
+        (1.0, date(2018, 1, 1), [Path("foo"), Path("bar")]),
+        same_contents,
+    ),
+    (Pattern[bytes], "foobar", re.compile(b"foobar"), same_value),
+    (
+        List[Tuple[float, bool]],
+        ([1, True], [2, False]),
+        [(1.0, True), (2.0, False)],
+        same_contents,
+    ),
+    (
+        Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, Tuple[int, bool]]]],
+        [["2018-01-01", [1, True]], ["2019-01-01", [2, 'false']]],
+        [(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))],
+        same_contents,
+    ),
+    (
+        Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, ...]]],
+        dict([["2018-01-01", [1, 'true']], ["2019-01-01", [2, False]]]),
+        dict([(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))]),
+        same_contents,
+    ),
+    (Tuple[complex, ...], ["1+2j", 3 + 4j], (1 + 2j, 3 + 4j), same_contents),
+    (
+        ChainMap[int, range],
+        [{1: "1:2", 2: [3, 4, 5]}, {"3": "6:7"}],
+        cl.ChainMap({1: range(1, 2), 2: range(3, 4, 5), 3: range(6, 7)}),
+        same_keyvals,
+    ),
+    (
+        ChainMap[int, range],
+        {1: "1:2", 2: [3, 4, 5], "3": "6:7"},
+        cl.ChainMap({1: range(1, 2), 2: range(3, 4, 5), 3: range(6, 7)}),
+        same_keyvals,
+    ),
+    (
+        SomeNamedTuple,
+        {'x': 'foo', 'y': [[1,2], '3/4']},
+        SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
+        same_contents,
+    ),
+    (
+        SomeNamedTuple,
+        ['foo', (0.5, '3/4')],
+        SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
+        same_contents,
+    ),
+    (
+        Dict[BuiltinFunctionType, Tuple[Type[int], Type[str]]],
+        {
+            'sorted': ['int', 'str'],
+            'ord': ['{}.{}'.format(__name__, _myint.__name__), '{}.{}'.format(__name__, _mystr.__name__)],
+        },
+        {sorted: (int, str), ord: (_myint, _mystr)},
+        same_keyvals,
+    ),
+    (Callable[[Any], SomeEnum], "{}.{}".format(__name__, SomeEnum.__name__), SomeEnum, same_value),
+    # inflation path for callables
+]
+
+inflation_test_cases = [
+    (Callable,
+     {
+         "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
+         "__args__": [[1234,5,6,7,8,9], {'x': 'bar', 'y':[[1,2], '3/4']}],
+     },
+     SomeCallable(datetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.bar, {_myFraction(1,2), _myFraction(3,4)})),
+     same_value,
+     ),
+    (SomeCallable[_mydatetime],
+     {
+         "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
+         "__kwargs__": {'x': '1234-05-06T07:08:09', 'y': ('foo', ['3/4'])},
+     },
+     SomeCallable(_mydatetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.foo, {_myFraction(3,4)})),
+     same_value,
+     ),
+    (
+        MyList[int],
+        {
+            '__classpath__': 'test_config_decode.SubList',
+            '__args__': [True, 2, 3.0],
+        },
+        SubList(1, 2, 3),
+        same_value,
+    )
+]
+
 
 @pytest.mark.parametrize(
     "type_,input_,expected,cmp",
-    basic_testcases + [
-        (type, "collections.OrderedDict", cl.OrderedDict, same_value),
-        (range, "1:2:3", range(1, 2, 3), same_value),
-        (range, [1, 2, 3], range(1, 2, 3), same_value),
-        (SomeEnum, "foo", SomeEnum.foo, same_value),
-        (SomeFlag, ["foo", "bar"], SomeFlag.foo | SomeFlag.bar, same_value),
-        (SomeFlag, "foo|bar", SomeFlag.foo | SomeFlag.bar, same_value),
-        (Callable, "itertools.chain", chain, same_value),
-        (Callable[[Any], SomeEnum], "{}.{}".format(__name__, SomeEnum.__name__), SomeEnum, same_value),
-        # inflation path for callables
-        (Callable,
-         {
-             "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
-             "__args__": [[1234,5,6,7,8,9], {'x': 'bar', 'y':[[1,2], '3/4']}],
-         },
-         SomeCallable(datetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.bar, {_myFraction(1,2), _myFraction(3,4)})),
-         same_value,
-         ),
-        (SomeCallable[_mydatetime],
-         {
-             "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
-             "__kwargs__": {'x': '1234-05-06T07:08:09', 'y': ('foo', ['3/4'])},
-         },
-         SomeCallable(_mydatetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.foo, {_myFraction(3,4)})),
-         same_value,
-         ),
-        (
-            Counter[str],
-            {"foo": 1, "bar": 2},
-            cl.Counter(["foo", "bar", "bar"]),
-            same_keyvals,
-        ),
-        (
-            Counter[int],
-            [("1", 1), ("2", "2"), ("3", "3")],
-            cl.Counter({1: 1, 2: 2, 3: 3}),
-            same_keyvals,
-        ),
-        (date, "2018-01-01", date(2018, 1, 1), same_value),
-        (datetime, "2018-01-01T12:00:00.000", datetime(2018, 1, 1, 12), same_value),
-        (bytes, [1, 2, 3], b"\x01\x02\x03", same_value),
-        (ByteString, "b'foo'", b"foo", same_value),
-        (List[bytes], ["b'foo'", [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
-        (
-            MutableSet[bytes],
-            ["b'foo'", [1, 2, 3]],
-            {b"foo", b"\x01\x02\x03"},
-            same_contents,
-        ),
-        (
-            Tuple[float, date, List[Path]],
-            [1, "2018-01-01", ("foo", "bar")],
-            (1.0, date(2018, 1, 1), [Path("foo"), Path("bar")]),
-            same_contents,
-        ),
-        (Pattern[bytes], "foobar", re.compile(b"foobar"), same_value),
-        (
-            List[Tuple[float, bool]],
-            ([1, True], [2, False]),
-            [(1.0, True), (2.0, False)],
-            same_contents,
-        ),
-        (
-            Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, Tuple[int, bool]]]],
-            [["2018-01-01", [1, True]], ["2019-01-01", [2, 'false']]],
-            [(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))],
-            same_contents,
-        ),
-        (
-            Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, ...]]],
-            dict([["2018-01-01", [1, 'true']], ["2019-01-01", [2, False]]]),
-            dict([(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))]),
-            same_contents,
-        ),
-        (Tuple[complex, ...], ["1+2j", 3 + 4j], (1 + 2j, 3 + 4j), same_contents),
-        (
-            ChainMap[int, range],
-            [{1: "1:2", 2: [3, 4, 5]}, {"3": "6:7"}],
-            cl.ChainMap({1: range(1, 2), 2: range(3, 4, 5), 3: range(6, 7)}),
-            same_keyvals,
-        ),
-        (
-            ChainMap[int, range],
-            {1: "1:2", 2: [3, 4, 5], "3": "6:7"},
-            cl.ChainMap({1: range(1, 2), 2: range(3, 4, 5), 3: range(6, 7)}),
-            same_keyvals,
-        ),
-        (
-            SomeNamedTuple,
-            {'x': 'foo', 'y': [[1,2], '3/4']},
-            SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
-            same_contents,
-        ),
-        (
-            SomeNamedTuple,
-            ['foo', (0.5, '3/4')],
-            SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
-            same_contents,
-        ),
-        (
-            Dict[BuiltinFunctionType, Tuple[Type[int], Type[str]]],
-            {
-                'sorted': ['int', 'str'],
-                'ord': ['{}.{}'.format(__name__, _myint.__name__), '{}.{}'.format(__name__, _mystr.__name__)],
-            },
-            {sorted: (int, str), ord: (_myint, _mystr)},
-            same_keyvals,
-        ),
-        (
-            MyList[int],
-            {
-                '__classpath__': 'test_config_decode.SubList',
-                '__args__': [True, 2, 3.0],
-            },
-            SubList(1, 2, 3),
-            same_value,
-        )
-    ],
+    basic_testcases + complex_test_cases + inflation_test_cases,
 )
 def test_postproc(type_, input_, expected, cmp):
     """We have to use a custom comparison here to assert that types are the same as well as
@@ -346,5 +364,29 @@ def test_postproc(type_, input_, expected, cmp):
     print("decoding value", input_)
     decoded = postproc(input_)
     print("decoded", decoded)
+    print("type", type(decoded))
+    print("value", str(decoded))
+    cmp(expected, decoded)
+
+
+@pytest.mark.parametrize(
+    "type_,input_,expected,cmp",
+    basic_testcases + complex_test_cases[:1],
+)
+def test_roundtrip(type_, input_, expected, cmp):
+    """We have to use a custom comparison here to assert that types are the same as well as
+    values; e.g. 1.0 compares equal to 1 but we want a stricter test than that."""
+    print("computing decoder for", type_)
+    postproc = config_decoder(type_)
+    print("decoder", postproc)
+    print("computing encoder for", type_)
+    preproc = config_encoder(type_)
+    print("encoder", preproc)
+    encoded = preproc(expected)
+    print("encoded", encoded)
+    decoded = postproc(encoded)
+    print("decoded", decoded)
     # TODO: a couple comparisons fail here
+    print("type", type(decoded))
+    print("value", str(decoded))
     cmp(expected, decoded)
