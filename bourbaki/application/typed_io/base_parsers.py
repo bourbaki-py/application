@@ -56,7 +56,10 @@ def parse_regex(s: str):
 
 
 def parse_regex_bytes(s: str):
-    return re.compile(s.encode())
+    """Treat string literals like '\xf4' as references to bytes, not unicode codepoints, for ease of writing in
+    config files"""
+    pattern = bytes(map(ord, s))
+    return re.compile(pattern)
 
 
 if sys.version_info >= (3, 7):
@@ -92,7 +95,7 @@ else:
         return dt
 
 
-range_pat = re.compile(r"(-?[0-9]+)([-:,])(-?[0-9]+)(?:\2(-?[0-9]+))?")
+range_pat = re.compile(r"(-?[0-9]+)([-:])(-?[0-9]+)(?:\2(-?[0-9]+))?")
 
 
 def parse_range(s):
