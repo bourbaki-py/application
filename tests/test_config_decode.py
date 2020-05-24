@@ -344,6 +344,7 @@ def test_postproc(type_, input_, expected, cmp):
     postproc = config_decoder(type_)
     print("decoder", postproc)
     print("decoding value", input_)
-    out = postproc(input_)
-    print("decoded", out)
-    # cmp(expected, out)
+    decoded = postproc(input_)
+    print("decoded", decoded)
+    # TODO: a couple comparisons fail here
+    cmp(expected, decoded)
