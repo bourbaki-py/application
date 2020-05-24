@@ -209,6 +209,11 @@ class MappingConfigEncoder(MappingWrapper):
             PicklableWithType.__init__(self, coll_type, *args)
         super().__init__(coll_type, *args)
 
+    def __call__(self, value):
+        if not isinstance(value, collections.Mapping):
+            raise TypeError("Can't encode value of type {} to config mapping".format(type(value)))
+        return super().__call__(value)
+
 
 @config_encoder.register(typing.ChainMap)
 class ChainMapConfigEncoder(MappingConfigEncoder):
