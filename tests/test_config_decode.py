@@ -371,7 +371,7 @@ def test_postproc(type_, input_, expected, cmp):
 
 @pytest.mark.parametrize(
     "type_,input_,expected,cmp",
-    basic_testcases + complex_test_cases[:1],
+    basic_testcases + complex_test_cases,
 )
 def test_roundtrip(type_, input_, expected, cmp):
     """We have to use a custom comparison here to assert that types are the same as well as
