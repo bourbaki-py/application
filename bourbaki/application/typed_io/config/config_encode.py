@@ -184,7 +184,7 @@ for _type in [types.FunctionType, types.BuiltinFunctionType, type, type(_lru)]:
 
 del _lru
 
-config_encoder.register(typing.Type)(parameterized_classpath)
+config_encoder.register(typing.Type, as_const=True)(parameterized_classpath)
 
 
 ###############
