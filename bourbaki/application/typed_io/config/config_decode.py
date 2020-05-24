@@ -175,6 +175,12 @@ to_range.register(str)(parse_range)
 def range_from_tuple(tup):
     return range(*tup)
 
+
+@to_range.register(int)
+def range_from_int(i):
+    return range(i)
+
+
 to_null = singledispatch(partial(cant_decode_to, type_=NoneType, input_types=(NoneType,)))
 to_null.register(NoneType)(identity)
 
@@ -239,7 +245,7 @@ def enum_config_decoder(enum_type):
 
 
 @config_decoder.register_all(enum.Flag, enum.IntFlag)
-def enum_config_decoder(enum_type):
+def flag_enum_config_decoder(enum_type):
     return FlagParser(enum_type).config_decode
 
 
@@ -353,7 +359,7 @@ class ChainMapConfigDecoder(MappingConfigDecoder):
 
 
 @config_decoder.register(typing.Counter)
-class CounterConfigEncoder(MappingConfigDecoder):
+class CounterConfigDecoder(MappingConfigDecoder):
     init_type = False
 
     def __init__(self, coll_type, key_type):
@@ -369,7 +375,6 @@ class CounterConfigEncoder(MappingConfigDecoder):
 
 @config_decoder.register(typing.Tuple)
 class TupleConfigDecoder(GenericConfigDecoderMixin, TupleWrapper):
-    _collection_cls = SequenceConfigDecoder
     legal_container_types = (NonAnyStrCollection,)
     helper_cls = TupleWrapper
 
