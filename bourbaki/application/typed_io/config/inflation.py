@@ -6,7 +6,7 @@ from functools import update_wrapper
 from inspect import signature, Parameter
 from itertools import chain
 from logging import getLogger
-from cytoolz import valmap
+from typing import Optional, Tuple, TypeVar, Type
 from bourbaki.introspection.imports import import_object, import_type
 from bourbaki.introspection.types import (
     typetypes,
@@ -104,6 +104,7 @@ def instance_from(
         )
     )
 
+    params = None
     if __classpath__ is not None:
         # this raises a TypeError if cls is not a type
         cls = import_type(__classpath__)
@@ -121,6 +122,11 @@ def instance_from(
                             __classpath__, target_org
                         )
                     )
+                # the constructing class from the classpath will be parameterized by the params of the
+                # target type, if any
+                target_args = get_generic_args(target_type_)
+                if target_args:
+                    params = tuple(zip(get_generic_params(target_org), target_args))
             elif not issubclass_generic(cls, target_type_):
                 logger.info("Performing generic subclass check: %s <: %s", cls, target_type_)
                 raise TypeError(
@@ -156,7 +162,7 @@ def instance_from(
     else:
         constructor = cls
 
-    wrapper = typed_config_callable(constructor)
+    wrapper = typed_config_callable(constructor, params)
     logger.info("Attempting to construct instance with constructor %s", constructor)
     if __kwargs__ is None and __args__ is None:
         obj = wrapper()
@@ -235,7 +241,6 @@ class TypedConfigCallable:
         global config_decoder
         if not TypedConfigCallable.called:
             from bourbaki.application.typed_io.config.config_decode import config_decoder
-
             TypedConfigCallable.called = True
 
         if self.__signature__ is None:
@@ -268,7 +273,8 @@ class TypedConfigCallable:
                         bound_args[name] = decoders[name](arg)
                     elif param.kind is Parameter.VAR_KEYWORD:
                         prefix = '**'
-                        bound_args[name] = valmap(decoders[name], arg)
+                        decoder = decoders[name]
+                        bound_args[name] = {k: decoder(v) for k, v in arg.items()}
                     elif param.kind is Parameter.VAR_POSITIONAL:
                         prefix = '*'
                         bound_args[name] = tuple(map(decoders[name], arg))
@@ -282,5 +288,6 @@ class TypedConfigCallable:
 
 
 @lru_cache_sig_preserving(None)
-def typed_config_callable(func, param_dict=None):
+def typed_config_callable(func, params: Optional[Tuple[Tuple[TypeVar, Type], ...]] = None):
+    param_dict = None if not params else dict(params)
     return TypedConfigCallable(func, param_dict)
