@@ -1,338 +1,260 @@
 # coding:utf-8
+import typing
+import types
+import collections.abc
 import decimal
 import enum
 import fractions
+from functools import singledispatch, lru_cache
 import io
 import os
-import sys
-import typing
-import types
-import numbers
 import pathlib
-import datetime
 import ipaddress
-import collections
+import datetime
+import sys
 import uuid
-from functools import partial
-from operator import attrgetter
 from urllib.parse import ParseResult as URL, urlunparse
+from warnings import warn
 from bourbaki.introspection.callables import function_classpath
-from bourbaki.introspection.types import LazyType, NamedTupleABC
-from bourbaki.introspection.generic_dispatch import (
-    GenericTypeLevelSingleDispatch,
-    UnknownSignature,
+from bourbaki.introspection.classes import parameterized_classpath
+from bourbaki.introspection.types import (
+    NamedTupleABC,
+    NonAnyStrCollection,
+    LazyType,
 )
 from bourbaki.introspection.generic_dispatch_helpers import (
+    LazyWrapper,
     CollectionWrapper,
     TupleWrapper,
     MappingWrapper,
+    NamedTupleWrapper,
     UnionWrapper,
-    LazyWrapper,
+    PicklableWithType,
 )
-from .parsers import EnumParser, FlagParser
-from .exceptions import (
-    ConfigIOUndefined,
-    ConfigTypedOutputError,
-    ConfigTypedKeyOutputError,
-    ConfigUnionOutputError,
+from bourbaki.introspection.generic_dispatch import UnknownSignature
+from ..base_parsers import (
+    EnumParser,
+    FlagParser,
 )
 from ..utils import (
-    Empty,
     identity,
-    File,
-    IODispatch,
-    TypeCheckOutput,
-    TypeCheckExportFunc,
-    TypeCheckExportType,
+    GenericIOTypeLevelSingleDispatch,
+)
+from ..file_types import File
+from ..exceptions import (
+    ConfigTypedOutputError, ConfigIOUndefinedForType, AllFailed, RaisedDisallowedExceptions,
+)
+
+NoneType = type(None)
+
+T = typing.TypeVar("T")
+
+# The main dispatcher
+
+config_encoder = GenericIOTypeLevelSingleDispatch(
+    "config_encoder",
+    isolated_bases=[typing.Union, typing.Generic],
+    resolve_exc_class=ConfigIOUndefinedForType,
+    call_exc_class=ConfigTypedOutputError,
 )
 
 
-class ConfigEncodeDispatch(IODispatch):
-    exc_type = ConfigTypedOutputError
+# basic encoders
 
+@config_encoder.register(decimal.Decimal, as_const=True)
+def to_config_decimal(dec: decimal.Decimal):
+    return float(dec) if float(dec) == dec else str(dec)
 
-class ConfigKeyEncodeDispatch(IODispatch):
-    exc_type = ConfigTypedKeyOutputError
 
+@config_encoder.register(fractions.Fraction, as_const=True)
+def to_config_fraction(frac: fractions.Fraction):
+    return frac.numerator if frac.denominator == 1 else str(frac)
 
-to_int_config = ConfigEncodeDispatch("to_int_config", int)
-to_int_config.register(numbers.Integral)(int)
 
-to_bool_config = ConfigEncodeDispatch("to_bool_config", bool)
-to_bool_config.register(numbers.Integral)(bool)
+config_encoder.register_all(
+    complex,
+    fractions.Fraction,
+    ipaddress.IPv4Address,
+    ipaddress.IPv6Address,
+    pathlib.Path,
+    uuid.UUID,
+    as_const=True,
+)(str)
 
-to_float_config = ConfigEncodeDispatch("to_float_config", float)
-to_float_config.register(numbers.Number)(float)
 
-to_complex_config = ConfigEncodeDispatch("to_complex_config", complex)
-to_complex_config.register(numbers.Complex)(str)
+config_encoder.register(URL, as_const=True)(urlunparse)
 
 
-@to_complex_config.register(numbers.Number)
-def number_to_complex_str(x):
-    return str(complex(x))
+# basic config/JSON types
 
+for _type in [int, float, bool, str]:
+    config_encoder.register(_type, as_const=True)(_type)
 
-to_fraction_config = ConfigEncodeDispatch("to_fraction_config", fractions.Fraction)
-to_fraction_config.register(fractions.Fraction)(str)
 
+# encode bytes types to lists of ints by default
 
-@to_fraction_config.register(numbers.Number)
-def number_to_fraction_str(x):
-    return str(fractions.Fraction(x))
+config_encoder.register_all(typing.ByteString, as_const=True)(list)
 
 
-to_decimal_config = ConfigEncodeDispatch("to_decimal_config", decimal.Decimal)
-to_decimal_config.register(decimal.Decimal)(str)
+@config_encoder.register(File, as_const=True)
+def to_config_file(f: io.IOBase):
+    if f is sys.stdin or f is sys.stdout or f is sys.stderr:
+        # argparse FileType parses this to on of the above handles depending on the mode
+        return '-'
+    name = getattr(f, name, None)
+    if name is None:
+        warn("Can't determine path/name for file object {}".format(f))
+        return None
+    return os.path.abspath(name)
 
 
-@to_decimal_config.register(numbers.Number)
-def number_to_decimal_str(x):
-    return str(decimal.Decimal(x))
+@config_encoder.register_all(datetime.date, as_const=True)
+def to_config_datetime(d: datetime.date):
+    return d.isoformat()
 
 
-to_bytes_config = ConfigEncodeDispatch("to_bytes_config", bytes)
-to_bytes_config.register((bytes, bytearray))(list)
+@config_encoder.register(range, as_const=True)
+def to_range_config(r: range):
+    if r.step == 1 or r.step is None:
+        return "{:d}:{:d}".format(r.start, r.stop)
+    return "{:d}:{:d}:{:d}".format(r.start, r.stop, r.step)
 
 
-bool_to_str = ConfigKeyEncodeDispatch("bool_to_str", bool)
-bool_to_str.register(bool)(str)
+config_encoder.register(NoneType, as_const=True)(identity)
 
 
-@bool_to_str.register(numbers.Integral)
-def integral_to_bool_str(i):
-    return str(bool(i))
+@config_encoder.register(typing.Pattern[str], as_const=True)
+def to_regex_str_config(r: typing.Pattern[str]):
+    return r.pattern
 
 
-int_to_str = ConfigKeyEncodeDispatch("int_to_str", int)
-int_to_str.register(int)(str)
+@config_encoder.register(typing.Pattern[bytes], as_const=True)
+def to_regex_bytes_config(r: typing.Pattern[bytes]):
+    pattern_encoded = ''.join(map(chr, r.pattern))
+    return pattern_encoded
 
 
-@int_to_str.register(numbers.Integral)
-def integral_to_int_str(b):
-    return str(int(b))
-
-
-float_to_str = ConfigKeyEncodeDispatch("float_to_str", float)
-float_to_str.register(float)(str)
-
-
-@float_to_str.register(numbers.Number)
-def number_to_float_str(i):
-    return str(float(i))
-
-
-bytes_to_str = ConfigKeyEncodeDispatch("bytes_to_str", typing.ByteString)
-bytes_to_str.register(bytes)(repr)
-
-
-@bytes_to_str.register(bytearray)
-def bytearray_to_str(b):
-    return repr(bytes(b))
-
-
-def repr_range(r):
-    if r.step == 1:
-        return "{}:{}".format(r.start, r.stop)
-    return "{}:{}:{}".format(r.start, r.stop, r.step)
-
-
-def encode_bytes_re(r):
-    s = encode_str_re(r)
-    if isinstance(s, str):
-        return s
-    return s.decode()
-
-
-encode_str_re = attrgetter("pattern")
-
-
-def config_file_encode(file: io.IOBase):
-    if file in (sys.stdout, sys.stderr, sys.stdin):
-        return "-"
-    try:
-        name = file.name
-    except AttributeError as e:
-        raise ConfigTypedOutputError(type(file), file, e)
-    else:
-        return os.path.abspath(name)
-
-
-config_encoder_methods = {
-    str: identity,
-    range: repr_range,
-    pathlib.Path: str,
-    uuid.UUID: str,
-    File: config_file_encode,
-    types.FunctionType: function_classpath,
-    types.BuiltinFunctionType: function_classpath,
-    datetime.date: datetime.date.isoformat,
-    datetime.datetime: datetime.datetime.isoformat,
-    ipaddress.IPv4Address: str,
-    ipaddress.IPv6Address: str,
-    URL: urlunparse,
-    typing.Pattern: encode_str_re,
-    typing.Pattern[str]: encode_str_re,
-    typing.Pattern[bytes]: encode_bytes_re,
-}
-
-
-class TypeCheckConfigEncoder(TypeCheckOutput):
-    exc_cls = ConfigTypedOutputError
-
-
-# don't isolate user-defined Generics because in general we don't know how to encode them...
-
-config_key_encoder = GenericTypeLevelSingleDispatch(
-    __name__, isolated_bases=[typing.Union]
-)
-
-config_encoder = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing.Union])
-
-
-@config_encoder.register_all(types.FunctionType, types.BuiltinFunctionType)
-@config_key_encoder.register_all(types.FunctionType, types.BuiltinFunctionType)
-class TypeCheckConfigEncodeFunc(TypeCheckExportFunc):
-    exc_cls = ConfigTypedOutputError
-
-
-@config_encoder.register(typing.Type)
-@config_key_encoder.register(typing.Type)
-class TypeCheckConfigEncodeType(TypeCheckExportType):
-    exc_cls = ConfigTypedOutputError
-
-
-# base for decoders that decode collections
-class GenericConfigEncoderMixin:
-    getter = config_encoder
-    legal_container_types = None
-    reduce = list
-    helper_cls = None
-
-    def typecheck(self, value):
-        if self.legal_container_types is None:
-            return value
-        if not isinstance(value, self.legal_container_types):
-            raise ConfigTypedOutputError(self.reduce, value)
-        return value
-
-    def __call__(self, value):
-        arg = self.typecheck(value)
-        return self.helper_cls.__call__(self, arg)
-
-
-@config_encoder.register(typing.Collection)
-class ConfigCollectionEncoder(GenericConfigEncoderMixin, CollectionWrapper):
-    reduce = list
-    helper_cls = CollectionWrapper
-
-
-@config_encoder.register(typing.Mapping)
-class ConfigMappingEncoder(GenericConfigEncoderMixin, MappingWrapper):
-    reduce = dict
-    key_getter = config_key_encoder
-    helper_cls = MappingWrapper
-
-
-@config_encoder.register(typing.ChainMap)
-class ConfigChainMapEncoder(ConfigMappingEncoder):
-    def __call__(self, arg):
-        if isinstance(arg, collections.ChainMap):
-            maps = arg.maps
-        else:
-            maps = [self.typecheck(arg)]
-        to_map = super(type(self), self).__call__
-        maps = map(to_map, maps)
-        return list(maps)
-
-
-@config_encoder.register(typing.Counter)
-class ConfigCounterEncoder(ConfigMappingEncoder):
-    def __init__(self, coll_type, key_type):
-        super(ConfigCounterEncoder, self).__init__(coll_type, key_type, int)
-
-
-@config_encoder.register(typing.Tuple)
-class ConfigTupleEncoder(TupleWrapper):
-    getter = config_encoder
-    reduce = staticmethod(list)
-    _collection_cls = ConfigCollectionEncoder
-
-
-class _DictFromNamedTupleIter:
-    def __init__(self, tuple_cls):
-        self.tuple_cls = tuple_cls
-
-    def __call__(self, iter_):
-        return dict(zip(self.tuple_cls._fields, iter_))
-
-
-@config_encoder.register(NamedTupleABC)
-class ConfigNamedTupleEncoder(TupleWrapper):
-    getter = config_encoder
-    get_reducer = staticmethod(_DictFromNamedTupleIter)
-
-
-@config_encoder.register(typing.Union)
-class UnionConfigEncoder(GenericConfigEncoderMixin, UnionWrapper):
-    tolerate_errors = (ConfigIOUndefined, UnknownSignature)
-    reduce = staticmethod(next)
-    helper_cls = UnionWrapper
-    exc_class = ConfigUnionOutputError
-
-
-@config_encoder.register(LazyType)
-class LazyConfigDecoder(LazyWrapper):
-    getter = config_encoder
+# enums
 
 
 @config_encoder.register_all(enum.Enum, enum.IntEnum)
-@config_key_encoder.register_all(enum.Enum, enum.IntEnum)
-def config_enum_encoder(enum_):
-    return EnumParser(enum_).config_encode
+def enum_config_encoder(enum_type):
+    return EnumParser(enum_type).config_encode
 
 
 @config_encoder.register_all(enum.Flag, enum.IntFlag)
-@config_key_encoder.register_all(enum.Flag, enum.IntFlag)
-def config_flag_encoder(enum_):
-    return FlagParser(enum_).config_encode
+def flag_enum_config_encoder(enum_type):
+    return FlagParser(enum_type).config_encode
 
 
-@config_key_encoder.register(typing.Union)
-class UnionConfigKeyEncoder(UnionConfigEncoder):
-    getter = config_key_encoder
+# ############################
+# # Custom and generic types #
+# ############################
 
 
-# typecheck the inputs of these; they aren't dispatched and they're specific
-for t, enc in config_encoder_methods.items():
-    f = partial(TypeCheckConfigEncoder, encoder=enc)
-    config_encoder.register(t)(f)
-    config_key_encoder.register(t)(f)
+# Note: inflate_config has no inverse; custom classes require custom encoders; thus we don't register for
+# unnanotated types (annotation == inspect.Empty or typing.Any) as in the config_decode case
 
 
-# don't need to typecheck these; they're dispatched selectively
-for t, enc, key_enc in [
-    (int, to_int_config, int_to_str),
-    (float, to_float_config, float_to_str),
-    (bool, to_bool_config, bool_to_str),
-    (typing.ByteString, to_bytes_config, bytes_to_str),
-    # str-encoded numerics
-    (complex, to_complex_config, to_complex_config),
-    (fractions.Fraction, to_fraction_config, to_fraction_config),
-    (decimal.Decimal, to_decimal_config, to_decimal_config),
-]:
-    config_encoder.register(t, as_const=True)(enc)
-    config_key_encoder.register(t, as_const=True)(key_enc)
+# ####################
+# # Importable types #
+# ####################
 
 
-# let unspecified-type values pass through unaltered; dumping config later will raise an error if they aren't
-# encodeable in the specified format. In most cases this will enforce JSON-typed objects
-config_encoder.register(Empty, as_const=True)(identity)
-config_encoder.register(typing.Any, as_const=True)(identity)
+# typing.Callable[...] has the same caveat as custom classes - there's no automatic way to do it.
+# However, config_encoder's purpose is to allow encoding function defaults, and generally when
+# providing a default for an arg with a typing.Callable annotation, one chooses an importable function;
+# we will raise a type Error here if something else was provided.
+# in that case, one may @to_config_callable.register(<custom-callable-type>)
+@config_encoder.register(typing.Callable)
+@singledispatch
+def to_config_callable(f: typing.Callable):
+    raise TypeError(
+        "Don't know how to encode value of type {} as configuration; "
+        "Use `{}.register` to define an encoder for this type".format(
+            type(f), function_classpath(to_config_callable)
+        )
+    )
 
 
-# require keys to be strings when the types aren't specified; deserialization can only return string keys so we require
-# this for round-trip consistency
-require_str_for_key = TypeCheckConfigEncoder(str, encoder=identity)
-config_key_encoder.register(Empty, as_const=True)(require_str_for_key)
-config_key_encoder.register(typing.Any, as_const=True)(require_str_for_key)
+_lru = lru_cache(None)(lambda x: x)
+
+for _type in [types.FunctionType, types.BuiltinFunctionType, type, type(_lru)]:
+    to_config_callable.register(_type)(function_classpath)
+
+del _lru
+
+config_encoder.register(typing.Type)(parameterized_classpath)
+
+
+###############
+# Collections #
+###############
+
+
+@config_encoder.register(typing.Collection)
+class CollectionConfigEncoder(CollectionWrapper):
+    reduce = staticmethod(list)
+    getter = config_encoder
+
+
+@config_encoder.register(typing.Mapping)
+class MappingConfigEncoder(MappingWrapper):
+    reduce = staticmethod(dict)
+    getter = config_encoder
+    init_type = True
+
+    def __init__(self, coll_type, *args):
+        if self.init_type:
+            PicklableWithType.__init__(self, coll_type, *args)
+        super().__init__(coll_type, *args)
+
+
+@config_encoder.register(typing.ChainMap)
+class ChainMapConfigEncoder(MappingConfigEncoder):
+    reduce = dict
+
+    def __call__(self, value: typing.ChainMap):
+        to_dict = super().__call__
+        dicts = map(to_dict, value.maps)
+        return list(dicts)
+
+
+@config_encoder.register(typing.Counter)
+class CounterConfigEncoder(MappingConfigEncoder):
+    init_type = False
+
+    def __init__(self, coll_type, key_type):
+        super().__init__(coll_type, key_type, int)
+        # can't pass two type args to Counter, hence init_type = False above and we set the type_ attr manually here
+        PicklableWithType.__init__(self, coll_type, key_type)
+
+
+@config_encoder.register(typing.Tuple)
+class TupleConfigEncoder(TupleWrapper):
+    getter = config_encoder
+    reduce = staticmethod(list)
+
+
+@config_encoder.register(NamedTupleABC)
+class NamedTupleConfigEncoder(NamedTupleWrapper):
+    getter = config_encoder
+    reduce_named = staticmethod(dict)
+
+    def __call__(self, value):
+        return super().__call__(value._asdict())
+
+
+# TODO: finish this
+@config_encoder.register(typing.Union)
+class UnionConfigEncoder(UnionWrapper):
+    tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature, ConfigTypedOutputError)
+    reduce = staticmethod(next)
+    getter = config_encoder
+    exc_class_bad_exception = RaisedDisallowedExceptions
+    exc_class_no_success = AllFailed
+
+
+@config_encoder.register(LazyType)
+class LazyConfigEncoder(LazyWrapper):
+    getter = config_encoder
