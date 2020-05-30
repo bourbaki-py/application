@@ -37,7 +37,7 @@ from ..base_parsers import (
 )
 from ..utils import (
     identity,
-    GenericIOTypeLevelSingleDispatch,
+    GenericIOParserTypeLevelSingleDispatch,
 )
 from ..file_types import File
 from ..exceptions import (
@@ -50,7 +50,7 @@ T = typing.TypeVar("T")
 
 # The main dispatcher
 
-config_encoder = GenericIOTypeLevelSingleDispatch(
+config_encoder = GenericIOParserTypeLevelSingleDispatch(
     "config_encoder",
     isolated_bases=[typing.Union, typing.Generic],
     resolve_exc_class=ConfigIOUndefinedForType,

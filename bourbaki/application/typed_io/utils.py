@@ -202,10 +202,6 @@ def parse_or_fail(func: Callable, type_: Type[T], exc_class: Type[TypedIOValueEr
 
 
 class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
-    """Inject custom exceptions into the resolution process and at the call site of the resolved function.
-    resolve_exc_class should subclass IOUndefinedForType with the same constructor signature, and
-    call_exc_class should subclass TypedIOValueError with the same constructor signature"""
-
     def __init__(
         self,
         name: str,
@@ -217,12 +213,6 @@ class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
         self.call_exc_class = call_exc_class
         self.resolve_exc_class = resolve_exc_class
 
-    def __call__(self, type_, **kwargs):
-        func = super().__call__(type_, **kwargs)
-        if self.call_exc_class is None:
-            return func
-        return partial(parse_or_fail, func, type_, self.call_exc_class)
-
     def resolve(self, sig, *, debug: bool = False):
         try:
             f = super().resolve(sig, debug=debug)
@@ -232,6 +222,18 @@ class GenericIOTypeLevelSingleDispatch(GenericTypeLevelSingleDispatch):
             raise e
         else:
             return f
+
+
+class GenericIOParserTypeLevelSingleDispatch(GenericIOTypeLevelSingleDispatch):
+    """Inject custom exceptions into the resolution process and at the call site of the resolved parsing function.
+    resolve_exc_class should subclass IOUndefinedForType with the same constructor signature, and
+    call_exc_class should subclass TypedIOValueError with the same constructor signature"""
+
+    def __call__(self, type_, **kwargs):
+        func = super().__call__(type_, **kwargs)
+        if self.call_exc_class is None:
+            return func
+        return partial(parse_or_fail, func, type_, self.call_exc_class)
 
 
 #####################################

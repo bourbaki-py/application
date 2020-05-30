@@ -5,7 +5,6 @@ from inspect import signature, Signature, Parameter
 from itertools import chain
 from typing_inspect import is_optional_type
 from bourbaki.introspection.generic_dispatch import (
-    GenericTypeLevelSingleDispatch,
     UnknownSignature,
     const,
 )
@@ -36,6 +35,8 @@ from bourbaki.introspection.types import (
 from ..exceptions import (
     ConfigIOUndefinedForType,
     ConfigIOUndefinedForKeyType,
+    ConfigTypedOutputError,
+    ConfigTypedKeyOutputError,
 )
 from ..base_reprs import (
     type_spec,
@@ -46,8 +47,9 @@ from ..base_reprs import (
     repr_type,
     Empty,
 )
-from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
 from ..base_parsers import EnumParser
+from .inflation import CONSTRUCTOR_KEY, CLASSPATH_KEY, KWARGS_KEY, ARGS_KEY
+from ..utils import GenericIOTypeLevelSingleDispatch
 
 NoneType = type(None)
 
@@ -258,12 +260,18 @@ def config_repr_callable_args(
 
 # the main method
 
-config_repr = GenericTypeLevelSingleDispatch(
-    "config_repr", isolated_bases=[typing.Union, NonStdLib]
+config_repr = GenericIOTypeLevelSingleDispatch(
+    "config_repr",
+    isolated_bases=[typing.Union, NonStdLib],
+    resolve_exc_class=ConfigIOUndefinedForType,
+    call_exc_class=ConfigTypedOutputError,
 )
 
-config_key_repr = GenericTypeLevelSingleDispatch(
-    "config_key_repr", isolated_bases=[typing.Union, NonStdLib]
+config_key_repr = GenericIOTypeLevelSingleDispatch(
+    "config_key_repr",
+    isolated_bases=[typing.Union, NonStdLib],
+    resolve_exc_class=ConfigIOUndefinedForKeyType,
+    call_exc_class=ConfigTypedKeyOutputError,
 )
 
 config_repr.register(BuiltinAtomic)(type_spec)

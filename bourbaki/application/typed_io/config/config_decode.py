@@ -48,7 +48,7 @@ from ..utils import (
     TypeCheckInput,
     TypeCheckImport,
     TypeCheckImportType,
-    GenericIOTypeLevelSingleDispatch,
+    GenericIOParserTypeLevelSingleDispatch,
 )
 from ..file_types import File, IOParser
 from ..exceptions import (
@@ -191,7 +191,7 @@ to_null.register(NoneType)(identity)
 
 # The main dispatcher
 
-config_decoder = GenericIOTypeLevelSingleDispatch(
+config_decoder = GenericIOParserTypeLevelSingleDispatch(
     "config_decoder",
     isolated_bases=[typing.Union, typing.Generic],
     resolve_exc_class=ConfigIOUndefinedForType,

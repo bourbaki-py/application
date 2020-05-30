@@ -26,29 +26,13 @@ def parse_bool(s):
 
 
 def parse_bytes(s, type_=bytes):
-    """Parse a bytes object from a string. This requires the explicit python literal "b''" format to avoid ambiguities
-    with escape sequences in case a user specified a string e.g. in a config file without knowing it would be
-    parsed to bytes"""
-    raise_ = False
-    try:
-        b = ast.literal_eval(s)
-    except SyntaxError:
-        raise_ = True
-        b = None
-    else:
-        if not isinstance(b, bytes):
-            raise_ = True
-
-        if type_ is not bytes:
-            b = type_(b)
-
-    if raise_:
-        ValueError(
-            "{} is not a legal bytes string expression; use format \"b'ascii-string'\" "
-            "with '\\x<hex-code>' escapes for non-ascii chars".format(repr(s))
-        )
-
-    return b
+    r"""Parse a bytes object from a string.
+    This will treat \x escapes as literal byte references in a string, allowing user-friendly specification
+    for example in a config file.
+    E.g. "\xff" as a _string_ refers to the unicode character 'ÿ', but when interpreted as bytes
+    here, refers to a the byte string equivalent to bytes([255]) (or bytearray when type_=bytearray)."""
+    ints = map(ord, s)
+    return type_(ints)
 
 
 def parse_regex(s: str):

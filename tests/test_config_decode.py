@@ -181,6 +181,10 @@ def same_file(f1, f2):
 def same_contents(a, b):
     assert len(a) == len(b)
     assert type(a) is type(b)
+    if isinstance(a, (set, frozenset)):
+        a = sorted(a)
+    if isinstance(b, (set, frozenset)):
+        b = sorted(b)
     for a_, b_ in zip(a, b):
         same_value(a_, b_)
 
@@ -225,8 +229,8 @@ basic_type_val_tups = [
     (Fraction, Fraction(2, 1), [2, 2.0, '2/1', [2,1], (2,1)]),
     (date, date(1234,5,6), ['1234-05-06', date(1234, 5, 6), [1234,5,6], (1234,5,6)]),
     (datetime, datetime(1234,5,6,7,8,9), [datetime(1234,5,6,7,8,9).timestamp(), '1234-05-06T07:08:09', datetime(1234, 5, 6, 7, 8, 9), (1234, 5, 6, 7, 8, 9), [1234, 5, 6, 7, 8, 9]]),
-    (bytes, b'\x01\x02\x03', [b'\x01\x02\x03', "b'\x01\x02\x03'", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
-    (bytearray, bytearray(b'\x01\x02\x03'), [b'\x01\x02\x03', "b'\x01\x02\x03'", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
+    (bytes, b'\x01\x02\x03', [b'\x01\x02\x03', "\x01\x02\x03", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
+    (bytearray, bytearray(b'\x01\x02\x03'), [b'\x01\x02\x03', "\x01\x02\x03", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
     (UUID, some_uuid, [str(some_uuid)]),
     (IPv4Address, IPv4Address("1.2.3.4"), ['1.2.3.4']),
     (IPv6Address, IPv6Address("1:2::3:4"), ['1:2::3:4', '1:2:0::0:3:4']),
@@ -236,7 +240,10 @@ basic_type_val_tups = [
 
 
 basic_testcases = list(chain.from_iterable(
-    ((t, i, to_instance_of(ovalue, t), same_value) for t, i in product(chain((type_,), custom_subclasses(type_)), ivalues))
+    (
+        (t, i, to_instance_of(ovalue, t), same_value)
+        for t, i in product(chain((type_,), custom_subclasses(type_)), ivalues)
+    )
     for (type_, ovalue, ivalues) in basic_type_val_tups
 ))
 
@@ -263,12 +270,12 @@ complex_test_cases = [
     (date, "2018-01-01", date(2018, 1, 1), same_value),
     (datetime, "2018-01-01T12:00:00.000", datetime(2018, 1, 1, 12), same_value),
     (bytes, [1, 2, 3], b"\x01\x02\x03", same_value),
-    (ByteString, "b'foo'", b"foo", same_value),
-    (List[bytes], ["b'foo'", [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
+    (ByteString, 'foo', b"foo", same_value),
+    (List[bytes], ['foo', [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
     (
         MutableSet[bytes],
-        ["b'foo'", [1, 2, 3]],
-        {b"foo", b"\x01\x02\x03"},
+        ['foo\xff', [1, 2, 3]],
+        {b"foo\xff", b"\x01\x02\x03"},
         same_contents,
     ),
     (
