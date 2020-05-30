@@ -345,7 +345,7 @@ inflation_test_cases = [
             '__classpath__': 'test_config_decode.SubList',
             '__args__': [True, 2, 3.0],
         },
-        SubList(1, 2, 3),
+        SubList(_myint(1), _myint(2), _myint(3)),
         same_value,
     )
 ]
