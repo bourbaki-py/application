@@ -50,7 +50,7 @@ from ..utils import (
     TypeCheckImportType,
     GenericIOTypeLevelSingleDispatch,
 )
-from ..file_types import File
+from ..file_types import File, IOParser
 from ..exceptions import (
     ConfigTypedInputError, ConfigIOUndefinedForType, AllFailed, RaisedDisallowedExceptions,
 )
@@ -94,9 +94,13 @@ for _funcname, _types in [
     ('to_file', (str,)),
     ('to_str', (str,)),
 ]:
+    # single dispatch on type of config value to decode, with base case providing a nice exception message
+    # on incorrect input type
     globals()[_funcname] = _dispatcher = singledispatch(partial(cant_decode_to, input_types=_types))
     _dispatcher.__name__ = _funcname
     for type_ in _types:
+        # to_instance_of assumes type_ is its own decoder for all of the available input _types,
+        # but elide a call of type_ if the value is already an instance of type_
         _dispatcher.register(type_)(to_instance_of)
 
 
@@ -247,6 +251,14 @@ def enum_config_decoder(enum_type):
 @config_decoder.register_all(enum.Flag, enum.IntFlag)
 def flag_enum_config_decoder(enum_type):
     return FlagParser(enum_type).config_decode
+
+
+##############
+# File Types #
+##############
+
+
+config_decoder.register(typing.IO)(IOParser)
 
 
 ############################

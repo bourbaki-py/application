@@ -19,7 +19,6 @@ from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.types import (
     NamedTupleABC,
-    NonAnyStrCollection,
     LazyType,
 )
 from bourbaki.introspection.generic_dispatch_helpers import (
@@ -96,13 +95,13 @@ for _type in [int, float, bool, str]:
 config_encoder.register_all(typing.ByteString, as_const=True)(list)
 
 
-@config_encoder.register(File, as_const=True)
+@config_encoder.register_all(File, typing.IO, as_const=True)
 def to_config_file(f: io.IOBase):
-    if f is sys.stdin or f is sys.stdout or f is sys.stderr:
+    if f is sys.stdin or f is sys.stdout:
         # argparse FileType parses this to on of the above handles depending on the mode
         return '-'
-    name = getattr(f, name, None)
-    if name is None:
+    name = getattr(f, "name", None)
+    if name is None or f is sys.stderr:
         warn("Can't determine path/name for file object {}".format(f))
         return None
     return os.path.abspath(name)

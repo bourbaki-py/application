@@ -21,6 +21,7 @@ from typing import (
     Optional,
     Pattern,
     Counter,
+    IO,
     ByteString,
     ChainMap,
     NamedTuple,
@@ -33,6 +34,7 @@ from typing import (
 )
 import collections as cl
 from enum import Enum, Flag
+from bourbaki.application.typed_io.file_types import File
 from bourbaki.application.typed_io.config.config_decode import config_decoder
 from bourbaki.application.typed_io.config.config_encode import config_encoder
 
@@ -164,6 +166,16 @@ class SomeCallable(Generic[T_]):
 def same_value(a, b):
     assert a == b
     assert type(a) is type(b)
+
+
+def same_file(f1, f2):
+    assert f1.name == f2.name
+    assert f1.mode == f2.mode
+    try:
+        assert f1.encoding.lower() == f2.encoding.lower()
+    except AttributeError:
+        pass
+    assert type(f1) is type(f2)
 
 
 def same_contents(a, b):
@@ -319,10 +331,10 @@ complex_test_cases = [
         same_keyvals,
     ),
     (Callable[[Any], SomeEnum], "{}.{}".format(__name__, SomeEnum.__name__), SomeEnum, same_value),
-    # inflation path for callables
 ]
 
 inflation_test_cases = [
+    # inflation path for callables
     (Callable,
      {
          "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
@@ -390,3 +402,37 @@ def test_roundtrip(type_, input_, expected, cmp):
     print("type", type(decoded))
     print("value", str(decoded))
     cmp(expected, decoded)
+
+
+@pytest.mark.parametrize(
+    "type_,input_,expected",
+    [
+        (File['r'], "-", sys.stdin),
+        (File['w'], "-", sys.stdout),
+        (File['a+'], None, None),
+        (File['rb'], None, None),
+        (IO[str], None, None),
+        (IO[bytes], None, None),
+    ]
+)
+def test_filetype_roundtrip(type_, input_, expected, tmp_path):
+    if input_ is None:
+        # IO case - read mode if file exists, write mode otherwise
+        newpath = tmp_path / "test"
+        if type_ is IO[str]:
+            mode = 'r'
+        elif type_ is IO[bytes]:
+            mode = 'rb'
+        else:
+            mode = type_.mode
+
+        # create for reading
+        newpath.touch()
+        input_ = str(newpath)
+        expected = open(newpath, mode)
+        cmp = same_file
+    else:
+        cmp = same_value
+
+    test_postproc(type_, input_, expected, cmp)
+    test_roundtrip(type_, input_, expected, cmp)

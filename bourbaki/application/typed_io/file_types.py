@@ -1,9 +1,12 @@
 # coding:utf-8
+import typing
 from typing import IO
 from argparse import FileType
 import io
 import encodings
+import os
 import sys
+import warnings
 from functools import lru_cache
 from bourbaki.introspection.types import PseudoGenericMeta
 
@@ -142,6 +145,7 @@ def normalize_encoding(enc):
     enc_ = encodings.search_function(enc)
     if not enc_:
         raise ValueError(
+
             "{} is not a valid text encoding; see encodings.aliases.aliases for the set of legal "
             "values".format(enc)
         )
@@ -156,3 +160,62 @@ def normalize_file_mode(mode):
             )
         )
     return mode
+
+
+#############################
+# File Parser for typing.IO #
+#############################
+
+
+class IOParser:
+    def __init__(self, io_base: typing.Type, value_type: typing.Type = None):
+        if value_type is None:
+            if io_base is typing.BinaryIO:
+                binary = True
+            elif io_base is typing.TextIO:
+                binary = False
+            else:
+                raise TypeError(
+                    "Can't interpret IO type {}; supply str or bytes as type argument to make "
+                    "the type more explicit, e.g. typing.IO[str]".format(io_base)
+                )
+        elif value_type is bytes:
+            binary = True
+        elif value_type is str:
+            binary = False
+        else:
+            raise TypeError("Can't interpet IO type {}".format(io_base[value_type]))
+
+        self.binary = binary
+        self.io_base = io_base
+        self.value_type = value_type
+
+    @property
+    def io_type(self):
+        if self.value_type is None:
+            return self.io_base
+        return self.io_base[self.value_type]
+
+    def __call__(self, path: str):
+        msg = (
+            "Can't interpret read/write semantics for type {} using path {}; {}; try annotating with "
+            "%s.%s[<mode>] instead to make the file mode explicit"
+        ) % (File.__module__, File.__name__)
+        if path == "-":
+            reason = "Either stdin or stdout is implied but the mode is unknown"
+            raise ValueError(
+                msg.format(self.io_type, path, reason)
+            )
+        elif os.path.exists(path):
+            reason = "Opening in read-only mode because path exists"
+            warnings.warn(msg.format(self.io_type, path, reason))
+            mode = "r"
+        else:
+            reason = "Opening in write-only mode because path doesn't exist"
+            warnings.warn(msg.format(self.io_type, path, reason))
+            mode = "w"
+
+        if self.binary:
+            mode = mode + 'b'
+
+        return File[mode](path)
