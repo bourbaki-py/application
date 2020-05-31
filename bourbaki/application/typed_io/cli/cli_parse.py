@@ -15,10 +15,10 @@ from warnings import warn
 from bourbaki.introspection.types import (
     get_named_tuple_arg_types,
     is_named_tuple_class,
-    issubclass_generic,
     is_top_type,
     LazyType,
     NonStrCollection,
+    get_constructor_for,
 )
 from bourbaki.introspection.callables import signature
 from bourbaki.introspection.generic_dispatch import (
@@ -34,15 +34,14 @@ from bourbaki.introspection.generic_dispatch_helpers import (
     LazyWrapper,
 )
 from .cli_complete import cli_completer
-from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs, cli_action
+from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs
 from .cli_repr_ import cli_repr
 from ..exceptions import (
     CLITypedInputError,
-    CLIIOUndefined,
-    CLIUnionInputError,
-    CLINestedCollectionsNotAllowed,
+    CLIIOUndefinedForType,
+    CLIIOUndefinedForNestedCollectionType,
 )
-from .parsers import (
+from ..base_parsers import (
     parse_iso_date,
     parse_iso_datetime,
     parse_range,
@@ -51,16 +50,16 @@ from .parsers import (
     parse_bool,
     EnumParser,
     FlagParser,
-    TypeCheckImportType,
-    TypeCheckImportFunc,
 )
-from .utils import (
-    File,
+from ..utils import (
+    TypeCheckImportType,
+    TypeCheckImport,
     Empty,
     identity,
     KEY_VAL_JOIN_CHAR,
-    parser_constructor_for_collection,
+    GenericIOTypeLevelSingleDispatch,
 )
+from ..file_types import File, IOParser
 
 NoneType = type(None)
 
@@ -70,8 +69,7 @@ class InvalidCLIParser(TypeError):
 
 
 def cli_split_keyval(s: str):
-    i = s.index(KEY_VAL_JOIN_CHAR)
-    return s[:i], s[i + 1 :]
+    return s.split(KEY_VAL_JOIN_CHAR, maxsplit=1)
 
 
 def cli_parse_bytes(seq: typing.Sequence[str]):
@@ -86,7 +84,7 @@ def cli_parse_bool(s: typing.Union[str, bool]):
     # have to allow bools for the flag case; argparse includes an implicit boolean default in that case
     if isinstance(s, bool):
         return s
-    return parse_bool(s, exc_type=CLITypedInputError)
+    return parse_bool(s)
 
 
 cli_parse_by_constructor = {
@@ -164,7 +162,7 @@ def _validate_parser(func):
     return func, annotation
 
 
-class CLIParserDispatch(GenericTypeLevelSingleDispatch):
+class CLIParserDispatch(GenericIOTypeLevelSingleDispatch):
     def register(
         self,
         *sig,
@@ -184,6 +182,13 @@ class CLIParserDispatch(GenericTypeLevelSingleDispatch):
         """
         dec = super().register(*sig, debug=debug, as_const=as_const)
         if not as_const:
+            underivable = [
+                name
+                for name, flag in [("nargs", derive_nargs), ("repr", derive_repr), ("completer", derive_completer)]
+                if flag
+            ]
+            if underivable:
+                warn("Can't derive {} when as_const = False; skipping derivations".format("/".join(underivable)))
             return dec
 
         def maybe_register_nargs_repr_completer(f):
@@ -209,43 +214,68 @@ class CLIParserDispatch(GenericTypeLevelSingleDispatch):
         return maybe_register_nargs_repr_completer
 
 
-cli_parser = CLIParserDispatch(__name__, isolated_bases=[typing.Union])
+cli_parser = CLIParserDispatch(
+    __name__,
+    isolated_bases=[typing.Union],
+    resolve_exc_class=CLIIOUndefinedForType,
+    call_exc_class=CLITypedInputError,
+)
+
+
+#########################
+# Files and importables #
+#########################
+
+
+cli_parser.register(typing.Callable)(TypeCheckImport)
+
+cli_parser.register(typing.Type)(TypeCheckImportType)
+
+cli_parser.register(typing.IO)(IOParser)
+
+
+###################################################################
+# Special case - top type - assume str and pass through unchanged #
+###################################################################
 
 
 @cli_parser.register(typing.Any)
-def cli_parser_any(t, *args):
-    if is_top_type(t):
-        return identity
-    raise CLIIOUndefined((t, *args))
+class CLINoParse:
+    def __init__(self, type_, *args):
+        if is_top_type(type_):
+            warn(
+                "Values passed from the command line for unannotated arguments or arguments annotated "
+                "as a top type (object/typing.Any) will always be passed to python functions as strings"
+            )
+        else:
+            raise TypeError(type_ if not args else type_[args])
+
+    def __call__(self, arg: str):
+        return arg
 
 
-@cli_parser.register(typing.Callable)
-class TypeCheckImportFuncCLI(TypeCheckImportFunc):
-    exc_cls = CLITypedInputError
-
-
-@cli_parser.register(typing.Type)
-class TypeCheckImportTypeCLI(TypeCheckImportType):
-    exc_cls = CLITypedInputError
-
-
-class GenericCLIParserMixin:
-    getter = cli_parser
-    get_reducer = staticmethod(parser_constructor_for_collection)
+######################
+# Collection parsers #
+######################
 
 
 @cli_parser.register(typing.Collection)
-class CollectionCLIParser(GenericCLIParserMixin, CollectionWrapper):
+class CollectionCLIParser(CollectionWrapper):
+    getter = cli_parser
+    get_reducer = staticmethod(get_constructor_for)
+
     def __init__(self, coll_type, val_type=object):
         if cli_action(val_type) is not None:
             # nested collections with append action
-            raise CLINestedCollectionsNotAllowed((coll_type, val_type))
+            raise CLIIOUndefinedForNestedCollectionType(coll_type[val_type])
         super().__init__(coll_type, val_type)
 
 
 @cli_parser.register(typing.Mapping)
-class MappingCLIParser(GenericCLIParserMixin, MappingWrapper):
+class MappingCLIParser(MappingWrapper):
     constructor_allows_iterable = True
+    getter = cli_parser
+    get_reducer = staticmethod(get_constructor_for)
 
     def __init__(self, coll_type, key_type=object, val_type=object):
         if (cli_nargs(key_type) is not None) or (cli_nargs(val_type) is not None):
@@ -320,27 +350,17 @@ class LazyCLIParser(GenericCLIParserMixin, LazyWrapper):
 
 
 @cli_parser.register_all(enum.Enum, enum.IntEnum)
-def cli_enum_parser(enum_):
-    return EnumParser(enum_).cli_parse
+def cli_enum_parser(enum_type):
+    return EnumParser(enum_type).cli_parse
 
 
 @cli_parser.register_all(enum.Flag, enum.IntFlag)
-def cli_flag_parser(enum_):
-    return FlagParser(enum_).cli_parse
+def cli_flag_parser(enum_type):
+    return FlagParser(enum_type).cli_parse
 
 
+# these types all have
 cli_parser.register_from_mapping(cli_parse_methods, as_const=True)
-
 
 # these types are all their own parsers
 cli_parser.register_all(*cli_parse_by_constructor)(identity)
-
-
-cli_option_parser = GenericTypeLevelSingleDispatch(
-    "cli_option_parser", isolated_bases=cli_parser.isolated_bases
-)
-
-
-@cli_option_parser.register(typing.Collection[NonStrCollection])
-class CollectionCLIOptionParser(GenericCLIParserMixin, CollectionWrapper):
-    pass

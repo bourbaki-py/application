@@ -142,7 +142,7 @@ class TypedIOValueError(ValueError, BourbakiTypedIOException):
 class IOUndefinedForType(TypedIOTypeError):
     source = None
     values = "values"
-    msg = "{source} I/O is not defined for {values} of type {type}; use {methods} to register custom {functions}"
+    msg = "{source} I/O is not defined for values of type {type}; use {methods} to register custom {functions}"
     addendum = ""
     methods = []
     functions = []
@@ -182,6 +182,14 @@ class CLIIOUndefinedForType(IOUndefinedForType):
         "completer (see bourbaki.application.completion for completers)",
     ]
     addendum = "for parsing and completing user input for values of type {type}"
+
+
+class CLIIOUndefinedForNestedCollectionType(CLIIOUndefinedForType):
+    msg = (
+        "{source} I/O is not defined for {values} of type {type}, "
+        "since multiply-nested keys and values cannot be unambiguously parsed; "
+        "use {methods} to register custom {functions}"
+    )
 
 
 class EnvIOUndefinedForType(IOUndefinedForType):
