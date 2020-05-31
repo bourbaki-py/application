@@ -1,7 +1,42 @@
 # coding:utf-8
 from inspect import signature
-from textwrap import indent
+from pprint import pformat
+import shutil
+from textwrap import indent, wrap
 from bourbaki.introspection.types import eval_type_tree, concretize_typevars
+from bourbaki.introspection.classes import classpath, parameterized_classpath
+
+STACKTRACE_VALUE_LITERAL_MAX_LINES = 7
+STACKTRACE_VALUE_LITERAL_MAX_DEPTH = 1
+STACKTRACE_VALUE_LITERAL_INDENT = 1
+# this will allow reported errors for nested structures of up to 6 indentation levels
+# before terminal text wrapping occurs
+STACKTRACE_LEVEL_INDENT = 2
+TERMINAL_WIDTH = shutil.get_terminal_size().columns
+STACKTRACE_VALUE_LITERAL_WIDTH = TERMINAL_WIDTH - 6 * STACKTRACE_LEVEL_INDENT
+
+
+def linewrap(msg: str):
+    return "\n".join(wrap(msg, TERMINAL_WIDTH))
+
+
+def pretty_repr(obj):
+    """For representing value literals in exception strings upon I/O encode/decode error"""
+    s = pformat(
+        obj,
+        indent=STACKTRACE_VALUE_LITERAL_INDENT,
+        depth=STACKTRACE_VALUE_LITERAL_MAX_DEPTH,
+        compact=False
+    )
+    if s.count("\n") >= STACKTRACE_VALUE_LITERAL_MAX_LINES:
+        lines = s.splitlines()
+        nlines = STACKTRACE_VALUE_LITERAL_MAX_LINES // 2
+        prefix = ' ' * STACKTRACE_VALUE_LITERAL_INDENT
+        newlines = lines[:nlines] + [
+            prefix + '    ...', prefix + '<TRUNCATED>', prefix + '    ...'
+        ] + lines[-nlines:]
+        s = '\n'.join(newlines)
+    return s
 
 
 class BourbakiTypedIOException(Exception):
@@ -29,12 +64,34 @@ class TypedIOTypeError(TypeError, BourbakiTypedIOException):
 class TypedIOValueError(ValueError, BourbakiTypedIOException):
     """Base type error class for all 'runtime' bourbaki typed I/O exceptions;
     e.g. parse errors for specific input values"""
+    source = None
+    method = None
+    # the msg must define these fields for formatting
+    msg = "{value_type} {source} {method} {type}"
 
     def __init__(self, type_, value, exc=None):
         super().__init__(type_, value)
         self._type = type_
         self.value = value
         self.exc = exc
+
+    def __str__(self):
+        msg = "\n".join(wrap(self.msg.format(
+            type=parameterized_classpath(self.type_),
+            source=self.source,
+            method=self.method,
+            value_type=classpath(type(self.value)),
+        ), TERMINAL_WIDTH))
+        msg = "{}\n{}".format(
+            msg,
+            indent(pretty_repr(self.value), ' ' * STACKTRACE_LEVEL_INDENT)
+        )
+        if self.exc is None:
+            return msg
+        return "{}\nRaised:\n{!s}".format(
+            msg,
+            indent(str(self.exc), ' ' * STACKTRACE_LEVEL_INDENT)
+        )
 
 
 ###############################################
@@ -53,9 +110,10 @@ class IOUndefinedForType(TypedIOTypeError):
     def __str__(self):
         methods = '/'.join(self.methods) + '.register'
         functions = '/'.join(self.functions)
-        return (self.msg + ' ' + self.addendum).format(
+        msg = (self.msg + ' ' + self.addendum).format(
             source=self.source, type=self.type_, methods=methods, functions=functions,
         )
+        return linewrap(msg)
 
 
 class ConfigIOUndefinedForType(IOUndefinedForType):
@@ -102,33 +160,11 @@ class StdinIOUndefinedForType(IOUndefinedForType):
 
 
 class TypedInputError(TypedIOValueError):
-    source = None
-    method = None
-    msg = "can't parse value of type {type} from {source} value {value!r} using {method}({type})"
-
-    def __str__(self):
-        msg = self.msg.format(type=self.type_, source=self.source, value=self.value, method=self.method)
-        if self.exc is None:
-            return msg
-        return msg + ";\nraised:\n{!s}".format(indent(str(self.exc), '    '))
+    msg = "Can't parse value (type {value_type}) from {source} using {method}({type}):"
 
 
 class TypedOutputError(TypedIOValueError):
-    source = None
-    method = None
-    msg = "can't encode value {value!r} of type {value_type} to {source} using {method}({type})"
-
-    def __str__(self):
-        msg = self.msg.format(
-            type=self.type_,
-            source=self.source,
-            value=self.value,
-            method=self.method,
-            value_type=type(self.value),
-        )
-        if self.exc is None:
-            return msg
-        return msg + ";\nraised:\n{!s}".format(indent(str(self.exc), '    '))
+    msg = "Can't encode value (type {value_type}) to {source} using {method}({type}):"
 
 
 # For Union parser/encoders
