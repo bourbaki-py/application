@@ -12,7 +12,12 @@ from bourbaki.introspection.types import (
 )
 from bourbaki.introspection.types.abcs import NonStrCollection
 from .cli.cli_parse import cli_parser, cli_option_parser
-from .cli.cli_nargs_ import cli_nargs, cli_option_nargs, cli_action, is_nested_collection_for_cli
+from .cli.cli_nargs_ import (
+    cli_nargs,
+    cli_option_nargs,
+    cli_action,
+    is_nested_collection_for_cli,
+)
 from .cli.cli_metavar import cli_metavar
 from .cli.cli_repr_ import cli_repr
 from .cli.cli_complete import cli_completer
@@ -44,7 +49,12 @@ class ArgSource(enum.Enum):
     STDIN = "standard input"
 
 
-CLI, CONFIG, ENV, STDIN = ArgSource.CLI, ArgSource.CONFIG, ArgSource.ENV, ArgSource.STDIN
+CLI, CONFIG, ENV, STDIN = (
+    ArgSource.CLI,
+    ArgSource.CONFIG,
+    ArgSource.ENV,
+    ArgSource.STDIN,
+)
 
 __all__ = ["ArgSource", "TypedIO"]
 
@@ -315,7 +325,7 @@ class TypedIO(PicklableWithType):
     @cached_property
     def env_parser(self):
         return env_parser(self.type_)
-    
+
     @cached_property
     def stdin_parser(self):
         return stdin_parser(self.type_)

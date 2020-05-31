@@ -167,7 +167,8 @@ class FixedShellFunctionComplete(Complete):
 
 class CompleteFromStdout(FixedShellFunctionComplete):
     """Complete from a shell command that prints lines to stdout"""
-    _shell_func_name = '_bourbaki_complete_from_stdout'
+
+    _shell_func_name = "_bourbaki_complete_from_stdout"
 
     def __init__(self, *args):
         if len(args) > 1:

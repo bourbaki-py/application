@@ -52,7 +52,10 @@ from ..utils import (
 )
 from ..file_types import File, IOParser
 from ..exceptions import (
-    ConfigTypedInputError, ConfigIOUndefinedForType, AllFailed, RaisedDisallowedExceptions,
+    ConfigTypedInputError,
+    ConfigIOUndefinedForType,
+    AllFailed,
+    RaisedDisallowedExceptions,
 )
 
 NoneType = type(None)
@@ -67,7 +70,10 @@ T = typing.TypeVar("T")
 # `singledispatch` function, to simply raise an error for unregistered input types. These can then
 # be post-processed with custom subclasses if they are present, using `to_instance_of` below.
 
-def cant_decode_to(value, type_: typing.Type[T], input_types: typing.Tuple[typing.Type]) -> T:
+
+def cant_decode_to(
+    value, type_: typing.Type[T], input_types: typing.Tuple[typing.Type]
+) -> T:
     msg = "Can't convert value {!r} to instance of {!s}".format(value, type_)
     if input_types:
         msg = msg + "; acceptable input types are {}".format(input_types)
@@ -81,22 +87,24 @@ def to_instance_of(value, type_: typing.Type[T]) -> T:
 
 
 for _funcname, _types in [
-    ('to_int', (int, str)),
-    ('to_float', (float, int, str)),
-    ('to_complex', (int, float, complex, str)),
-    ('to_fraction', (int, float, str, fractions.Fraction)),
-    ('to_decimal', (int, str, float, decimal.Decimal)),
-    ('to_bytes', (bytes, bytearray, list, tuple)),
-    ('to_bytearray', (bytearray, bytes, list, tuple)),
-    ('to_uuid', (str,)),
-    ('to_ipaddress', (str,)),
-    ('to_path', (pathlib.Path, str,)),
-    ('to_file', (str,)),
-    ('to_str', (str,)),
+    ("to_int", (int, str)),
+    ("to_float", (float, int, str)),
+    ("to_complex", (int, float, complex, str)),
+    ("to_fraction", (int, float, str, fractions.Fraction)),
+    ("to_decimal", (int, str, float, decimal.Decimal)),
+    ("to_bytes", (bytes, bytearray, list, tuple)),
+    ("to_bytearray", (bytearray, bytes, list, tuple)),
+    ("to_uuid", (str,)),
+    ("to_ipaddress", (str,)),
+    ("to_path", (pathlib.Path, str)),
+    ("to_file", (str,)),
+    ("to_str", (str,)),
 ]:
     # single dispatch on type of config value to decode, with base case providing a nice exception message
     # on incorrect input type
-    globals()[_funcname] = _dispatcher = singledispatch(partial(cant_decode_to, input_types=_types))
+    globals()[_funcname] = _dispatcher = singledispatch(
+        partial(cant_decode_to, input_types=_types)
+    )
     _dispatcher.__name__ = _funcname
     for type_ in _types:
         # to_instance_of assumes type_ is its own decoder for all of the available input _types,
@@ -130,25 +138,47 @@ def numerator_denominator_to_fraction(tup, type_):
 to_bytes.register(str)(parse_bytes)
 to_bytearray.register(str)(parse_bytes)
 
-to_date = singledispatch(partial(cant_decode_to, input_types=(str, datetime.date, int, float, list, tuple)))
-to_datetime = singledispatch(partial(cant_decode_to, input_types=(str, datetime.date, datetime.datetime, int, float, list, tuple)))
+to_date = singledispatch(
+    partial(cant_decode_to, input_types=(str, datetime.date, int, float, list, tuple))
+)
+to_datetime = singledispatch(
+    partial(
+        cant_decode_to,
+        input_types=(str, datetime.date, datetime.datetime, int, float, list, tuple),
+    )
+)
 
 to_date.register(str)(parse_iso_date)
 to_datetime.register(str)(parse_iso_datetime)
 
+
 @to_date.register(datetime.date)
 @to_datetime.register(datetime.date)
-def to_date_date(value: datetime.date, type_: typing.Type[datetime.date]) -> datetime.date:
+def to_date_date(
+    value: datetime.date, type_: typing.Type[datetime.date]
+) -> datetime.date:
     if type(value) is not type_:
         return type_(value.year, value.month, value.day)
     return value
 
+
 @to_datetime.register(datetime.datetime)
-def to_datetime_datetime(value: datetime.datetime, type_: typing.Type[datetime.datetime]) -> datetime.datetime:
+def to_datetime_datetime(
+    value: datetime.datetime, type_: typing.Type[datetime.datetime]
+) -> datetime.datetime:
     if type(value) is not type_:
-        tup = (value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond)
+        tup = (
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+            value.second,
+            value.microsecond,
+        )
         return type_(*tup, tzinfo=value.tzinfo)
     return value
+
 
 @to_date.register(list)
 @to_date.register(tuple)
@@ -156,6 +186,7 @@ def to_datetime_datetime(value: datetime.datetime, type_: typing.Type[datetime.d
 @to_datetime.register(tuple)
 def date_from_tuple(t, type_: typing.Type[datetime.date]) -> datetime.date:
     return type_(*t)
+
 
 @to_date.register(int)
 @to_date.register(float)
@@ -170,9 +201,12 @@ to_bool = singledispatch(partial(cant_decode_to, type_=bool, input_types=(bool, 
 to_bool.register(bool)(identity)
 to_bool.register(str)(parse_bool)
 
-to_range = singledispatch(partial(cant_decode_to, type_=range, input_types=(str, list, tuple, range)))
+to_range = singledispatch(
+    partial(cant_decode_to, type_=range, input_types=(str, list, tuple, range))
+)
 to_range.register(range)(identity)
 to_range.register(str)(parse_range)
+
 
 @to_range.register(list)
 @to_range.register(tuple)
@@ -185,7 +219,9 @@ def range_from_int(i):
     return range(i)
 
 
-to_null = singledispatch(partial(cant_decode_to, type_=NoneType, input_types=(NoneType,)))
+to_null = singledispatch(
+    partial(cant_decode_to, type_=NoneType, input_types=(NoneType,))
+)
 to_null.register(NoneType)(identity)
 
 
@@ -243,6 +279,7 @@ for type_, decoder in [
 
 # enums
 
+
 @config_decoder.register_all(enum.Enum, enum.IntEnum)
 def enum_config_decoder(enum_type):
     return EnumParser(enum_type).config_decode
@@ -295,7 +332,9 @@ class TypeCheckInflateCallableConfig(TypeCheckInflateConfig):
         return super().decode(conf)
 
 
-config_decoder.register_all(types.FunctionType, types.BuiltinFunctionType)(TypeCheckImport)
+config_decoder.register_all(types.FunctionType, types.BuiltinFunctionType)(
+    TypeCheckImport
+)
 config_decoder.register(typing.Type)(TypeCheckImportType)
 
 

@@ -26,22 +26,25 @@ def pretty_repr(obj):
         obj,
         indent=STACKTRACE_VALUE_LITERAL_INDENT,
         depth=STACKTRACE_VALUE_LITERAL_MAX_DEPTH,
-        compact=False
+        compact=False,
     )
     if s.count("\n") >= STACKTRACE_VALUE_LITERAL_MAX_LINES:
         lines = s.splitlines()
         nlines = STACKTRACE_VALUE_LITERAL_MAX_LINES // 2
-        prefix = ' ' * STACKTRACE_VALUE_LITERAL_INDENT
-        newlines = lines[:nlines] + [
-            prefix + '    ...', prefix + '<TRUNCATED>', prefix + '    ...'
-        ] + lines[-nlines:]
-        s = '\n'.join(newlines)
+        prefix = " " * STACKTRACE_VALUE_LITERAL_INDENT
+        newlines = (
+            lines[:nlines]
+            + [prefix + "    ...", prefix + "<TRUNCATED>", prefix + "    ..."]
+            + lines[-nlines:]
+        )
+        s = "\n".join(newlines)
     return s
 
 
 class BourbakiTypedIOException(Exception):
     """Base exception class of all bourbaki typed I/O exceptions.
     repr method formats as `ExceptionName('message')`"""
+
     _type = None
 
     @property
@@ -64,6 +67,7 @@ class TypedIOTypeError(TypeError, BourbakiTypedIOException):
 class TypedIOValueError(ValueError, BourbakiTypedIOException):
     """Base type error class for all 'runtime' bourbaki typed I/O exceptions;
     e.g. parse errors for specific input values"""
+
     source = None
     method = None
     # the msg must define these fields for formatting
@@ -76,21 +80,24 @@ class TypedIOValueError(ValueError, BourbakiTypedIOException):
         self.exc = exc
 
     def __str__(self):
-        msg = "\n".join(wrap(self.msg.format(
-            type=parameterized_classpath(self.type_),
-            source=self.source,
-            method=self.method,
-            value_type=classpath(type(self.value)),
-        ), TERMINAL_WIDTH))
+        msg = "\n".join(
+            wrap(
+                self.msg.format(
+                    type=parameterized_classpath(self.type_),
+                    source=self.source,
+                    method=self.method,
+                    value_type=classpath(type(self.value)),
+                ),
+                TERMINAL_WIDTH,
+            )
+        )
         msg = "{}\n{}".format(
-            msg,
-            indent(pretty_repr(self.value), ' ' * STACKTRACE_LEVEL_INDENT)
+            msg, indent(pretty_repr(self.value), " " * STACKTRACE_LEVEL_INDENT)
         )
         if self.exc is None:
             return msg
         return "{}\nRaised:\n{!s}".format(
-            msg,
-            indent(str(self.exc), ' ' * STACKTRACE_LEVEL_INDENT)
+            msg, indent(str(self.exc), " " * STACKTRACE_LEVEL_INDENT)
         )
 
 
@@ -108,49 +115,53 @@ class IOUndefinedForType(TypedIOTypeError):
     functions = []
 
     def __str__(self):
-        methods = '/'.join(self.methods) + '.register'
-        functions = '/'.join(self.functions)
-        msg = (self.msg + ' ' + self.addendum).format(
-            source=self.source, type=self.type_, methods=methods, functions=functions,
+        methods = "/".join(self.methods) + ".register"
+        functions = "/".join(self.functions)
+        msg = (self.msg + " " + self.addendum).format(
+            source=self.source, type=self.type_, methods=methods, functions=functions
         )
         return linewrap(msg)
 
 
 class ConfigIOUndefinedForType(IOUndefinedForType):
-    source = 'configuration file'
-    methods = ['config_encoder', 'config_decoder', 'config_repr']
-    functions = ['encoder', 'decoder', 'type-representer (for generating config templates)']
+    source = "configuration file"
+    methods = ["config_encoder", "config_decoder", "config_repr"]
+    functions = [
+        "encoder",
+        "decoder",
+        "type-representer (for generating config templates)",
+    ]
     addendum = "for parsing and encoding values of type {type} to configuration values (JSON-like)"
 
 
 class ConfigIOUndefinedForKeyType(ConfigIOUndefinedForType):
-    values = 'mapping keys'
-    methods = ['config_key_encoder', 'config_key_decoder', 'config_key_repr']
+    values = "mapping keys"
+    methods = ["config_key_encoder", "config_key_decoder", "config_key_repr"]
     addendum = "for parsing and encoding mapping keys of type {type} to configuration keys (generally, strings)"
 
 
 class CLIIOUndefinedForType(IOUndefinedForType):
-    source = 'command line'
-    methods = ['cli_parser', 'cli_repr', 'cli_completer']
+    source = "command line"
+    methods = ["cli_parser", "cli_repr", "cli_completer"]
     functions = [
-        'parser',
-        'type-representer (for generating help strings)',
-        'completer (see bourbaki.application.completion for completers)'
+        "parser",
+        "type-representer (for generating help strings)",
+        "completer (see bourbaki.application.completion for completers)",
     ]
     addendum = "for parsing and completing user input for values of type {type}"
 
 
 class EnvIOUndefinedForType(IOUndefinedForType):
-    source = 'environment variable'
-    methods = ['env_parser']
-    functions = ['parser']
+    source = "environment variable"
+    methods = ["env_parser"]
+    functions = ["parser"]
     addendum = "for parsing environment variables to values of type {type}"
 
 
 class StdinIOUndefinedForType(IOUndefinedForType):
-    source = 'stdin'
-    methods = ['stdin_parser']
-    functions = ['parser']
+    source = "stdin"
+    methods = ["stdin_parser"]
+    functions = ["parser"]
     addendum = "for parsing standard input to values of type {type}"
 
 
@@ -169,17 +180,19 @@ class TypedOutputError(TypedIOValueError):
 
 # For Union parser/encoders
 
+
 class AllFailed(ValueError):
     def __str__(self):
-        return '\n\n'.join(map(str, self.args))
+        return "\n\n".join(map(str, self.args))
 
 
 class RaisedDisallowedExceptions(ValueError):
     def __str__(self):
-        return '\n\n'.join(map(str, self.args))
+        return "\n\n".join(map(str, self.args))
 
 
 # Config
+
 
 class ConfigTypedInputError(TypedInputError):
     source = "configuration file"
@@ -209,6 +222,7 @@ class ConfigTypedKeyOutputError(ConfigTypedOutputError):
 
 # CLI
 
+
 class CLITypedInputError(TypedInputError):
     source = "command line"
     method = "cli_parser"
@@ -216,12 +230,14 @@ class CLITypedInputError(TypedInputError):
 
 # Env
 
+
 class EnvTypedInputError(TypedInputError):
     source = "environment variable"
     method = "env_parser"
 
 
 # Stdin
+
 
 class StdinTypedInputError(TypedInputError):
     source = "stdin"

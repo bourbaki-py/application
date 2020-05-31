@@ -71,7 +71,7 @@ class InvalidCLIParser(TypeError):
 
 def cli_split_keyval(s: str):
     i = s.index(KEY_VAL_JOIN_CHAR)
-    return s[:i], s[i + 1:]
+    return s[:i], s[i + 1 :]
 
 
 def cli_parse_bytes(seq: typing.Sequence[str]):

@@ -17,7 +17,12 @@ from bourbaki.application.typed_io import TypedIO
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.exceptions import *
 from bourbaki.application.typed_io.cli_repr_ import bool_cli_repr, KEY_VAL_JOIN_CHAR
-from bourbaki.application.typed_io.utils import byte_repr, complex_repr, READ_MODES, WRITE_MODES
+from bourbaki.application.typed_io.utils import (
+    byte_repr,
+    complex_repr,
+    READ_MODES,
+    WRITE_MODES,
+)
 from bourbaki.application.typed_io.config_repr_ import (
     config_repr,
     bool_config_repr,
@@ -670,8 +675,8 @@ test_cases = [
         3,
         (type_spec(int), type_spec(str), complex_repr),
         [{"foo": type_spec(int), "bar": type_spec(str)}, complex_repr],
-        (FooTup(1, "2"), 1+2j),
-        ['1', '2', '1+2j'],
+        (FooTup(1, "2"), 1 + 2j),
+        ["1", "2", "1+2j"],
         [{"foo": 1, "bar": "2"}, "(1+2j)"],
         multi_test=False,
     ),
@@ -680,7 +685,7 @@ test_cases = [
         List[FooTup],
         2,
         (type_spec(int), type_spec(str)),
-        [{"foo": type_spec(int), "bar": type_spec(str)}, '...'],
+        [{"foo": type_spec(int), "bar": type_spec(str)}, "..."],
         [FooTup(1, "2"), FooTup(3, "4")],
         [[["1", 2], ["3", "4"]]],
         [[{"foo": 1, "bar": "2"}, {"foo": 3, "bar": "4"}], [[1, "2"], [3, "4"]]],
@@ -691,7 +696,7 @@ test_cases = [
         Tuple[FooTup, ...],
         2,
         (type_spec(int), type_spec(str)),
-        [{"foo": type_spec(int), "bar": type_spec(str)}, '...'],
+        [{"foo": type_spec(int), "bar": type_spec(str)}, "..."],
         (FooTup(1, "2"), FooTup(3, "4")),
         [[["1", 2], ["3", "4"]]],
         [[{"foo": 1, "bar": "2"}, {"foo": 3, "bar": "4"}], [[1, "2"], [3, "4"]]],
@@ -700,10 +705,10 @@ test_cases = [
     ),
     _TestCase(
         List[Set[bool_float_or_str]],
-        '*',
+        "*",
         bool_float_or_str_cli_repr,
-        [[bool_float_or_str_config_repr, '...'], '...'],
-        [{True, 2.0, 'foo'}, {3.0, False}],
+        [[bool_float_or_str_config_repr, "..."], "..."],
+        [{True, 2.0, "foo"}, {3.0, False}],
         [["true", "2", "foo"], ["3", "false"]],
         [[True, 2, "foo"], [3, False]],
         cli_action="append",

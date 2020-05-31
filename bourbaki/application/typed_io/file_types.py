@@ -145,7 +145,6 @@ def normalize_encoding(enc):
     enc_ = encodings.search_function(enc)
     if not enc_:
         raise ValueError(
-
             "{} is not a valid text encoding; see encodings.aliases.aliases for the set of legal "
             "values".format(enc)
         )
@@ -203,9 +202,7 @@ class IOParser:
         ) % (File.__module__, File.__name__)
         if path == "-":
             reason = "Either stdin or stdout is implied but the mode is unknown"
-            raise ValueError(
-                msg.format(self.io_type, path, reason)
-            )
+            raise ValueError(msg.format(self.io_type, path, reason))
         elif os.path.exists(path):
             reason = "Opening in read-only mode because path exists"
             warnings.warn(msg.format(self.io_type, path, reason))
@@ -216,6 +213,6 @@ class IOParser:
             mode = "w"
 
         if self.binary:
-            mode = mode + 'b'
+            mode = mode + "b"
 
         return File[mode](path)

@@ -223,7 +223,11 @@ class FinalCLISignatureSpec(NamedTuple):
 
     @property
     def parsed(self) -> Set[str]:
-        return self.parse_cmd_line.union(self.parse_config).union(self.parse_env).union(self.parse_stdin)
+        return (
+            self.parse_cmd_line.union(self.parse_config)
+            .union(self.parse_env)
+            .union(self.parse_stdin)
+        )
 
     @property
     def have_fallback(self) -> Set[str]:

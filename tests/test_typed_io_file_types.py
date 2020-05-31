@@ -5,7 +5,13 @@ import tempfile
 
 import pytest
 
-from bourbaki.application.typed_io.file_types import File, TextFile, BinaryFile, READ_MODES, WRITE_MODES
+from bourbaki.application.typed_io.file_types import (
+    File,
+    TextFile,
+    BinaryFile,
+    READ_MODES,
+    WRITE_MODES,
+)
 
 
 @pytest.mark.parametrize(

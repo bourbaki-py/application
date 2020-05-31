@@ -14,9 +14,11 @@ from .utils import (
     PicklableWithType,
     PositionalMetavarFormatter,
 )
+
 NoneType = type(None)
 
 # nargs for argparse.ArgumentParser
+
 
 def cli_metavar(
     param: Parameter,
@@ -31,9 +33,7 @@ def cli_metavar(
 
     if metavar is None:
         if param.kind == Parameter.VAR_KEYWORD:
-            metavar = "NAME{}{}".format(
-                KEY_VAL_JOIN_CHAR, name.upper().rstrip("S")
-            )
+            metavar = "NAME{}{}".format(KEY_VAL_JOIN_CHAR, name.upper().rstrip("S"))
         elif is_named_tuple_class(type_per_option):
             metavar = tuple(
                 to_str_cli_repr(k.upper(), cli_nargs(v))
@@ -47,7 +47,9 @@ def cli_metavar(
 
     single_metavar_types = (str, type(None))
     if not isinstance(metavar, single_metavar_types):
-        metavar = tuple(chain.from_iterable((t,) if isinstance(t, str) else t for t in metavar))
+        metavar = tuple(
+            chain.from_iterable((t,) if isinstance(t, str) else t for t in metavar)
+        )
 
     if not isinstance(type_str, single_metavar_types):
         # tuple types
@@ -56,9 +58,7 @@ def cli_metavar(
     if positional and not isinstance(metavar, single_metavar_types):
         # hack to deal with the fact that argparse handles fixed-length positionals differently than
         # fixed-length options when formatting help strings
-        metavar = PositionalMetavarFormatter(
-            *(metavar or ()), name=name.upper()
-        )
+        metavar = PositionalMetavarFormatter(*(metavar or ()), name=name.upper())
 
 
 def flatten(obj):
@@ -67,4 +67,5 @@ def flatten(obj):
             yield from chain.from_iterable(map(inner, obj))
         else:
             yield obj
+
     return list(inner(obj))

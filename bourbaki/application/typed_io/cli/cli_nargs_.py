@@ -33,21 +33,21 @@ class NestedTupleCLINargsError(CLINestedCollectionsNotAllowed):
     def __str__(self):
         return (
             "Some type parameters of type {} require a variable number of command line args; can't parse "
-            "unambiguously. Tuple types may have variadic type parameters only in the last position".format(self.type_)
-        )
-
-
-class NestedMappingNargsError(CLINestedCollectionsNotAllowed):
-    def __str__(self):
-        return (
-            "Mapping types with keys or values requiring more than one command line arg can't be parsed: {}".format(
+            "unambiguously. Tuple types may have variadic type parameters only in the last position".format(
                 self.type_
             )
         )
 
 
+class NestedMappingNargsError(CLINestedCollectionsNotAllowed):
+    def __str__(self):
+        return "Mapping types with keys or values requiring more than one command line arg can't be parsed: {}".format(
+            self.type_
+        )
+
+
 is_nested_collection_for_cli = GenericTypeLevelSingleDispatch(
-    "is_nested_collection_for_cli", isolated_bases=[typing.Union],
+    "is_nested_collection_for_cli", isolated_bases=[typing.Union]
 )
 
 
@@ -64,10 +64,10 @@ def is_nested_collection_for_cli_any(org: typing.Type, *args: typing.Type):
 
 @is_nested_collection_for_cli.register(typing.Union)
 def is_nested_collection_for_cli_union(t: typing.Type, *args: typing.Type):
-     nesteds = set(is_nested_collection_for_cli(a) for a in args)
-     if len(nesteds) != 1:
-         raise CLIIOUndefined((t, *args))
-     return next(iter(nesteds))
+    nesteds = set(is_nested_collection_for_cli(a) for a in args)
+    if len(nesteds) != 1:
+        raise CLIIOUndefined((t, *args))
+    return next(iter(nesteds))
 
 
 @is_nested_collection_for_cli.register(typing.Tuple)

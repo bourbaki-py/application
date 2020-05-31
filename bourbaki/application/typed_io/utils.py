@@ -9,7 +9,9 @@ from bourbaki.introspection.imports import import_object, import_type
 from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.classes import parameterized_classpath
 from bourbaki.introspection.generic_dispatch import (
-    GenericTypeLevelSingleDispatch, UnknownSignature, AmbiguousResolutionError,
+    GenericTypeLevelSingleDispatch,
+    UnknownSignature,
+    AmbiguousResolutionError,
 )
 from bourbaki.introspection.generic_dispatch_helpers import PicklableWithType
 from .exceptions import IOUndefinedForType, TypedIOValueError
@@ -81,7 +83,8 @@ def cmd_line_arg_names(name, positional=False, prefix_char=None, negative_flag=F
             prefix_char = CLI_PREFIX_CHAR
         names = (
             # 1 '-' for option names with len <= 1, 2 for long option names
-            (prefix_char * min(len(name), 2)) + to_cmd_line_name(name, negative_flag),
+            (prefix_char * min(len(name), 2))
+            + to_cmd_line_name(name, negative_flag),
         )
     else:
         names = (name,)
@@ -194,7 +197,9 @@ class Missing(list):
         return False
 
 
-def parse_or_fail(func: Callable, type_: Type[T], exc_class: Type[TypedIOValueError], value: Any) -> T:
+def parse_or_fail(
+    func: Callable, type_: Type[T], exc_class: Type[TypedIOValueError], value: Any
+) -> T:
     try:
         return func(value)
     except Exception as e:
@@ -253,7 +258,9 @@ class TypeCheckInput(PicklableWithType):
         parsed = self.decode(value)
         if not isinstance_generic(parsed, self.type_):
             raise TypeError(
-                "Parsed value {!r} is not an instance of {!s}".format(parsed, self.type_)
+                "Parsed value {!r} is not an instance of {!s}".format(
+                    parsed, self.type_
+                )
             )
         return parsed
 
@@ -274,7 +281,7 @@ class TypeCheckOutput(PicklableWithType):
         if not isinstance_generic(value, self.type_):
             raise TypeError(
                 "Expected to encode value of type {!s}; got {!s}".format(
-                    self.type_, type(value),
+                    self.type_, type(value)
                 )
             )
         return self.encode(value)

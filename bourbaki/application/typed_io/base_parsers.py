@@ -22,7 +22,9 @@ def parse_bool(s):
     try:
         return bool_constants[s.lower()]
     except KeyError:
-        raise ValueError("Legal boolean string constants are %r; got %r" % (tuple(bool_constants), s))
+        raise ValueError(
+            "Legal boolean string constants are %r; got %r" % (tuple(bool_constants), s)
+        )
 
 
 def parse_bytes(s, type_=bytes):
@@ -47,12 +49,16 @@ def parse_regex_bytes(s: str):
 
 
 if sys.version_info >= (3, 7):
+
     def parse_iso_date(s, type_=datetime.date):
         return type_.fromisoformat(s)
 
     def parse_iso_datetime(s, type_=datetime.datetime):
         return type_.fromisoformat(s)
+
+
 else:
+
     def parse_iso_date(s, type_=datetime.date):
         dt = datetime.datetime.strptime(s, "%Y-%m-%d")
         return type_(dt.year, dt.month, dt.day)
@@ -140,13 +146,13 @@ class FlagParser(EnumParser):
         es = (parse(e) for e in parts)
         return reduce(operator.or_, es)
 
-    def config_decode(
-        self, value: Union[str, Collection[str]]
-    ) -> E:
+    def config_decode(self, value: Union[str, Collection[str]]) -> E:
         if isinstance(value, str):
             return super().config_decode(value)
         elif not isinstance(value, typing.Collection):
-            raise TypeError("Expected str or collection of str; got {}".format(type(value)))
+            raise TypeError(
+                "Expected str or collection of str; got {}".format(type(value))
+            )
         else:
             config_decode = super(type(self), self).config_decode
             return reduce(operator.or_, (config_decode(e) for e in value))

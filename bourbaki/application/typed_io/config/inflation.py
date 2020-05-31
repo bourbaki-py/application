@@ -128,7 +128,9 @@ def instance_from(
                 if target_args:
                     params = tuple(zip(get_generic_params(target_org), target_args))
             elif not issubclass_generic(cls, target_type_):
-                logger.info("Performing generic subclass check: %s <: %s", cls, target_type_)
+                logger.info(
+                    "Performing generic subclass check: %s <: %s", cls, target_type_
+                )
                 raise TypeError(
                     "classpath {} does not specify a generic subclass of the target type {}".format(
                         __classpath__, target_type
@@ -240,7 +242,10 @@ class TypedConfigCallable:
         # of getting around the circular import
         global config_decoder
         if not TypedConfigCallable.called:
-            from bourbaki.application.typed_io.config.config_decode import config_decoder
+            from bourbaki.application.typed_io.config.config_decode import (
+                config_decoder,
+            )
+
             TypedConfigCallable.called = True
 
         if self.__signature__ is None:
@@ -267,19 +272,25 @@ class TypedConfigCallable:
 
             for name, arg in bound_args.items():
                 param = params[name]
-                prefix = ''
+                prefix = ""
                 try:
                     if param.kind in NON_VARIADIC_KINDS:
                         bound_args[name] = decoders[name](arg)
                     elif param.kind is Parameter.VAR_KEYWORD:
-                        prefix = '**'
+                        prefix = "**"
                         decoder = decoders[name]
                         bound_args[name] = {k: decoder(v) for k, v in arg.items()}
                     elif param.kind is Parameter.VAR_POSITIONAL:
-                        prefix = '*'
+                        prefix = "*"
                         bound_args[name] = tuple(map(decoders[name], arg))
                 except Exception as e:
-                    raise ConfigInflationError(self.func, {ARGS_KEY: args, KWARGS_KEY: kwargs}, e, prefix + name, self.__signature__)
+                    raise ConfigInflationError(
+                        self.func,
+                        {ARGS_KEY: args, KWARGS_KEY: kwargs},
+                        e,
+                        prefix + name,
+                        self.__signature__,
+                    )
 
             bound.apply_defaults()
             args, kwargs = bound.args, bound.kwargs
@@ -288,6 +299,8 @@ class TypedConfigCallable:
 
 
 @lru_cache_sig_preserving(None)
-def typed_config_callable(func, params: Optional[Tuple[Tuple[TypeVar, Type], ...]] = None):
+def typed_config_callable(
+    func, params: Optional[Tuple[Tuple[TypeVar, Type], ...]] = None
+):
     param_dict = None if not params else dict(params)
     return TypedConfigCallable(func, param_dict)

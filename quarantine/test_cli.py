@@ -24,11 +24,7 @@ def maybe(key):
     return OPTIONAL_ARG_TEMPLATE.format(key)
 
 
-output_args = {
-    "pretty": False,
-    "literal": False,
-    maybe("outfile"): text_path_repr,
-}
+output_args = {"pretty": False, "literal": False, maybe("outfile"): text_path_repr}
 
 fooenum_repr = "|".join(v.name for v in FooEnum)
 
@@ -207,12 +203,15 @@ def test_cli_result(args, result, config_format, capsys):
         assert parsed == result
 
 
-@pytest.mark.parametrize("args,exc", [
-    (['--install-bash-completion'], SystemExit),
-    (['--version'], SystemExit),
-    (["--info"], SystemExit),
-    (['--execute', 'print', 'ns'], None),
-])
+@pytest.mark.parametrize(
+    "args,exc",
+    [
+        (["--install-bash-completion"], SystemExit),
+        (["--version"], SystemExit),
+        (["--info"], SystemExit),
+        (["--execute", "print", "ns"], None),
+    ],
+)
 def test_cli_special_actions(args, exc):
     if exc is None:
         cli.run(args)
@@ -222,7 +221,7 @@ def test_cli_special_actions(args, exc):
 
 
 def test_cli_parses_env(monkeypatch):
-    monkeypatch.setenv('CLI_ARG_B', '"1/2" 34 \'56\'')
-    ns = cli.run(['print', 'ns'])
-    assert ns['b'] == [Fraction(1, 2), 34, 56]
-    monkeypatch.delenv('CLI_ARG_B')
+    monkeypatch.setenv("CLI_ARG_B", "\"1/2\" 34 '56'")
+    ns = cli.run(["print", "ns"])
+    assert ns["b"] == [Fraction(1, 2), 34, 56]
+    monkeypatch.delenv("CLI_ARG_B")

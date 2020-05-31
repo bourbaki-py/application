@@ -60,16 +60,9 @@ from ..logging import configure_default_logging, Logged, ProgressLogger
 from ..logging.helpers import validate_log_level_int
 from ..logging.defaults import PROGRESS, ERROR, INFO, DEFAULT_LOG_MSG_FMT
 from ..config import load_config, dump_config, ConfigFormat, LEGAL_CONFIG_EXTENSIONS
-from ..typed_io.utils import (
-    to_cmd_line_name,
-    get_dest_name,
-    Missing,
-)
+from ..typed_io.utils import to_cmd_line_name, get_dest_name, Missing
 from ..typed_io.base_reprs import ellipsis_, text_path_repr
-from ..typed_io.exceptions import (
-    TypedInputError,
-    IOUndefinedForType,
-)
+from ..typed_io.exceptions import TypedInputError, IOUndefinedForType
 from ..typed_io.stdin.stdin_parse import to_stdin_parser
 from ..typed_io.main import TypedIO, ArgSource
 from .actions import (
@@ -136,11 +129,7 @@ DEFAULT_LOOKUP_ORDER = (
 
 ExitCodeSpec = Mapping[Type[Exception], Union[int, Callable[[Exception], int]]]
 
-DEFAULT_EXIT_CODES = {
-    Exception: 1,
-    TypedInputError: 2,
-    IOUndefinedForType: 3,
-}
+DEFAULT_EXIT_CODES = {Exception: 1, TypedInputError: 2, IOUndefinedForType: 3}
 
 
 class ReservedNameError(AttributeError):
@@ -189,11 +178,7 @@ class WideHelpFormatter(RawDescriptionHelpFormatter):
 
 
 class CLIErrorHandlingContext:
-    def __init__(
-        self,
-        exit_codes: Opt[ExitCodeSpec] = None,
-        verbose: bool = False,
-    ):
+    def __init__(self, exit_codes: Opt[ExitCodeSpec] = None, verbose: bool = False):
         if exit_codes is None:
             exit_codes = {Exception: 1}
         self.verbose = verbose
@@ -1806,9 +1791,9 @@ class SubCommandFunc(Logged):
                     "At most one arg may be parsed from stdin; the function {} specifies args {} and its output "
                     "handler {} specifies args {}".format(
                         func,
-                        ', '.join(final_spec.parse_stdin),
+                        ", ".join(final_spec.parse_stdin),
                         output_handler,
-                        ', '.join(final_output_spec.parse_stdin),
+                        ", ".join(final_output_spec.parse_stdin),
                     )
                 )
 

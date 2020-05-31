@@ -69,7 +69,7 @@ def pprint_(
 cli = CommandLineInterface(
     prog="cli.py",
     use_verbose_flag=True,
-    use_execution_flag='--execute',
+    use_execution_flag="--execute",
     add_init_config_command=("init", "config"),
     require_options=False,
     use_config_file=True,
@@ -88,7 +88,7 @@ cli = CommandLineInterface(
         "leading": "test commands with leading variadic args",
         "get": "get attributes",
         "cant": "test things that can't be parsed from the command line, only config",
-    }
+    },
 )
 
 
@@ -101,7 +101,7 @@ class MyCommandLineApp(Generic[Num], Logged):
     """
 
     @cli_spec.config_subsection("__main__")
-    @cli_spec.parse_env(b='CLI_ARG_B')
+    @cli_spec.parse_env(b="CLI_ARG_B")
     def __init__(
         self, a: Num = 1, b: List[Num] = [1, 2, 3], c: Optional[datetime.date] = None
     ):

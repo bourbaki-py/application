@@ -32,7 +32,7 @@ class stdin_parser:
             return self.parser(list(map(lex_env_var, text.splitlines())))
         elif self.cli_nargs is None:
             # just parse the whole thing as a string (removing trailing endlines)
-            return self.parser(text.rstrip('\r\n'))
+            return self.parser(text.rstrip("\r\n"))
         elif isinstance(self.cli_nargs, int):
             # lex the input for tuple types - this will work for both line breaks and other whitespace
             # as in a columnar format
@@ -50,8 +50,10 @@ def to_stdin_parser(parser_or_format: Union[ConfigFormat, StdinParser]) -> Stdin
     elif callable(parser_or_format):
         parser = parser_or_format
     else:
-        raise TypeError("parser_or_format must be a callable or an instance of {}.{}; got {}".format(
-            ConfigFormat.__module__, ConfigFormat.__name__, type(parser_or_format),
-        ))
+        raise TypeError(
+            "parser_or_format must be a callable or an instance of {}.{}; got {}".format(
+                ConfigFormat.__module__, ConfigFormat.__name__, type(parser_or_format)
+            )
+        )
 
     return parser

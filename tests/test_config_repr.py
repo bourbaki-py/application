@@ -16,9 +16,18 @@ from bourbaki.introspection.callables import call_repr
 from bourbaki.application.typed_io.utils import *
 from bourbaki.application.typed_io.exceptions import *
 from bourbaki.application.typed_io.base_reprs import (
-    any_repr, byte_repr, complex_repr, date_repr, datetime_repr,
-    ellipsis_, type_spec, ipv4_repr, ipv6_repr, classpath,
-    classpath_type_repr, classpath_function_repr,
+    any_repr,
+    byte_repr,
+    complex_repr,
+    date_repr,
+    datetime_repr,
+    ellipsis_,
+    type_spec,
+    ipv4_repr,
+    ipv6_repr,
+    classpath,
+    classpath_type_repr,
+    classpath_function_repr,
 )
 from bourbaki.application.typed_io.config.config_repr_ import (
     config_repr,
@@ -26,7 +35,11 @@ from bourbaki.application.typed_io.config.config_repr_ import (
     bytes_config_repr,
 )
 from bourbaki.application.typed_io.config.config_encode import config_encoder
-from bourbaki.application.typed_io.config.inflation import CLASSPATH_KEY, ARGS_KEY, KWARGS_KEY
+from bourbaki.application.typed_io.config.inflation import (
+    CLASSPATH_KEY,
+    ARGS_KEY,
+    KWARGS_KEY,
+)
 
 
 tuple_str_ = ("foo", "bar", "baz")
@@ -226,7 +239,6 @@ if NEW_TYPING:
         gen.__dict__[attr] = getattr(SimpleConfigReprGenericMeta, attr).fget(gen)
 
 
-
 test_cases = [
     # atomic
     (bool, bool_config_repr),
@@ -274,11 +286,16 @@ test_cases = [
     ),
     (
         Counter[types.FunctionType],
-        {classpath_function_repr: type_spec(int), ellipsis_: ellipsis_}
+        {classpath_function_repr: type_spec(int), ellipsis_: ellipsis_},
     ),
     (
         DefaultDict[Union[Type, types.BuiltinFunctionType], int],
-        {"{} OR {}".format(classpath_type_repr, classpath_function_repr): type_spec(int), ellipsis_: ellipsis_},
+        {
+            "{} OR {}".format(classpath_type_repr, classpath_function_repr): type_spec(
+                int
+            ),
+            ellipsis_: ellipsis_,
+        },
     ),
     # parameterized collections
     (List[int], int_coll_config_repr),
@@ -293,11 +310,14 @@ test_cases = [
         [bool_config_repr, datetime_repr, ipv4_repr],
     ),
     (FooTup, {"foo": type_spec(int), "bar": type_spec(str)}),
-    (Tuple[FooTup, complex], [{"foo": type_spec(int), "bar": type_spec(str)}, complex_repr]),
+    (
+        Tuple[FooTup, complex],
+        [{"foo": type_spec(int), "bar": type_spec(str)}, complex_repr],
+    ),
     # Nested collections
-    (List[FooTup], [{"foo": type_spec(int), "bar": type_spec(str)}, '...']),
-    (Tuple[FooTup, ...], [{"foo": type_spec(int), "bar": type_spec(str)}, '...']),
-    (List[Set[bool_float_or_str]], [[bool_float_or_str_config_repr, '...'], '...']),
+    (List[FooTup], [{"foo": type_spec(int), "bar": type_spec(str)}, "..."]),
+    (Tuple[FooTup, ...], [{"foo": type_spec(int), "bar": type_spec(str)}, "..."]),
+    (List[Set[bool_float_or_str]], [[bool_float_or_str_config_repr, "..."], "..."]),
     # Lazy types
     (LazyType["datetime.datetime"], datetime_repr),
     (LazyListInt, [type_spec(int), ellipsis_]),
@@ -308,8 +328,12 @@ test_cases = [
     # custom generic classes
     (custom_generic_class, custom_generic_class.config_repr),
     (custom_generic_class[str], custom_generic_class[str].config_repr),
-    (custom_generic_class[datetime.date], custom_generic_class[datetime.date].config_repr),
+    (
+        custom_generic_class[datetime.date],
+        custom_generic_class[datetime.date].config_repr,
+    ),
 ]
+
 
 @pytest.mark.parametrize("type_, repr_", test_cases)
 def test_config_repr(type_, repr_):

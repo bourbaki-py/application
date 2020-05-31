@@ -4,10 +4,7 @@ import enum
 from inspect import signature, Signature, Parameter
 from itertools import chain
 from typing_inspect import is_optional_type
-from bourbaki.introspection.generic_dispatch import (
-    UnknownSignature,
-    const,
-)
+from bourbaki.introspection.generic_dispatch import UnknownSignature, const
 from bourbaki.introspection.generic_dispatch_helpers import UnionWrapper, LazyWrapper
 from bourbaki.introspection.classes import (
     classpath,

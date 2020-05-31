@@ -253,7 +253,7 @@ def load_python(file):
         return locals if execmode else conf
 
     conf = exec_(code, mode, {})
-    if mode == 'exec':
+    if mode == "exec":
         conf.pop("__builtins__", None)
     return conf
 

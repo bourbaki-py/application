@@ -139,11 +139,7 @@ T_ = TypeVar("T_", bound=datetime)
 
 
 class SomeCallable(Generic[T_]):
-    def __init__(
-        self,
-        x: T_,
-        y: Optional[SomeNamedTuple] = None,
-    ):
+    def __init__(self, x: T_, y: Optional[SomeNamedTuple] = None):
         self.x = x
         self.y = y
 
@@ -155,11 +151,12 @@ class SomeCallable(Generic[T_]):
 
     def __eq__(self, other):
         return (
-            type(self.x) is type(other.x) and
-            self.x == other.x and
+            type(self.x) is type(other.x)
+            and self.x == other.x
+            and
             # 'is' operator fails for this namedtuple type for some reason
-            type(self.y).__name__ == type(other.y).__name__ and
-            all(a == b for a, b in zip(self.y, other.y))
+            type(self.y).__name__ == type(other.y).__name__
+            and all(a == b for a, b in zip(self.y, other.y))
         )
 
 
@@ -205,7 +202,15 @@ def to_instance_of(value, type_):
     if type(value) is type_:
         return value
     elif issubclass(type_, datetime):
-        tup = (value.year, value.month, value.day, value.hour, value.minute, value.second, value.microsecond)
+        tup = (
+            value.year,
+            value.month,
+            value.day,
+            value.hour,
+            value.minute,
+            value.second,
+            value.microsecond,
+        )
         return type_(*tup, tzinfo=value.tzinfo)
     elif issubclass(type_, date):
         return type_(value.year, value.month, value.day)
@@ -218,34 +223,58 @@ def to_instance_of(value, type_):
 
 
 basic_type_val_tups = [
-    (bool, True, ['true', True]),
-    (int, 123, [123, '123']),
-    (float, 123.0, [123.0, 123, '123e0']),
-    (float, 1.23, [1.23, '1.23']),
-    (complex, 123+0j, [123, 123.0, '123.0', '123+0j']),
-    (complex, 1+23j, [1+23j, '1+23j']),
-    (Decimal, Decimal('1.23'), ['1.23', Decimal('1.23')]),
+    (bool, True, ["true", True]),
+    (int, 123, [123, "123"]),
+    (float, 123.0, [123.0, 123, "123e0"]),
+    (float, 1.23, [1.23, "1.23"]),
+    (complex, 123 + 0j, [123, 123.0, "123.0", "123+0j"]),
+    (complex, 1 + 23j, [1 + 23j, "1+23j"]),
+    (Decimal, Decimal("1.23"), ["1.23", Decimal("1.23")]),
     (Decimal, Decimal(1), [1, 1.0]),
-    (Fraction, Fraction(2, 1), [2, 2.0, '2/1', [2,1], (2,1)]),
-    (date, date(1234,5,6), ['1234-05-06', date(1234, 5, 6), [1234,5,6], (1234,5,6)]),
-    (datetime, datetime(1234,5,6,7,8,9), [datetime(1234,5,6,7,8,9).timestamp(), '1234-05-06T07:08:09', datetime(1234, 5, 6, 7, 8, 9), (1234, 5, 6, 7, 8, 9), [1234, 5, 6, 7, 8, 9]]),
-    (bytes, b'\x01\x02\x03', [b'\x01\x02\x03', "\x01\x02\x03", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
-    (bytearray, bytearray(b'\x01\x02\x03'), [b'\x01\x02\x03', "\x01\x02\x03", bytearray([1,2,3]), [1,2,3], (1,2,3)]),
+    (Fraction, Fraction(2, 1), [2, 2.0, "2/1", [2, 1], (2, 1)]),
+    (
+        date,
+        date(1234, 5, 6),
+        ["1234-05-06", date(1234, 5, 6), [1234, 5, 6], (1234, 5, 6)],
+    ),
+    (
+        datetime,
+        datetime(1234, 5, 6, 7, 8, 9),
+        [
+            datetime(1234, 5, 6, 7, 8, 9).timestamp(),
+            "1234-05-06T07:08:09",
+            datetime(1234, 5, 6, 7, 8, 9),
+            (1234, 5, 6, 7, 8, 9),
+            [1234, 5, 6, 7, 8, 9],
+        ],
+    ),
+    (
+        bytes,
+        b"\x01\x02\x03",
+        [b"\x01\x02\x03", "\x01\x02\x03", bytearray([1, 2, 3]), [1, 2, 3], (1, 2, 3)],
+    ),
+    (
+        bytearray,
+        bytearray(b"\x01\x02\x03"),
+        [b"\x01\x02\x03", "\x01\x02\x03", bytearray([1, 2, 3]), [1, 2, 3], (1, 2, 3)],
+    ),
     (UUID, some_uuid, [str(some_uuid)]),
-    (IPv4Address, IPv4Address("1.2.3.4"), ['1.2.3.4']),
-    (IPv6Address, IPv6Address("1:2::3:4"), ['1:2::3:4', '1:2:0::0:3:4']),
+    (IPv4Address, IPv4Address("1.2.3.4"), ["1.2.3.4"]),
+    (IPv6Address, IPv6Address("1:2::3:4"), ["1:2::3:4", "1:2:0::0:3:4"]),
     (PosixPath, PosixPath("foo/bar/baz/"), ["foo/bar/baz/", "foo/bar/baz"]),
     (str, "1 2 3", ["1 2 3"]),
 ]
 
 
-basic_testcases = list(chain.from_iterable(
-    (
-        (t, i, to_instance_of(ovalue, t), same_value)
-        for t, i in product(chain((type_,), custom_subclasses(type_)), ivalues)
+basic_testcases = list(
+    chain.from_iterable(
+        (
+            (t, i, to_instance_of(ovalue, t), same_value)
+            for t, i in product(chain((type_,), custom_subclasses(type_)), ivalues)
+        )
+        for (type_, ovalue, ivalues) in basic_type_val_tups
     )
-    for (type_, ovalue, ivalues) in basic_type_val_tups
-))
+)
 
 complex_test_cases = [
     (type, "collections.OrderedDict", cl.OrderedDict, same_value),
@@ -270,11 +299,11 @@ complex_test_cases = [
     (date, "2018-01-01", date(2018, 1, 1), same_value),
     (datetime, "2018-01-01T12:00:00.000", datetime(2018, 1, 1, 12), same_value),
     (bytes, [1, 2, 3], b"\x01\x02\x03", same_value),
-    (ByteString, 'foo', b"foo", same_value),
-    (List[bytes], ['foo', [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
+    (ByteString, "foo", b"foo", same_value),
+    (List[bytes], ["foo", [1, 2, 3]], [b"foo", b"\x01\x02\x03"], same_contents),
     (
         MutableSet[bytes],
-        ['foo\xff', [1, 2, 3]],
+        ["foo\xff", [1, 2, 3]],
         {b"foo\xff", b"\x01\x02\x03"},
         same_contents,
     ),
@@ -293,13 +322,13 @@ complex_test_cases = [
     ),
     (
         Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, Tuple[int, bool]]]],
-        [["2018-01-01", [1, True]], ["2019-01-01", [2, 'false']]],
+        [["2018-01-01", [1, True]], ["2019-01-01", [2, "false"]]],
         [(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))],
         same_contents,
     ),
     (
         Union[Mapping[date, Tuple[int, bool]], List[Tuple[date, ...]]],
-        dict([["2018-01-01", [1, 'true']], ["2019-01-01", [2, False]]]),
+        dict([["2018-01-01", [1, "true"]], ["2019-01-01", [2, False]]]),
         dict([(date(2018, 1, 1), (1, True)), (date(2019, 1, 1), (2, False))]),
         same_contents,
     ),
@@ -318,55 +347,68 @@ complex_test_cases = [
     ),
     (
         SomeNamedTuple,
-        {'x': 'foo', 'y': [[1,2], '3/4']},
-        SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
+        {"x": "foo", "y": [[1, 2], "3/4"]},
+        SomeNamedTuple(SomeEnum.foo, {_myFraction(1, 2), _myFraction(3, 4)}),
         same_contents,
     ),
     (
         SomeNamedTuple,
-        ['foo', (0.5, '3/4')],
-        SomeNamedTuple(SomeEnum.foo, {_myFraction(1,2), _myFraction(3,4)}),
+        ["foo", (0.5, "3/4")],
+        SomeNamedTuple(SomeEnum.foo, {_myFraction(1, 2), _myFraction(3, 4)}),
         same_contents,
     ),
     (
         Dict[BuiltinFunctionType, Tuple[Type[int], Type[str]]],
         {
-            'sorted': ['int', 'str'],
-            'ord': ['{}.{}'.format(__name__, _myint.__name__), '{}.{}'.format(__name__, _mystr.__name__)],
+            "sorted": ["int", "str"],
+            "ord": [
+                "{}.{}".format(__name__, _myint.__name__),
+                "{}.{}".format(__name__, _mystr.__name__),
+            ],
         },
         {sorted: (int, str), ord: (_myint, _mystr)},
         same_keyvals,
     ),
-    (Callable[[Any], SomeEnum], "{}.{}".format(__name__, SomeEnum.__name__), SomeEnum, same_value),
+    (
+        Callable[[Any], SomeEnum],
+        "{}.{}".format(__name__, SomeEnum.__name__),
+        SomeEnum,
+        same_value,
+    ),
 ]
 
 inflation_test_cases = [
     # inflation path for callables
-    (Callable,
-     {
-         "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
-         "__args__": [[1234,5,6,7,8,9], {'x': 'bar', 'y':[[1,2], '3/4']}],
-     },
-     SomeCallable(datetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.bar, {_myFraction(1,2), _myFraction(3,4)})),
-     same_value,
-     ),
-    (SomeCallable[_mydatetime],
-     {
-         "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
-         "__kwargs__": {'x': '1234-05-06T07:08:09', 'y': ('foo', ['3/4'])},
-     },
-     SomeCallable(_mydatetime(1234,5,6,7,8,9), SomeNamedTuple(SomeEnum.foo, {_myFraction(3,4)})),
-     same_value,
-     ),
+    (
+        Callable,
+        {
+            "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
+            "__args__": [[1234, 5, 6, 7, 8, 9], {"x": "bar", "y": [[1, 2], "3/4"]}],
+        },
+        SomeCallable(
+            datetime(1234, 5, 6, 7, 8, 9),
+            SomeNamedTuple(SomeEnum.bar, {_myFraction(1, 2), _myFraction(3, 4)}),
+        ),
+        same_value,
+    ),
+    (
+        SomeCallable[_mydatetime],
+        {
+            "__classpath__": "{}.{}".format(__name__, SomeCallable.__name__),
+            "__kwargs__": {"x": "1234-05-06T07:08:09", "y": ("foo", ["3/4"])},
+        },
+        SomeCallable(
+            _mydatetime(1234, 5, 6, 7, 8, 9),
+            SomeNamedTuple(SomeEnum.foo, {_myFraction(3, 4)}),
+        ),
+        same_value,
+    ),
     (
         MyList[int],
-        {
-            '__classpath__': 'test_config_decode.SubList',
-            '__args__': [True, 2, 3.0],
-        },
+        {"__classpath__": "test_config_decode.SubList", "__args__": [True, 2, 3.0]},
         SubList(_myint(1), _myint(2), _myint(3)),
         same_value,
-    )
+    ),
 ]
 
 
@@ -389,8 +431,7 @@ def test_postproc(type_, input_, expected, cmp):
 
 
 @pytest.mark.parametrize(
-    "type_,input_,expected,cmp",
-    basic_testcases + complex_test_cases,
+    "type_,input_,expected,cmp", basic_testcases + complex_test_cases
 )
 def test_roundtrip(type_, input_, expected, cmp):
     """We have to use a custom comparison here to assert that types are the same as well as
@@ -414,22 +455,22 @@ def test_roundtrip(type_, input_, expected, cmp):
 @pytest.mark.parametrize(
     "type_,input_,expected",
     [
-        (File['r'], "-", sys.stdin),
-        (File['w'], "-", sys.stdout),
-        (File['a+'], None, None),
-        (File['rb'], None, None),
+        (File["r"], "-", sys.stdin),
+        (File["w"], "-", sys.stdout),
+        (File["a+"], None, None),
+        (File["rb"], None, None),
         (IO[str], None, None),
         (IO[bytes], None, None),
-    ]
+    ],
 )
 def test_filetype_roundtrip(type_, input_, expected, tmp_path):
     if input_ is None:
         # IO case - read mode if file exists, write mode otherwise
         newpath = tmp_path / "test"
         if type_ is IO[str]:
-            mode = 'r'
+            mode = "r"
         elif type_ is IO[bytes]:
-            mode = 'rb'
+            mode = "rb"
         else:
             mode = type_.mode
 

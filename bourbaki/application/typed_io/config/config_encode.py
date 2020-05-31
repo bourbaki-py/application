@@ -17,10 +17,7 @@ from urllib.parse import ParseResult as URL, urlunparse
 from warnings import warn
 from bourbaki.introspection.callables import function_classpath
 from bourbaki.introspection.classes import parameterized_classpath
-from bourbaki.introspection.types import (
-    NamedTupleABC,
-    LazyType,
-)
+from bourbaki.introspection.types import NamedTupleABC, LazyType
 from bourbaki.introspection.generic_dispatch_helpers import (
     LazyWrapper,
     CollectionWrapper,
@@ -31,17 +28,14 @@ from bourbaki.introspection.generic_dispatch_helpers import (
     PicklableWithType,
 )
 from bourbaki.introspection.generic_dispatch import UnknownSignature
-from ..base_parsers import (
-    EnumParser,
-    FlagParser,
-)
-from ..utils import (
-    identity,
-    GenericIOParserTypeLevelSingleDispatch,
-)
+from ..base_parsers import EnumParser, FlagParser
+from ..utils import identity, GenericIOParserTypeLevelSingleDispatch
 from ..file_types import File
 from ..exceptions import (
-    ConfigTypedOutputError, ConfigIOUndefinedForType, AllFailed, RaisedDisallowedExceptions,
+    ConfigTypedOutputError,
+    ConfigIOUndefinedForType,
+    AllFailed,
+    RaisedDisallowedExceptions,
 )
 
 NoneType = type(None)
@@ -59,6 +53,7 @@ config_encoder = GenericIOParserTypeLevelSingleDispatch(
 
 
 # basic encoders
+
 
 @config_encoder.register(decimal.Decimal, as_const=True)
 def to_config_decimal(dec: decimal.Decimal):
@@ -99,7 +94,7 @@ config_encoder.register_all(typing.ByteString, as_const=True)(list)
 def to_config_file(f: io.IOBase):
     if f is sys.stdin or f is sys.stdout:
         # argparse FileType parses this to on of the above handles depending on the mode
-        return '-'
+        return "-"
     name = getattr(f, "name", None)
     if name is None or f is sys.stderr:
         warn("Can't determine path/name for file object {}".format(f))
@@ -129,7 +124,7 @@ def to_regex_str_config(r: typing.Pattern[str]):
 
 @config_encoder.register(typing.Pattern[bytes], as_const=True)
 def to_regex_bytes_config(r: typing.Pattern[bytes]):
-    pattern_encoded = ''.join(map(chr, r.pattern))
+    pattern_encoded = "".join(map(chr, r.pattern))
     return pattern_encoded
 
 
@@ -210,7 +205,9 @@ class MappingConfigEncoder(MappingWrapper):
 
     def __call__(self, value):
         if not isinstance(value, collections.Mapping):
-            raise TypeError("Can't encode value of type {} to config mapping".format(type(value)))
+            raise TypeError(
+                "Can't encode value of type {} to config mapping".format(type(value))
+            )
         return super().__call__(value)
 
 
@@ -252,7 +249,11 @@ class NamedTupleConfigEncoder(NamedTupleWrapper):
 # TODO: finish this
 @config_encoder.register(typing.Union)
 class UnionConfigEncoder(UnionWrapper):
-    tolerate_errors = (ConfigIOUndefinedForType, UnknownSignature, ConfigTypedOutputError)
+    tolerate_errors = (
+        ConfigIOUndefinedForType,
+        UnknownSignature,
+        ConfigTypedOutputError,
+    )
     reduce = staticmethod(next)
     getter = config_encoder
     exc_class_bad_exception = RaisedDisallowedExceptions

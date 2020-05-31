@@ -7,13 +7,18 @@ from itertools import chain
 from collections import Counter
 from warnings import warn
 import pytest
-from bourbaki.application.logging import Logged, InstanceLoggerNamingConvention, configure_debug_logging
+from bourbaki.application.logging import (
+    Logged,
+    InstanceLoggerNamingConvention,
+    configure_debug_logging,
+)
 from bourbaki.application.logging.defaults import (
     DEFAULT_LOG_MSG_FMT,
     DEFAULT_LOG_DATE_FMT,
 )
 from bourbaki.application.logging.analysis import log_line_regex, log_file_to_df
 from bourbaki.application.logging import CountingLogger, configure_default_logging
+
 
 class _TestLogger(CountingLogger):
     def disable(self):
@@ -26,12 +31,9 @@ class _TestLogger(CountingLogger):
 
 logging.setLoggerClass(_TestLogger)
 
-configure_default_logging(
-    console_level=0,
-    disable_existing_loggers=True,
-)
-logging.root.getChild('matplotlib').disable()
-logging.root.getChild('pandas').disable()
+configure_default_logging(console_level=0, disable_existing_loggers=True)
+logging.root.getChild("matplotlib").disable()
+logging.root.getChild("pandas").disable()
 
 
 global TestLoggedClass
@@ -187,9 +189,7 @@ def test_logfile_dataframe_parse(this_logfile, logger):
     # this adds some METALOG-level messages to the file
     log_all_counts()
     # which should be parsed here
-    parsed_log = log_file_to_df(
-        this_logfile, datetime_index=True, raise_=False
-    )
+    parsed_log = log_file_to_df(this_logfile, datetime_index=True, raise_=False)
 
     assert_parsed_equals_logged(parsed_message_counts(parsed_log), all_message_counts())
 

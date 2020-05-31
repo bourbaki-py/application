@@ -22,9 +22,9 @@ class Foo:
         """
         self.x = x
         self.y = y
-    
-    @cli_spec.parse_stdin('opt')
-    @cli_spec.stdin_parser('.py')
+
+    @cli_spec.parse_stdin("opt")
+    @cli_spec.stdin_parser(".py")
     def nested(
         self,
         tup: Tuple[Tuple[int, int], str, complex],
