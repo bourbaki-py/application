@@ -8,7 +8,6 @@ from bourbaki.introspection.types import (
     get_constraints,
     get_bound,
     get_generic_args,
-    reconstruct_generic,
     issubclass_generic,
     is_top_type,
     is_named_tuple_class,
@@ -33,7 +32,6 @@ from bourbaki.application.completion.completers import (
     CompleteBools,
     NoComplete,
 )
-from .cli_repr_ import cli_repr
 from .utils import File
 
 NoneType = type(None)
