@@ -293,7 +293,8 @@ class MappingCLIParser(MappingWrapper):
 
 
 @cli_parser.register(typing.Union)
-class UnionCLIParser(GenericCLIParserMixin, UnionWrapper):
+class UnionCLIParser(UnionWrapper):
+    getter = cli_parser
     reduce = staticmethod(next)
     tolerate_errors = (CLIIOUndefined, UnknownSignature)
     exc_class = CLIUnionInputError
@@ -309,11 +310,9 @@ class UnionCLIParser(GenericCLIParserMixin, UnionWrapper):
 
 
 @cli_parser.register(typing.Tuple)
-class TupleCLIParser(GenericCLIParserMixin, TupleWrapper):
-    _collection_cls = CollectionCLIParser
-    _nargs = None
-    _entry_nargs = None
-    require_same_len = False
+class TupleCLIParser(TupleWrapper):
+    getter = cli_parser
+    get_reducer = staticmethod(get_constructor_for)
 
     def __new__(cls, t, *types):
         if is_named_tuple_class(t):
@@ -345,8 +344,8 @@ class TupleCLIParser(GenericCLIParserMixin, TupleWrapper):
 
 
 @cli_parser.register(LazyType)
-class LazyCLIParser(GenericCLIParserMixin, LazyWrapper):
-    pass
+class LazyCLIParser(LazyWrapper):
+    getter = cli_parser
 
 
 @cli_parser.register_all(enum.Enum, enum.IntEnum)
