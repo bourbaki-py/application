@@ -42,7 +42,7 @@ def parse_regex(s: str):
 def parse_regex_bytes(s: str):
     """Treat string literals like '\xf4' as references to bytes, not unicode codepoints, for ease of writing in
     config files"""
-    pattern = bytes(map(ord, s))
+    pattern = parse_bytes(s) if isinstance(s, str) else s
     return re.compile(pattern)
 
 
