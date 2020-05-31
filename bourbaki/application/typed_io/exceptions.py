@@ -3,6 +3,8 @@ from inspect import signature
 from pprint import pformat
 import shutil
 from textwrap import indent, wrap
+from typing import Optional
+
 from bourbaki.introspection.types import eval_type_tree, concretize_typevars
 from bourbaki.introspection.classes import classpath, parameterized_classpath
 
@@ -14,6 +16,37 @@ STACKTRACE_VALUE_LITERAL_INDENT = 1
 STACKTRACE_LEVEL_INDENT = 2
 TERMINAL_WIDTH = shutil.get_terminal_size().columns
 STACKTRACE_VALUE_LITERAL_WIDTH = TERMINAL_WIDTH - 6 * STACKTRACE_LEVEL_INDENT
+
+
+def configure_parser_stacktraces(
+    value_literal_max_lines: int = STACKTRACE_VALUE_LITERAL_MAX_LINES,
+    value_literal_max_depth: int = STACKTRACE_VALUE_LITERAL_MAX_DEPTH,
+    value_literal_indent: int = STACKTRACE_VALUE_LITERAL_INDENT,
+    stack_level_indent: int = STACKTRACE_LEVEL_INDENT,
+    terminal_width: Optional[int] = None,
+    value_literal_width: Optional[int] = None,
+):
+    global STACKTRACE_VALUE_LITERAL_MAX_LINES
+    global STACKTRACE_VALUE_LITERAL_MAX_DEPTH
+    global STACKTRACE_VALUE_LITERAL_INDENT
+    global STACKTRACE_LEVEL_INDENT
+    global TERMINAL_WIDTH
+    global STACKTRACE_VALUE_LITERAL_WIDTH
+
+    STACKTRACE_VALUE_LITERAL_MAX_LINES = value_literal_max_lines
+    STACKTRACE_VALUE_LITERAL_MAX_DEPTH = value_literal_max_depth
+    STACKTRACE_VALUE_LITERAL_INDENT = value_literal_indent
+    STACKTRACE_LEVEL_INDENT = stack_level_indent
+
+    if terminal_width is None:
+        TERMINAL_WIDTH = shutil.get_terminal_size().columns
+    else:
+        TERMINAL_WIDTH = terminal_width
+
+    if value_literal_width is None:
+        STACKTRACE_VALUE_LITERAL_WIDTH = TERMINAL_WIDTH - 6 * STACKTRACE_LEVEL_INDENT
+    else:
+        STACKTRACE_VALUE_LITERAL_WIDTH = value_literal_width
 
 
 def linewrap(msg: str):
