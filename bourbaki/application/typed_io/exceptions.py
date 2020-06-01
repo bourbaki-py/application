@@ -186,8 +186,25 @@ class CLIIOUndefinedForType(IOUndefinedForType):
 
 class CLIIOUndefinedForNestedCollectionType(CLIIOUndefinedForType):
     msg = (
-        "{source} I/O is not defined for {values} of type {type}, "
+        "{source} I/O is not defined for values of type {type}, "
         "since multiply-nested keys and values cannot be unambiguously parsed; "
+        "use {methods} to register custom {functions}"
+    )
+
+
+class CLIIOUndefinedForNestedTupleType(CLIIOUndefinedForType):
+    msg = (
+        "{source} I/O is not defined for values of type {type}, "
+        "since tuple types with variable-length contents (other than the last position, which may "
+        "not be a nested collection type) cannot be unambiguously parsed; use {methods} to register "
+        "custom {functions}"
+    )
+
+
+class CLIAmbiguousUnionType(CLIIOUndefinedForType):
+    msg = (
+        "{source} I/O is not defined for values of union type {type}, "
+        "since the types therein imply differing numbers of command line args; "
         "use {methods} to register custom {functions}"
     )
 
