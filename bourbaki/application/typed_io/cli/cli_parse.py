@@ -17,15 +17,11 @@ from bourbaki.introspection.types import (
     is_named_tuple_class,
     is_top_type,
     LazyType,
-    NonStrCollection,
     get_constructor_for,
 )
 from bourbaki.introspection.callables import signature
-from bourbaki.introspection.generic_dispatch import (
-    GenericTypeLevelSingleDispatch,
-    UnknownSignature,
-    DEBUG,
-)
+import bourbaki.introspection.generic_dispatch as _generic_dispatch
+from bourbaki.introspection.generic_dispatch import UnknownSignature
 from bourbaki.introspection.generic_dispatch_helpers import (
     CollectionWrapper,
     MappingWrapper,
@@ -34,12 +30,13 @@ from bourbaki.introspection.generic_dispatch_helpers import (
     LazyWrapper,
 )
 from .cli_complete import cli_completer
-from .cli_nargs_ import check_tuple_nargs, check_union_nargs, cli_nargs
+from .cli_nargs_ import check_tuple_nargs, cli_nargs
 from .cli_repr_ import cli_repr
 from ..exceptions import (
     CLITypedInputError,
     CLIIOUndefinedForType,
-    CLIIOUndefinedForNestedCollectionType,
+    AllFailed,
+    RaisedDisallowedExceptions,
 )
 from ..base_parsers import (
     parse_iso_date,
@@ -166,7 +163,7 @@ class CLIParserDispatch(GenericIOTypeLevelSingleDispatch):
     def register(
         self,
         *sig,
-        debug: bool = DEBUG,
+        debug: bool = False,
         as_const: bool = False,
         derive_nargs: bool = False,
         derive_repr: bool = False,
@@ -180,6 +177,7 @@ class CLIParserDispatch(GenericIOTypeLevelSingleDispatch):
         - cli_completer
         when derive_nargs, derive_repr, derive_completer respectively are True.
         """
+        debug = debug or _generic_dispatch.DEBUG
         dec = super().register(*sig, debug=debug, as_const=as_const)
         if not as_const:
             underivable = [
@@ -264,12 +262,6 @@ class CollectionCLIParser(CollectionWrapper):
     getter = cli_parser
     get_reducer = staticmethod(get_constructor_for)
 
-    def __init__(self, coll_type, val_type=object):
-        if cli_action(val_type) is not None:
-            # nested collections with append action
-            raise CLIIOUndefinedForNestedCollectionType(coll_type[val_type])
-        super().__init__(coll_type, val_type)
-
 
 @cli_parser.register(typing.Mapping)
 class MappingCLIParser(MappingWrapper):
@@ -278,8 +270,6 @@ class MappingCLIParser(MappingWrapper):
     get_reducer = staticmethod(get_constructor_for)
 
     def __init__(self, coll_type, key_type=object, val_type=object):
-        if (cli_nargs(key_type) is not None) or (cli_nargs(val_type) is not None):
-            raise CLINestedCollectionsNotAllowed((coll_type, key_type, val_type))
         super().__init__(coll_type, key_type, val_type)
         coll_type = self.reduce
         if issubclass(coll_type, (collections.Counter, collections.ChainMap)):
@@ -296,12 +286,9 @@ class MappingCLIParser(MappingWrapper):
 class UnionCLIParser(UnionWrapper):
     getter = cli_parser
     reduce = staticmethod(next)
-    tolerate_errors = (CLIIOUndefined, UnknownSignature)
-    exc_class = CLIUnionInputError
-
-    def __init__(self, u, *types):
-        check_union_nargs(*types)
-        super().__init__(u, *types)
+    tolerate_errors = (CLIIOUndefinedForType, UnknownSignature)
+    exc_class_no_success = AllFailed
+    exc_class_bad_exception = RaisedDisallowedExceptions
 
     def __call__(self, arg):
         if arg is None and self.is_optional:
@@ -314,21 +301,22 @@ class TupleCLIParser(TupleWrapper):
     getter = cli_parser
     get_reducer = staticmethod(get_constructor_for)
 
-    def __new__(cls, t, *types):
+    def __init__(self, t, *types):
         if is_named_tuple_class(t):
             types = get_named_tuple_arg_types(t)
 
-        self = TupleWrapper.__new__(cls, t, *types)
-        if Ellipsis in types:
-            return self
+        super().__init__(t, *types)
 
-        self._entry_nargs, self._nargs = check_tuple_nargs(t, *types)
-        self.require_same_len = all(n in (None, 1) for n in self._entry_nargs)
-        return self
+        if Ellipsis not in types:
+            self._entry_nargs, _ = check_tuple_nargs(t, *types)
+            self.require_same_len = all(n in (None, 1) for n in self._entry_nargs)
+        else:
+            self._entry_nargs = None
 
     def iter_chunks(self, args):
         ix = 0
-        for n in self._entry_nargs:
+        entry_nargs = (n.nargs for n in self._entry_nargs)
+        for n in entry_nargs:
             if n is None:
                 yield args[ix]
                 ix += 1
@@ -340,6 +328,8 @@ class TupleCLIParser(TupleWrapper):
                 ix = None
 
     def call_iter(self, arg):
+        if self._entry_nargs is None:
+            return super().call_iter(arg)
         return (f(a) for f, a in zip(self.funcs, self.iter_chunks(arg)))
 
 

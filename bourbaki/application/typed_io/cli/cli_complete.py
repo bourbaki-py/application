@@ -32,7 +32,7 @@ from bourbaki.application.completion.completers import (
     CompleteBools,
     NoComplete,
 )
-from .utils import File
+from ..file_types import File
 
 NoneType = type(None)
 

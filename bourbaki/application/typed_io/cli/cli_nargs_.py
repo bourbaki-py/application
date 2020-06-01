@@ -131,7 +131,8 @@ def tuple_nargs(t, *types):
         return CLINargsAction(ZERO_OR_MORE)
 
     # namedtuple and other fixed-length tuples
-    return check_tuple_nargs(t, *types)
+    _, total_nargs = check_tuple_nargs(t, *types)
+    return total_nargs
 
 
 @cli_nargs.register(typing.Union)
@@ -149,14 +150,13 @@ def union_nargs(u, *types):
 
 
 def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
-    print(tup_type, types)
     if Ellipsis in types:
         # variable-length tuples
         types = [typing.List[types[0]]]
 
     all_nargs = tuple(cli_nargs(t) for t in types)
     if not all_nargs:
-        return ZERO_OR_MORE
+        return all_nargs, CLINargsAction(ZERO_OR_MORE)
 
     head_nargs = all_nargs[:-1] if allow_tail_collection else all_nargs
     if (allow_tail_collection and all_nargs[-1].is_nested) or any(a.is_variable_length for a in head_nargs):
@@ -167,7 +167,7 @@ def check_tuple_nargs(tup_type, *types, allow_tail_collection: bool = True):
         raise CLIIOUndefinedForNestedTupleType(type_)
 
     total_nargs = sum(all_nargs)
-    return total_nargs
+    return all_nargs, total_nargs
 
 
 cli_option_nargs = cli_nargs

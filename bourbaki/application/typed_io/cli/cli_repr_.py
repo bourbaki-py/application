@@ -12,16 +12,17 @@ from bourbaki.introspection.types import (
     NonStrCollection,
 )
 from .cli_nargs_ import cli_nargs
-from .exceptions import CLIIOUndefined, CLINestedCollectionsNotAllowed
-from .parsers import bool_constants, EnumParser
-from .utils import (
+from ..exceptions import CLIIOUndefinedForType, CLIIOUndefinedForNestedCollectionType
+from ..base_parsers import bool_constants, EnumParser
+from ..base_reprs import (
     byte_repr,
     any_repr,
     classpath_function_repr,
     default_repr_values,
     repr_type,
+    type_spec,
 )
-from .utils import type_spec, KEY_VAL_JOIN_CHAR, to_str_cli_repr
+from ..utils import KEY_VAL_JOIN_CHAR, to_str_cli_repr
 
 NoneType = type(None)
 
@@ -56,14 +57,14 @@ def cli_repr_union(u, *types):
                 continue
             try:
                 repr_ = cli_repr(t)
-            except CLIIOUndefined:
+            except CLIIOUndefinedForType:
                 continue
             else:
                 yield repr_
 
     reprs = list(inner(types))
     if not reprs:
-        raise CLIIOUndefined((u, *types))
+        raise CLIIOUndefinedForType((u, *types))
     if all(isinstance(r, str) for r in reprs):
         return "|".join(reprs)
     else:
@@ -100,7 +101,7 @@ def cli_repr_mapping(m, k, v):
     if issubclass_generic(k, NonStrCollection) or issubclass_generic(
         v, NonStrCollection
     ):
-        raise CLINestedCollectionsNotAllowed((m, k, v))
+        raise CLIIOUndefinedForNestedCollectionType((m, k, v))
     return "{k}{j}{v}".format(k=cli_repr(k), v=cli_repr(v), j=KEY_VAL_JOIN_CHAR)
 
 
@@ -108,7 +109,7 @@ def cli_repr_mapping(m, k, v):
 @cli_repr.register(typing.Collection)
 def cli_repr_seq(s, t=typing.Any):
     if issubclass_generic(t, NonStrCollection):
-        raise CLINestedCollectionsNotAllowed((s, t))
+        raise CLIIOUndefinedForNestedCollectionType((s, t))
     return cli_repr(t)
 
 
