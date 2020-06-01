@@ -2,7 +2,6 @@
 import typing
 import enum
 from itertools import repeat
-from bourbaki.introspection.generic_dispatch import GenericTypeLevelSingleDispatch
 from bourbaki.introspection.types import (
     issubclass_generic,
     is_named_tuple_class,
@@ -22,7 +21,7 @@ from ..base_reprs import (
     repr_type,
     type_spec,
 )
-from ..utils import KEY_VAL_JOIN_CHAR, to_str_cli_repr
+from ..utils import KEY_VAL_JOIN_CHAR, to_str_cli_repr, GenericIOTypeLevelSingleDispatch
 
 NoneType = type(None)
 
@@ -38,7 +37,11 @@ cli_repr_values.update(
 )
 
 
-cli_repr = GenericTypeLevelSingleDispatch(__name__, isolated_bases=[typing.Union])
+cli_repr = GenericIOTypeLevelSingleDispatch(
+    __name__,
+    isolated_bases=[typing.Union],
+    resolve_exc_class=CLIIOUndefinedForType,
+)
 
 
 # base generic handlers
