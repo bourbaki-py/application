@@ -181,7 +181,7 @@ class CLIIOUndefinedForType(IOUndefinedForType):
         "type-representer (for generating help strings)",
         "completer (see bourbaki.application.completion for completers)",
     ]
-    addendum = "for parsing and completing user input for values of type {type}"
+    addendum = "for for values of type {type}"
 
 
 class CLIIOUndefinedForNestedCollectionType(CLIIOUndefinedForType):
