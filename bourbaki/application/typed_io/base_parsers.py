@@ -1,12 +1,13 @@
 # coding:utf-8
-from typing import Collection, Union
+from typing import Collection, Iterator, Union
 import typing
 import datetime
 import enum
+from itertools import chain
 import operator
 import re
 import sys
-from functools import reduce, lru_cache
+from functools import partial, reduce, lru_cache
 from inspect import Parameter
 from argparse import ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL
 
@@ -14,7 +15,19 @@ Empty = Parameter.empty
 
 NARGS_OPTIONS = (None, ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL)
 
-bool_constants = {"true": True, "false": False}
+bool_constants = {"true": True, "false": False, "1": True, "0": False}
+
+hex_to_int = partial(int, base=16)
+
+
+def _pairs(s: str) -> Iterator[str]:
+    return (s[i:i+2] for i in range(0, len(s), 2))
+
+
+def string_to_hex_codes(s: str) -> Iterator[str]:
+    return chain.from_iterable(
+        map(_pairs, s.split())
+    )
 
 
 def parse_bool(s):
@@ -28,11 +41,9 @@ def parse_bool(s):
 
 def parse_bytes(s, type_=bytes):
     r"""Parse a bytes object from a string.
-    This will treat \x escapes as literal byte references in a string, allowing user-friendly specification
-    for example in a config file.
-    E.g. "\xff" as a _string_ refers to the unicode character 'ÿ', but when interpreted as bytes
-    here, refers to a the byte string equivalent to bytes([255]) (or bytearray when type_=bytearray)."""
-    ints = map(ord, s)
+    This uses a simple hex encoding scheme where whitespace is ignored and pairs of hex codes are
+    treated as single bytes."""
+    ints = map(hex_to_int, string_to_hex_codes(s))
     return type_(ints)
 
 
@@ -42,8 +53,9 @@ def parse_regex(s: str):
 
 def parse_regex_bytes(s: str):
     """Treat string literals like '\xf4' as references to bytes, not unicode codepoints, for ease of writing in
-    config files"""
-    pattern = parse_bytes(s) if isinstance(s, str) else s
+    config files. E.g. "\xff" as a _string_ refers to the unicode character 'ÿ', but when interpreted as bytes
+    here, refers to the byte string `bytes([255])`"""
+    pattern = bytes(map(ord, s)) if isinstance(s, str) else s
     return re.compile(pattern)
 
 
