@@ -1,5 +1,5 @@
 # coding:utf-8
-from typing import Union, Optional, Type, Callable, TypeVar, Any, List
+from typing import Union, Optional, Callable, TypeVar, Any, List, Type
 from argparse import ZERO_OR_MORE, ONE_OR_MORE, OPTIONAL
 from functools import partial, singledispatch
 from inspect import Parameter
@@ -14,6 +14,7 @@ from bourbaki.introspection.generic_dispatch import (
     AmbiguousResolutionError,
 )
 from bourbaki.introspection.generic_dispatch_helpers import PicklableWithType
+from bourbaki.introspection.types import get_constructor_for
 from .exceptions import IOUndefinedForType, TypedIOValueError
 
 T = TypeVar("T")
@@ -142,6 +143,31 @@ def to_param_doc(param: Doc, name: str) -> Optional[str]:
                 type(param)
             )
         )
+
+
+###################
+# Parsing helpers #
+###################
+
+
+def to_instance_of(value, type_: Type[T]) -> T:
+    """Use a type as its own constructor on an input value; allows injecting custom subclasses
+    e.g. of simple builtin types by binding the `type_` arg when resolving a parser for the type."""
+    if type(value) is type_:
+        return value
+    return type_(value)
+
+
+class basic_decoder:
+    """For binding the `type_` arg of a parser, e.g. `to_instance_of`, at parser resolution time.
+    Note that `func` must accept a `type_` keyword arg (as `to_instance_of` does)."""
+
+    def __init__(self, func):
+        self.func = func
+
+    def __call__(self, type_, *args):
+        """"""
+        return partial(self.func, type_=get_constructor_for(type_))
 
 
 ##############################

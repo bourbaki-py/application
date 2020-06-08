@@ -44,6 +44,8 @@ from ..base_parsers import (
 )
 from ..utils import (
     identity,
+    to_instance_of,
+    basic_decoder,
     Empty,
     TypeCheckInput,
     TypeCheckImport,
@@ -80,11 +82,8 @@ def cant_decode_to(
     raise TypeError(msg)
 
 
-def to_instance_of(value, type_: typing.Type[T]) -> T:
-    if type(value) is type_:
-        return value
-    return type_(value)
-
+to_int = to_float = to_complex = to_fraction = to_decimal = to_bytes = \
+    to_bytearray = to_uuid = to_ipaddress = to_path = to_file = to_str = None
 
 for _funcname, _types in [
     ("to_int", (int, str)),
@@ -233,14 +232,6 @@ config_decoder = GenericIOParserTypeLevelSingleDispatch(
     resolve_exc_class=ConfigIOUndefinedForType,
     call_exc_class=ConfigTypedInputError,
 )
-
-
-class basic_decoder:
-    def __init__(self, func):
-        self.func = func
-
-    def __call__(self, type_, *args):
-        return partial(self.func, type_=get_constructor_for(type_))
 
 
 # All the simple parsers
