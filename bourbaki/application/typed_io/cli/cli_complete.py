@@ -41,7 +41,7 @@ cli_completer = GenericTypeLevelSingleDispatch(
     "cli_completer", isolated_bases=[typing.Union]
 )
 
-cli_completer.register_all(int, bytes, bytearray, numbers.Integral, as_const=True)(
+cli_completer.register_all(int, numbers.Integral, as_const=True)(
     CompleteInts()
 )
 
