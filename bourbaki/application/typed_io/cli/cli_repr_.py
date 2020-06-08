@@ -14,7 +14,6 @@ from .cli_nargs_ import cli_nargs
 from ..exceptions import CLIIOUndefinedForType, CLIIOUndefinedForNestedCollectionType
 from ..base_parsers import bool_constants, EnumParser
 from ..base_reprs import (
-    byte_repr,
     any_repr,
     classpath_function_repr,
     default_repr_values,
@@ -26,11 +25,12 @@ from ..utils import KEY_VAL_JOIN_CHAR, to_str_cli_repr, GenericIOTypeLevelSingle
 NoneType = type(None)
 
 bool_cli_repr = "{{{}}}".format("|".join(bool_constants))
+bytes_cli_repr = "[0-9a-f][0-9a-f]..."
 
 cli_repr_values = default_repr_values.copy()
 cli_repr_values.update(
     [
-        (typing.ByteString, byte_repr),
+        (typing.ByteString, bytes_cli_repr),
         (bool, bool_cli_repr),
         (typing.Callable, classpath_function_repr),
     ]

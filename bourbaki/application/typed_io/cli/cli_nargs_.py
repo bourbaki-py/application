@@ -100,6 +100,9 @@ cli_nargs.register(typing.Any, as_const=True)(CLINargsAction(None))
 # urllib.parse.ParseResult is a namedtuple type
 cli_nargs.register_all(URL, as_const=True)(CLINargsAction(None))
 
+# byte types are subclasses of Collection but we parse them from hex strings
+cli_nargs.register(typing.ByteString, as_const=True)(CLINargsAction(None))
+
 
 @cli_nargs.register(NonStrCollection)
 def collection_nargs(t, v=typing.Any, *args):
@@ -116,7 +119,8 @@ def collection_nargs(t, v=typing.Any, *args):
 def mapping_nargs(t, k=typing.Any, v=typing.Any):
     key_nargs = cli_nargs(k)
     val_nargs = cli_nargs(v)
-    if key_nargs.nargs is not None or val_nargs is not None:
+    print(key_nargs, val_nargs)
+    if (key_nargs.nargs is not None) or (val_nargs.nargs is not None):
         raise CLIIOUndefinedForNestedCollectionType(t[k, v])
     return CLINargsAction(ZERO_OR_MORE)
 

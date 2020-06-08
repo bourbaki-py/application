@@ -10,7 +10,7 @@ import collections
 from urllib.parse import ParseResult as URL, urlparse
 import uuid
 from inspect import Parameter
-from functools import lru_cache
+from functools import lru_cache, partial
 from warnings import warn
 from bourbaki.introspection.types import (
     get_named_tuple_arg_types,
@@ -39,6 +39,7 @@ from ..exceptions import (
     RaisedDisallowedExceptions,
 )
 from ..base_parsers import (
+    parse_bytes,
     parse_iso_date,
     parse_iso_datetime,
     parse_range,
@@ -49,6 +50,8 @@ from ..base_parsers import (
     FlagParser,
 )
 from ..utils import (
+    basic_decoder,
+    to_instance_of,
     TypeCheckImportType,
     TypeCheckImport,
     Empty,
@@ -69,55 +72,16 @@ def cli_split_keyval(s: str):
     return s.split(KEY_VAL_JOIN_CHAR, maxsplit=1)
 
 
-def cli_parse_bytes(seq: typing.Sequence[str]):
-    return bytes(map(int, seq))
-
-
-def cli_parse_bytearray(seq: typing.Sequence[str]):
-    return bytearray(map(int, seq))
-
-
-def cli_parse_bool(s: typing.Union[str, bool]):
-    # have to allow bools for the flag case; argparse includes an implicit boolean default in that case
-    if isinstance(s, bool):
-        return s
-    return parse_bool(s)
-
-
-cli_parse_by_constructor = {
-    int,
-    float,
-    str,
-    complex,
-    decimal.Decimal,
-    fractions.Fraction,
-    pathlib.Path,
-    ipaddress.IPv4Address,
-    ipaddress.IPv6Address,
-    uuid.UUID,
-    File,
-}
-
-cli_parse_methods = {
-    bool: cli_parse_bool,
-    bytes: cli_parse_bytes,
-    bytearray: cli_parse_bytearray,
-    range: parse_range,
-    datetime.date: parse_iso_date,
-    datetime.datetime: parse_iso_datetime,
-    typing.Pattern: parse_regex,
-    typing.Pattern[bytes]: parse_regex_bytes,
-    URL: urlparse,
-    Empty: identity,
-}
-
-
 @lru_cache(None)
 def _validate_parser(func):
     try:
         sig = signature(func)
-    except ValueError:
+    except ValueError as e:
         annotation = None
+        warn(
+            "Couldn't get signature for CLI parser function {}; raised {}; can't derive "
+            "nargs/type-repr/completer".format(func, e)
+        )
     else:
         msg = "CLI parsers must have only a single required positional arg; "
         if len(sig.parameters) == 0:
@@ -155,6 +119,14 @@ def _validate_parser(func):
                 )
 
         annotation = param.annotation
+
+        if annotation in (typing.Any, object, Parameter.empty):
+            warn(
+                "Vacuous or nonexistent annotation on parameter {} of CLI parser function {}; "
+                "may not be able to derive useful nargs/type-repr/completer".format(
+                    param.name, str(func),
+                )
+            )
 
     return func, annotation
 
@@ -252,6 +224,56 @@ class CLINoParse:
         return arg
 
 
+#################
+# Basic Parsers #
+#################
+
+
+# subclass-able types which are their own parsers - inject via basic_decoder
+for _type in [
+    int,
+    float,
+    str,
+    complex,
+    decimal.Decimal,
+    fractions.Fraction,
+    pathlib.Path,
+    ipaddress.IPv4Address,
+    ipaddress.IPv6Address,
+    uuid.UUID,
+    File,
+]:
+    cli_parser.register(_type)(basic_decoder(to_instance_of))
+
+# subclass-able types with custom parsers - inject via basic_decoder
+for _type, _parser in [
+    (datetime.date, parse_iso_date),
+    (datetime.datetime, parse_iso_datetime),
+    (typing.ByteString, parse_bytes),
+]:
+    cli_parser.register(_type)(basic_decoder(_parser))
+
+# non-subclass-able types or types with non-generic constructors
+for _type, _parser in [
+    (URL, urlparse),
+    (range, parse_range),
+    (typing.Pattern[str], parse_regex),
+    (typing.Pattern[bytes], parse_regex_bytes),
+]:
+    cli_parser.register(_type, as_const=True)(_parser)
+
+
+@cli_parser.register(bool, as_const=True)
+def cli_parse_bool(s: typing.Union[str, bool]) -> bool:
+    if isinstance(s, bool):
+        # for flags with store_true action
+        return s
+    return parse_bool(s)
+
+
+cli_parser.register(Empty, as_const=True)(identity)
+
+
 ######################
 # Collection parsers #
 ######################
@@ -296,14 +318,24 @@ class UnionCLIParser(UnionWrapper):
         return super().__call__(arg)
 
 
+def namedtuple_from_iterable(tup_type: typing.Type[typing.NamedTuple], it: typing.Iterable):
+    return tup_type(*it)
+
+
 @cli_parser.register(typing.Tuple)
 class TupleCLIParser(TupleWrapper):
     getter = cli_parser
-    get_reducer = staticmethod(get_constructor_for)
+
+    @staticmethod
+    def get_reducer(tup_type):
+        if is_named_tuple_class(tup_type):
+            return
+        return get_constructor_for(tup_type)
 
     def __init__(self, t, *types):
         if is_named_tuple_class(t):
             types = get_named_tuple_arg_types(t)
+            self.reduce = partial(namedtuple_from_iterable, t)
 
         super().__init__(t, *types)
 
@@ -333,6 +365,8 @@ class TupleCLIParser(TupleWrapper):
         return (f(a) for f, a in zip(self.funcs, self.iter_chunks(arg)))
 
 
+
+
 @cli_parser.register(LazyType)
 class LazyCLIParser(LazyWrapper):
     getter = cli_parser
@@ -346,10 +380,3 @@ def cli_enum_parser(enum_type):
 @cli_parser.register_all(enum.Flag, enum.IntFlag)
 def cli_flag_parser(enum_type):
     return FlagParser(enum_type).cli_parse
-
-
-# these types all have
-cli_parser.register_from_mapping(cli_parse_methods, as_const=True)
-
-# these types are all their own parsers
-cli_parser.register_all(*cli_parse_by_constructor)(identity)
