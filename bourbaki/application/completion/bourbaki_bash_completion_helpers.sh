@@ -606,7 +606,11 @@ _bourbaki_no_complete() {
 _bourbaki_complete_from_stdout() {
     local cur line
     $BASH_COMPLETION_CUR_WORD cur
-    COMPREPLY=("${COMPREPLY[@]}" $("$@" 2>/dev/null | while read line; do [ "${line#$cur}" != "$line" ] && echo "$line"; done;))
+    if [ -z "$cur" ]; then
+      COMPREPLY=("${COMPREPLY[@]}" $("$@" 2>/dev/null))
+    else
+      COMPREPLY=("${COMPREPLY[@]}" $("$@" 2>/dev/null | while read line; do [ "${line#$cur}" != "$line" ] && echo "$line"; done;))
+    fi
 }
 
 _eval_completer() {
