@@ -604,6 +604,7 @@ _bourbaki_no_complete() {
 }
 
 _bourbaki_complete_from_stdout() {
+    _bourbaki_debug "COMPLETING FROM OUTPUT OF: $@"
     local cur line
     $BASH_COMPLETION_CUR_WORD cur
     if [ -z "$cur" ]; then
@@ -611,6 +612,7 @@ _bourbaki_complete_from_stdout() {
     else
       COMPREPLY=("${COMPREPLY[@]}" $("$@" 2>/dev/null | while read line; do [ "${line#$cur}" != "$line" ] && echo "$line"; done;))
     fi
+    _bourbaki_debug_total_completions
 }
 
 _eval_completer() {
