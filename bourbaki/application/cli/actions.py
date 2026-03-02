@@ -9,11 +9,10 @@ from ..completion import install_shell_completion
 
 
 def load_package_info(package):
-    from pkg_resources import get_distribution
+    from importlib.metadata import distribution
     from pkginfo import Distribution
 
-    dist = get_distribution(package)
-    meta = dist.get_metadata(dist.PKG_INFO)
+    meta = str(distribution(package).metadata)
     d = Distribution()
     d.parse(meta)
     return d.__dict__
