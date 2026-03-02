@@ -53,8 +53,7 @@ def is_json_serializable(conf):
 
 # safe python syntactic constructs for configuration
 legal_python_config_exprs = (
-    ast.Num,
-    ast.Str,
+    ast.Constant,
     ast.BinOp,
     ast.operator,
     ast.Compare,
@@ -64,15 +63,12 @@ legal_python_config_exprs = (
     ast.Tuple,
     ast.Dict,
     ast.Set,
-    ast.Bytes,
     ast.Subscript,
-    ast.Ellipsis,
     ast.ListComp,
     ast.DictComp,
     ast.SetComp,
     ast.comprehension,
     ast.keyword,
-    ast.NameConstant,
     ast.Assign,
     ast.Call,
 )

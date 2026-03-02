@@ -115,7 +115,7 @@ def str_to_bytes(s, type_=bytes, exc_type=ConfigTypedInputError):
         raise exc_type(type_, s, e)
     else:
         expr = t.body
-        if not isinstance(expr, ast.Bytes):
+        if not (isinstance(expr, ast.Constant) and isinstance(expr.value, bytes)):
             raise exc_type(
                 type_,
                 s,
