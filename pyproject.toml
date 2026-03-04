@@ -1,0 +1,40 @@
+[project]
+name = "bourbaki.application"
+description = "CLIs derived directly from type signatures and docstrings years before typer existed"
+version = "0.5.12"
+authors = [
+    {name = "Matthew Hawthorn", email = "hawthorn.matthew@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+dependencies = [
+	"pkginfo",
+	"multipledispatch>=0.4.9",
+	"ujson",
+	"toml",
+	"PyYAML>=3.12",
+	"typing_inspect",
+	"bourbaki.introspection>=0.5.1",
+]
+
+[project.urls]
+homepage = "https://github.com/bourbaki-py/"
+repository = "https://github.com/bourbaki-py/application.git"
+
+[options.scripts]
+compgen_python_classpaths.py = "bourbaki.application.completion.compgen_python_classpaths:main"
