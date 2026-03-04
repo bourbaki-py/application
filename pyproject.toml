@@ -1,7 +1,7 @@
 [project]
 name = "bourbaki.application"
 description = "CLIs derived directly from type signatures and docstrings years before typer existed"
-version = "0.5.12"
+version = "0.10.13"
 authors = [
     {name = "Matthew Hawthorn", email = "hawthorn.matthew@gmail.com"}
 ]
